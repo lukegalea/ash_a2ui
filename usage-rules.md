@@ -1,0 +1,119 @@
+# Rules for working with AshA2ui
+
+AshA2ui is an Ash extension that generates A2UI (Agent to UI) v0.9.1 protocol
+payloads from Ash resources. You declare a surface (table + form + actions)
+in an `a2ui` DSL block; the extension emits the wire messages, routes client
+`action` envelopes back into Ash actions, and enforces authorization. Read
+the docs before assuming prior knowledge — the DSL is small and these rules
+cover most decisions.
+
+## When to reach for AshA2ui (preferred ladder)
+
+Work down this ladder and stop at the first rung that fits:
+
+1. **The UI description must cross a wire** (agent canvas, chat surface,
+   embedded panel, non-Phoenix client, multiple render targets) and the page
+   is a projection of a resource (table/form/actions) → **use AshA2ui**.
+2. You need a full internal admin over many resources in a Phoenix app →
+   **use AshAdmin**, not AshA2ui. It's less work and renders in-process.
+3. The page needs bespoke interactions, custom widgets, or pixel-level
+   control → **write plain LiveView** (or use Backpex for Ecto-first admin
+   panels). Don't fight the fixed component catalog.
+4. Only one Phoenix web client exists and nothing needs to consume a UI
+   protocol → plain LiveView; the protocol indirection buys nothing yet.
+
+## Authoring surfaces
+
+- Two equivalent authoring modes; pick deliberately:
+  - **On the resource** (`use Ash.Resource, extensions: [AshA2ui]` + `a2ui`
+    block) — fine for resources that exist to be rendered.
+  - **Standalone UI module** (`use AshA2ui.Standalone` + `for_resource` in
+    the `a2ui` block) — prefer this for shared domain resources you don't
+    want to couple to UI concerns, resources you can't edit, or multiple
+    surfaces per resource.
+
+```elixir
+defmodule MyApp.UI.TicketUI do
+  use AshA2ui.Standalone
+
+  a2ui do
+    for_resource MyApp.Support.Ticket
+
+    component :table do
+      fields [:subject, :status]
+      read_action :read
+      row_actions [:update]
+    end
+
+    component :form do
+      fields [:subject, :status]
+      create_action :create
+      update_action :update
+    end
+  end
+end
+```
+
+- **Always declare `row_actions` explicitly and minimally.** It is the
+  server-side allowlist for the `invoke` action — anything listed becomes
+  invokable by any client that can reach the surface; anything not listed is
+  rejected before Ash is called. Never add an action "because it exists".
+- Omit `fields` only when the inferred set (public attributes for tables,
+  action `accept`s for forms) is genuinely what you want shown. Otherwise
+  list fields explicitly.
+- Use `field` blocks for presentation (`label`, `widget`, `order`, `hidden`,
+  `format`) instead of renaming attributes or adding calculated duplicates.
+- Trust the type→widget mapping first (`AshA2ui.TypeMapper`); override with
+  `widget` only when the default is wrong for the specific field.
+- **Verifier errors are your friend.** Referenced fields and actions are
+  checked at compile time; if compilation fails, fix the declaration — do
+  not work around it with runtime indirection. A verifier failure means the
+  surface would have emitted a broken wire contract.
+
+## Building and serving payloads
+
+- **Never hand-write A2UI JSON.** Always produce messages via
+  `AshA2ui.Info.build_surface/2` (full bootstrap) or
+  `AshA2ui.Info.build_data_model/2` (data-only refresh). Hand-rolled maps
+  bypass schema validation and the versioned encoder.
+- Always pass `actor:` (and `tenant:` where relevant). Reads run with
+  `authorize?: true`; a nil actor is evaluated by policies as nil, not
+  skipped.
+- Remember: on a resource with **no policies**, `authorize?: true` is a
+  no-op. Transport-level authentication is your only gate there — say so in
+  code review rather than assuming enforcement.
+- Prefer `AshA2ui.LiveRenderer` for Phoenix hosts (it also gives PubSub live
+  refresh). Use plain JSON endpoints when the consumer isn't a LiveView
+  page. Both are supported; don't invent a third transport before checking
+  the roadmap.
+
+## Handling client actions
+
+- **Don't bypass `AshA2ui.ActionHandler`.** Every inbound `action` envelope
+  goes through `AshA2ui.ActionHandler.handle/3` — it validates the envelope,
+  enforces the DSL allowlist, invokes the Ash action with the actor, and
+  maps validation errors onto the reserved data-model paths. Calling Ash
+  actions directly from transport code skips the allowlist and the error
+  mapping.
+- v0 action names are exactly `"submit_form"`, `"select_row"`, and
+  `"invoke"`. Don't invent new `action.name` values; add a proper Ash action
+  and expose it via `row_actions` instead.
+- Surface feedback through the reserved data-model paths — `/errors/<field>`
+  for validation errors, `/ui/status` for lifecycle feedback — never through
+  ad-hoc paths or custom message types. Renderers depend on these paths.
+
+## Avoid list
+
+- ❌ Hand-writing or string-templating A2UI message JSON.
+- ❌ Calling Ash actions directly from transport code in response to client
+  envelopes (bypasses the allowlist — use `ActionHandler`).
+- ❌ Wide-open `row_actions` (e.g. mirroring every action on the resource).
+- ❌ Treating `authorize?: true` as access control on a policy-less
+  resource.
+- ❌ Suppressing or working around compile-time verifier errors.
+- ❌ Expecting actor-dependent field visibility — v0 has none (documented
+  limitation); use separate standalone surfaces per audience instead.
+- ❌ Relying on Table components — the v0.9.1 basic catalog has none; tables
+  are `List` + `Row`/`Column` composition and AshA2ui handles that for you.
+- ❌ Depending on undocumented message batching/ordering details of the
+  encoder; only the documented paths and message sequence are contract.
