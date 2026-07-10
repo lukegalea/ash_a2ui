@@ -8,12 +8,14 @@ on:
     branches: [main]
   workflow_call:
 # The reusable ash-ci workflow's nested jobs request write permissions
-# (report_mix_deps: contents; deploy-docs: pages + id-token); a caller that
-# doesn't grant them fails at workflow startup.
+# (report_mix_deps: contents; deploy-docs: pages + id-token; credo:
+# security-events for SARIF upload); a caller that doesn't grant them fails
+# at workflow startup.
 permissions:
   contents: write
   pages: write
   id-token: write
+  security-events: write
 jobs:
   ash-ci:
     uses: ash-project/ash/.github/workflows/ash-ci.yml@main
