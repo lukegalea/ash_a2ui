@@ -1,13 +1,307 @@
+<!--
+Badges: the hex.pm / hexdocs badges are placeholders until the first
+`mix hex.publish` (see SUBMISSION.md). The CI badge is live once the repo is
+pushed to GitHub.
+-->
+
+![Elixir CI](https://github.com/lukegalea/ash_a2ui/actions/workflows/elixir.yml/badge.svg)
+[![Hex version badge](https://img.shields.io/hexpm/v/ash_a2ui.svg)](https://hex.pm/packages/ash_a2ui)
+[![Hexdocs badge](https://img.shields.io/badge/docs-hexdocs-purple)](https://hexdocs.pm/ash_a2ui)
+
 # AshA2ui
 
-AshA2ui is an [Ash](https://ash-hq.org) extension that generates
-[A2UI (Agent to UI)](https://github.com/a2ui-project/a2ui) v0.9.1 payloads directly from
-your Ash resources. Declare an `a2ui` block on a resource (or in a standalone UI module),
-and AshA2ui builds the `createSurface` / `updateComponents` / `updateDataModel` message
-stream for any A2UI renderer (such as `@a2ui/lit`), routes client `action` envelopes back
-into Ash actions with full actor/authorization support, and — when `phoenix_live_view` is
-available — ships a batteries-included LiveView transport (`AshA2ui.LiveRenderer`) with
-PubSub-driven live data refresh. The protocol core depends only on `ash`.
+Declare a UI surface on an [Ash](https://ash-hq.org) resource and get a
+standards-based, agent-ready UI over the wire — no templates, no components,
+no hand-written JSON.
 
-> **🚧 Under construction.** This library is being actively built and is not yet published
-> to Hex. APIs may change without notice.
+AshA2ui is an Ash extension that generates
+[A2UI (Agent to UI)](https://github.com/a2ui-project/a2ui) **v0.9.1** protocol
+payloads directly from your Ash resources. You describe *what* the surface
+shows (a table, a form, per-row actions) in a small `a2ui` DSL block; AshA2ui
+derives the rest from what your resource already knows — attributes, types,
+actions, policies — and emits the `createSurface` / `updateComponents` /
+`updateDataModel` message stream that any A2UI renderer (such as
+[`@a2ui/lit`](https://www.npmjs.com/package/@a2ui/lit) or
+[`@a2ui/react`](https://www.npmjs.com/package/@a2ui/react)) turns into a live
+UI. Client interactions come back as A2UI `action` envelopes and are routed
+into your Ash actions with full actor/authorization support.
+
+Why this exists: in the agent era, "the UI" is increasingly something a server
+(or an agent) *describes* and a remote canvas renders — chat surfaces, agent
+canvases, embedded panels, cross-platform clients. Ash resources already carry
+the richest machine-readable description of your domain. AshA2ui closes the
+gap between the two.
+
+- **Protocol core depends only on `ash`.** The DSL → `ResolvedView` → encoder
+  → `ActionHandler` pipeline is transport-agnostic plain functions.
+- **Batteries-included LiveView transport.** When `phoenix_live_view` is
+  present, `AshA2ui.LiveRenderer` gives you a complete LiveView that pushes
+  A2UI messages to a shipped JS hook hosting `<a2ui-surface>`, routes actions
+  back, and live-refreshes the data model from `Ash.Notifier.PubSub`.
+- **Plain JSON endpoints work too.** A controller that returns
+  `AshA2ui.Info.build_surface/2`'s message list is a complete alternative
+  transport.
+- **Compile-time verifiers.** Referencing a field or action that doesn't
+  exist fails at compile time, not in production — strictness matters more
+  when you're emitting a wire protocol.
+
+> **Status:** under active development, not yet published to hex.pm. APIs may
+> change until v0.1.0 is tagged.
+
+## Installation
+
+With [igniter](https://hexdocs.pm/igniter) (recommended):
+
+```bash
+mix igniter.install ash_a2ui
+```
+
+Or manually — add the dependency:
+
+```elixir
+def deps do
+  [
+    {:ash_a2ui, "~> 0.1"},
+    # optional, for the LiveView transport:
+    {:phoenix_live_view, "~> 1.0"}
+  ]
+end
+```
+
+then add `:ash_a2ui` to your `.formatter.exs` so `mix format` understands the
+DSL:
+
+```elixir
+[
+  import_deps: [:ash_a2ui],
+  plugins: [Spark.Formatter]
+]
+```
+
+## Quickstart
+
+### Authoring mode 1: on the resource
+
+```elixir
+defmodule MyApp.Support.Ticket do
+  use Ash.Resource,
+    domain: MyApp.Support,
+    data_layer: AshPostgres.DataLayer,
+    extensions: [AshA2ui]
+
+  attributes do
+    uuid_primary_key :id
+    attribute :subject, :string, public?: true, allow_nil?: false
+
+    attribute :status, :atom,
+      public?: true,
+      constraints: [one_of: [:open, :closed]],
+      default: :open
+
+    create_timestamp :inserted_at, public?: true
+  end
+
+  actions do
+    defaults [:read, :destroy, create: :*, update: :*]
+  end
+
+  a2ui do
+    surface_id "tickets"
+
+    component :table do
+      fields [:subject, :status, :inserted_at]
+      read_action :read
+      row_actions [:update, :destroy]
+    end
+
+    component :form do
+      fields [:subject, :status]
+      create_action :create
+      update_action :update
+    end
+
+    field :inserted_at do
+      label "Created"
+      format :date
+    end
+  end
+end
+```
+
+### Authoring mode 2: a standalone UI module
+
+Keep UI metadata out of shared domain resources (or define multiple surfaces
+for one resource) with `AshA2ui.Standalone`:
+
+```elixir
+defmodule MyApp.UI.TicketUI do
+  use AshA2ui.Standalone
+
+  a2ui do
+    for_resource MyApp.Support.Ticket
+    surface_id "tickets"
+
+    component :table do
+      fields [:subject, :status]
+      row_actions [:update]
+    end
+  end
+end
+```
+
+Standalone modules are accepted anywhere a resource is:
+`AshA2ui.Info.build_surface(MyApp.UI.TicketUI, actor: user)`.
+
+### Building the surface
+
+```elixir
+messages = AshA2ui.Info.build_surface(MyApp.Support.Ticket, actor: current_user)
+# => [
+#   %{"version" => "v0.9.1", "createSurface" => %{"surfaceId" => "tickets", ...}},
+#   %{"version" => "v0.9.1", "updateComponents" => %{...}},
+#   %{"version" => "v0.9.1", "updateDataModel" => %{...}}
+# ]
+```
+
+Records are loaded through the resource's read action with `authorize?: true`
+and your `actor:`/`tenant:` — policies apply exactly as everywhere else in
+Ash.
+
+## Transports
+
+### LiveView (batteries included)
+
+```elixir
+defmodule MyAppWeb.TicketA2uiLive do
+  use AshA2ui.LiveRenderer,
+    ui: MyApp.UI.TicketUI,
+    actor_fn: & &1.assigns.current_user
+end
+```
+
+That's the whole LiveView. On mount it builds the surface and pushes the
+messages to the shipped JS hook (`priv/js/ash_a2ui_hook.js`) hosting
+`<a2ui-surface>`; client `action` envelopes arrive as the `"a2ui:action"`
+event and are routed through `AshA2ui.ActionHandler`; and if the resource has
+`Ash.Notifier.PubSub` configured, the LiveView subscribes on mount and pushes
+`updateDataModel` refreshes when records change — live refresh across browser
+tabs for free.
+
+See the
+[Getting Started tutorial](documentation/tutorials/getting-started-with-ash-a2ui.md)
+for the router and JS wiring, and
+[Rendering Clients](documentation/topics/rendering-clients.md) for the full
+hook contract.
+
+### Plain JSON endpoint
+
+Transport-agnosticism proof — a read-only surface is just a controller:
+
+```elixir
+defmodule MyAppWeb.A2uiController do
+  use MyAppWeb, :controller
+
+  def tickets(conn, _params) do
+    messages =
+      AshA2ui.Info.build_surface(MyApp.UI.TicketUI,
+        actor: conn.assigns.current_user
+      )
+
+    json(conn, messages)
+  end
+end
+```
+
+Feed the response to any A2UI renderer. Mutations can be posted back as
+`action` envelopes to a matching endpoint that calls
+`AshA2ui.ActionHandler.handle/3`.
+
+## Positioning: is this the right tool?
+
+Honest comparison — each of these is the better choice in its own lane:
+
+| | AshA2ui | [AshAdmin](https://hexdocs.pm/ash_admin) | [AshSDUI](https://github.com/FoundryStack/ash_sdui) | [Backpex](https://hexdocs.pm/backpex) |
+|---|---|---|---|---|
+| What it is | Ash resources → A2UI wire protocol | Drop-in admin UI for all your resources | Server-driven UI runtime inside LiveView | LiveView admin panel builder (Ecto) |
+| Output | JSON messages for any A2UI renderer | Rendered LiveView pages | Rendered LiveView pages | Rendered LiveView pages |
+| Client | `@a2ui/lit`, `@a2ui/react`, agent canvases, anything speaking A2UI | Browser only | Browser only | Browser only |
+| Best when | UI must cross a wire: agent surfaces, embedded panels, non-Phoenix clients, multiple frontends | You want a full internal admin in minutes with zero per-resource config | You want dynamic layouts/recipes rendered server-side in LiveView | You want a polished, deeply customizable admin and are Ecto-first |
+| Customization | DSL + roadmap `overrides:`; renderer owns look & feel | Resource-level config | Recipes, layout persistence, Storybook | Full HEEx control |
+
+If you just need an internal admin panel in a Phoenix app, **use AshAdmin** —
+it's less work. Reach for AshA2ui when the UI description itself needs to
+travel: to an agent canvas, a non-LiveView client, or multiple render targets.
+More on this boundary in
+[What is AshA2ui?](documentation/topics/what-is-ash-a2ui.md)
+
+## Coverage matrix
+
+The rule: **not in this table = not fully demoed.** Each promoted capability
+maps to a demo route (in the reference proof-of-concept app) and a named test
+in this repo. POC route cells are filled in when the POC lands.
+
+| Capability | Demo route | Test |
+|---|---|---|
+| Table render (`List` + `Row`/`Column` composition) | *pending POC* | `test/encoder_test.exs` |
+| Form create/update | *pending POC* | `test/encoder_test.exs`, `test/action_handler_test.exs` |
+| Row actions (`invoke` allowlist) | *pending POC* | `test/action_handler_test.exs` |
+| Validation-error round trip (`/errors/<field>`) | *pending POC* | `test/action_handler_test.exs` |
+| Actor-aware authorization | *pending POC* | `test/action_handler_test.exs` |
+| Field inference from public attributes | n/a (compile time) | `test/transformer_test.exs` |
+| Compile-time verifiers (bad fields/actions) | n/a (compile time) | `test/verifier_test.exs` |
+| Schema validation of every payload (vendored v0.9.1 schemas) | *pending POC* | `test/schema_helper_test.exs` + every encoder/e2e test |
+| LiveView transport (mount, action round trip) | *pending POC* | `test/live_renderer_test.exs` |
+| PubSub live data refresh | *pending POC* | `test/live_renderer_test.exs` |
+| End-to-end: resource → surface → action → updated data model | *pending POC* | `test/ash_a2ui_test.exs` |
+
+## Roadmap
+
+v0 deliberately supports exactly what a real CRUD admin page needs: table +
+form components, row actions, field inference, type→widget mapping,
+compile-time verifiers, actor-aware authorization, and PubSub live refresh via
+the LiveView transport. Documented as roadmap (not built):
+
+- **A2UI v1.0 spec support** once it leaves RC — the payload builder is
+  isolated behind a versioned encoder (`AshA2ui.Encoder.V0_9_1`) so a new spec
+  version is a new encoder module.
+- **`ui_query`-style declarative allowlist** — named, server-enforced
+  search/sort/filter/pagination configs referenced by the client by name;
+  never arbitrary client-supplied query params.
+- **`refreshes` metadata on actions** — after a successful action, push
+  `updateDataModel` only for the named data regions it affects (v0 refreshes
+  the whole surface data model).
+- **Relationship rendering** — `belongs_to` inference from
+  `source_attribute`, option-label fallback chain
+  (`[:name, :title, :label, :username, :email]`), destination reads with
+  `actor:`/`tenant:`, and nested-form interaction modes driven by
+  `Ash.Changeset.ManagedRelationshipHelpers`.
+- **`overrides:` option on `build_surface/2`** — per-request title/label/
+  empty-state tweaks: the middle rung between the DSL and forking the encoder.
+- **Context struct** (`actor`, `tenant`, `locale`, `audience`, `device`) with
+  audience-conditional surfaces chosen in plain Elixir — simple gates in
+  metadata, complex branching in ordinary functions, never a hidden rules
+  engine.
+- **Non-LiveView streaming transports** (SSE, raw WebSocket).
+- **Custom component catalogs** beyond the basic catalog.
+- **Aggregate/calculation rendering** beyond plain attribute fields.
+- **AshAI-generated component trees** — letting an LLM propose the surface
+  layout while AshA2ui keeps the data and action contracts safe.
+
+## Documentation
+
+- [Getting Started tutorial](documentation/tutorials/getting-started-with-ash-a2ui.md)
+- [What is AshA2ui?](documentation/topics/what-is-ash-a2ui.md) — concept and
+  the honest "when it pays off" boundary
+- [Rendering Clients](documentation/topics/rendering-clients.md) — transports,
+  hook contract, `@a2ui/lit` / `@a2ui/react`
+- [Actions and Authorization](documentation/topics/actions-and-authorization.md)
+- [Data Model Conventions](documentation/topics/data-model-conventions.md)
+- [DSL reference](documentation/dsls/DSL-AshA2ui.md)
+
+## Contributing
+
+Issues and PRs welcome at
+[github.com/lukegalea/ash_a2ui](https://github.com/lukegalea/ash_a2ui).
+Every payload-producing change must keep the schema-validation test suite
+green (`mix test`) — the vendored A2UI v0.9.1 JSON Schemas in
+`priv/a2ui/v0_9_1/` are the executable spec.

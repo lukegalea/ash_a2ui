@@ -83,6 +83,10 @@ defmodule AshA2ui.MixProject do
       extras: [
         {"README.md", title: "Home"},
         "documentation/tutorials/getting-started-with-ash-a2ui.md",
+        "documentation/topics/what-is-ash-a2ui.md",
+        "documentation/topics/rendering-clients.md",
+        "documentation/topics/actions-and-authorization.md",
+        "documentation/topics/data-model-conventions.md",
         {"documentation/dsls/DSL-AshA2ui.md", search_data: Spark.Docs.search_data_for(AshA2ui)},
         "CHANGELOG.md"
       ],
