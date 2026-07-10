@@ -132,6 +132,12 @@ defmodule AshA2ui do
         type: {:behaviour, Ash.Resource},
         doc:
           "The Ash resource this surface renders. Only used (and required) in standalone UI modules (`use AshA2ui.Standalone`)."
+      ],
+      add_render_action?: [
+        type: :boolean,
+        default: true,
+        doc:
+          "Whether to automatically add a generic `render_a2ui` action returning the surface's A2UI messages. Ignored in standalone UI modules."
       ]
     ],
     entities: [
