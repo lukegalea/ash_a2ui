@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    tags:
+      - "v*"
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+jobs:
+  ash-ci:
+    uses: ash-project/ash/.github/workflows/ash-ci.yml@main
+    secrets:
+      HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
+  # Proves the protocol core is Phoenix-free: NO_PHOENIX=1 makes mix.exs drop
+  # phoenix_live_view (optional) and the whole dev/test Phoenix stack before
+  # deps.get, then compiles and runs the test suite. AshA2ui.LiveRenderer and
+  # the Phoenix test endpoint/router are wrapped in
+  # `Code.ensure_loaded?(Phoenix.LiveView)` guards, so they are simply not
+  # compiled here. This env-var approach was chosen over lockfile manipulation
+  # (`mix deps.unlock`) because it needs no extra steps and cannot leave the
+  # checkout in a half-unlocked state; the lockfile mutation it causes is
+  # confined to the throwaway CI workspace.
+  no-phoenix:
+    name: mix test (without phoenix_live_view)
+    runs-on: ubuntu-latest
+    env:
+      NO_PHOENIX: "1"
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: mix test
