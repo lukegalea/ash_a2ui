@@ -168,7 +168,9 @@ defmodule AshA2ui.MixProject do
         # phoenix itself comes in transitively (phoenix_live_view requires it
         # in all envs, so an :only-restricted explicit entry would conflict)
         {:phoenix_live_view, "~> 1.0", optional: true},
-        {:bandit, "~> 1.0", only: [:dev, :test]}
+        {:bandit, "~> 1.0", only: [:dev, :test]},
+        # required by Phoenix.LiveViewTest (live_renderer_test.exs)
+        {:lazy_html, ">= 0.1.0", only: [:dev, :test]}
       ]
     end
   end

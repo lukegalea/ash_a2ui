@@ -14,8 +14,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     @moduledoc false
 
     use Phoenix.Router
-    # TODO Track 4: `import Phoenix.LiveView.Router` when adding live routes
-    # (left out for now to keep the compile warning-free).
+
+    import Phoenix.LiveView.Router
 
     pipeline :browser do
       plug(:accepts, ["html"])
@@ -25,8 +25,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     scope "/" do
       pipe_through(:browser)
 
-      # TODO Track 4: add live routes for LiveRenderer tests here, e.g.
-      #   live "/kitchen-sink", AshA2ui.Test.KitchenSinkLive
+      # LiveRenderer test LiveViews (defined in test/live_renderer_test.exs;
+      # the `live` macro only records the module as route metadata, so it is
+      # safe to reference modules that are loaded later, at test time).
+      live("/live-renderer/stubbed", AshA2ui.Test.StubbedLive)
+      live("/live-renderer/pubsub", AshA2ui.Test.PubsubStubLive)
+      live("/live-renderer/defaults", AshA2ui.Test.DefaultsLive)
     end
   end
 
