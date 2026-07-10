@@ -10,6 +10,11 @@ defmodule AshA2ui.RenderA2uiAction do
 
   @impl true
   def run(input, _opts, context) do
-    {:ok, AshA2ui.Info.build_surface(input.resource, Ash.Context.to_opts(context))}
+    opts =
+      context
+      |> Ash.Context.to_opts()
+      |> Keyword.take([:actor, :tenant, :domain, :authorize?])
+
+    {:ok, AshA2ui.Info.build_surface(input.resource, opts)}
   end
 end

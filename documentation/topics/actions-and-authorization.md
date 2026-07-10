@@ -7,8 +7,9 @@ side channel: if a policy forbids it, the surface can't do it either.
 ## Reading: the `render_a2ui` generic action
 
 Compiling a resource with the `AshA2ui` extension adds a generic action
-`render_a2ui` (returning `:map`) to the resource — opt-out via the
-extension's transformer options if you don't want it. It wraps
+`render_a2ui` (returning `{:array, :map}` — the surface message list) to the
+resource — opt out with `add_render_action? false` in the `a2ui` section if
+you don't want it. It wraps
 `AshA2ui.Info.build_surface/2`, which means surface rendering:
 
 - shows up in code interfaces like any other action,
@@ -45,9 +46,13 @@ The v0 `action.name` vocabulary:
 
 | `action.name` | Meaning | Maps to |
 |---|---|---|
-| `"submit_form"` | The form component was submitted | The form's `create_action` or `update_action` |
+| `"submit_form"` | The form component was submitted | The form's `create_action` or `update_action` (with `recordId` → update, without → create) |
 | `"invoke"` | A row action button was clicked | The named action in `row_actions` |
 | `"select_row"` | A table row was selected | Selection state (e.g. loading a record into the form) |
+
+When the view declares no form/table action, the handler falls back to the
+resource's **primary** create/update/read action — so minimal surfaces work
+without spelling every action out.
 
 Both result tuples carry valid server→client messages: on success, a data
 refresh plus `/ui/status` feedback; on failure, validation errors mapped onto
@@ -65,8 +70,9 @@ end
 ```
 
 `ActionHandler` rejects any `invoke` envelope naming an action outside the
-declared `row_actions` (and any `submit_form` targeting anything but the
-form's declared `create_action`/`update_action`) — *before* touching Ash.
+declared `row_actions` — *before* touching Ash. (`submit_form` envelopes
+carry no action name at all: the server always runs the view's declared
+create/update action, so there is nothing for a client to redirect.)
 A malicious client editing the envelope cannot reach `:destroy` if you didn't
 declare it. Corollary: **declare `row_actions` explicitly and minimally**;
 never expose an action through the surface just because it exists.

@@ -1,6 +1,9 @@
 # The directory Mix will write compiled artifacts to.
 /_build/
 
+# NO_PHOENIX builds use an isolated build dir (see mix.exs build_path).
+/_build_no_phoenix/
+
 # If you run "mix test --cover", coverage assets end up here.
 /cover/
 

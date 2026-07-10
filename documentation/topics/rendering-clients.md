@@ -72,35 +72,48 @@ of the generated LiveView when needed.
 
 ### The hook contract
 
-The package ships the LiveView JS hook at `priv/js/ash_a2ui_hook.js`:
+The package ships the LiveView JS hook at `priv/js/ash_a2ui_hook.js`. It has
+**no bundled dependencies** — your app bundle imports the `@a2ui` renderer
+packages and hands the renderer classes to the hook via
+`configureAshA2ui({MessageProcessor, catalogs})` before the `LiveSocket`
+mounts it:
 
-- Register it under the name **`AshA2ui`** in your `LiveSocket` hooks.
+- Import **`@a2ui/lit/v0_9`** for its side effect: registering the
+  `<a2ui-surface>` custom element (and to get `basicCatalog`).
+- Import **`MessageProcessor` from `@a2ui/web_core/v0_9`** — message ingest
+  in the 0.10.x renderers is `new MessageProcessor(catalogs, actionHandler)`
+  + `processor.processMessages(messages)`; the `<a2ui-surface>` element
+  itself has **no ingest API** (it only accepts a `SurfaceModel` via its
+  `surface` property, which the hook wires up through
+  `processor.onSurfaceCreated`).
+- Register the hook under the name **`AshA2ui`** in your `LiveSocket` hooks.
 - The LiveView renders a container `div` with `phx-hook="AshA2ui"` and
   `phx-update="ignore"`; the hook owns everything inside it.
-- On mount, the hook creates an `<a2ui-surface>` element (provided by your
-  installed renderer, e.g. `@a2ui/lit`) and feeds it every A2UI
-  server→client message pushed by the LiveView.
-- User interactions surface as A2UI `action` envelopes, which the hook
-  forwards to the server as the **`"a2ui:action"`** LiveView event.
-
-> #### Not yet final {: .warning}
->
-> The name of the server→client `push_event` the hook listens on is an
-> internal detail between `AshA2ui.LiveRenderer` and the shipped hook and is
-> being finalized during integration. Use the shipped hook rather than
-> hand-rolling one, and this never affects you.
+- Server→client messages arrive on the **`"a2ui:messages"`** `push_event`
+  (payload `%{messages: [...]}`); the hook feeds them to the processor.
+- User interactions are delivered to the processor's action callback and
+  forwarded to the server as the **`"a2ui:action"`** LiveView event, wrapped
+  in the A2UI v0.9.1 client envelope.
 
 Wiring in `assets/js/app.js`:
 
 ```javascript
-import "@a2ui/lit/v0_9";
-import { AshA2ui } from "../../deps/ash_a2ui/priv/js/ash_a2ui_hook.js";
+import "@a2ui/lit/v0_9"; // registers <a2ui-surface>
+import { basicCatalog } from "@a2ui/lit/v0_9";
+import { MessageProcessor } from "@a2ui/web_core/v0_9";
+import { AshA2ui, configureAshA2ui } from "../../deps/ash_a2ui/priv/js/ash_a2ui_hook.js";
+
+configureAshA2ui({ MessageProcessor, catalogs: [basicCatalog] });
 
 const liveSocket = new LiveSocket("/live", Socket, {
   hooks: { AshA2ui },
   params: { _csrf_token: csrfToken },
 });
 ```
+
+(Bundling the hook separately from your app code? Setting
+`globalThis.__ASH_A2UI_DEPS__ = {MessageProcessor, catalogs}` works as an
+alternative to calling `configureAshA2ui`.)
 
 ## Transport 2: plain JSON endpoints
 

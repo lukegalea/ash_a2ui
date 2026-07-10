@@ -122,8 +122,9 @@ What each part does:
 Everything you reference is checked at compile time: a typo'd field or a
 nonexistent action is a compile error, not a runtime surprise.
 
-Widgets default from attribute types via `AshA2ui.TypeMapper` — `:string` →
-`TextField`, `:boolean` → `CheckBox`, an enum-constrained `:atom` →
+Widgets default from attribute types via `AshA2ui.TypeMapper.widget_for/2`
+(which takes the Ash type and its constraints) — `:string` → `TextField`,
+`:boolean` → `CheckBox`, an `:atom` with `one_of` constraints →
 `ChoicePicker`, datetimes → `DateTimeInput` — and can be overridden per field
 with `widget`.
 
@@ -195,20 +196,25 @@ end
 
 ### The JavaScript side
 
-Install the renderer in your assets:
+Install the renderer packages in your assets:
 
 ```bash
-cd assets && npm install @a2ui/lit
+cd assets && npm install @a2ui/lit @a2ui/web_core
 ```
 
-Then register the shipped hook and the renderer in your app bundle
-(`assets/js/app.js`), alongside your existing hooks:
+Then register the shipped hook and hand it the renderer classes in your app
+bundle (`assets/js/app.js`), alongside your existing hooks:
 
 ```javascript
-// The A2UI web-component renderer (v0.9.x entry point):
+// Registers the <a2ui-surface> custom element and exports the basic catalog:
 import "@a2ui/lit/v0_9";
+import { basicCatalog } from "@a2ui/lit/v0_9";
+// The protocol message processor:
+import { MessageProcessor } from "@a2ui/web_core/v0_9";
 // The hook shipped inside the ash_a2ui package:
-import { AshA2ui } from "../../deps/ash_a2ui/priv/js/ash_a2ui_hook.js";
+import { AshA2ui, configureAshA2ui } from "../../deps/ash_a2ui/priv/js/ash_a2ui_hook.js";
+
+configureAshA2ui({ MessageProcessor, catalogs: [basicCatalog] });
 
 const liveSocket = new LiveSocket("/live", Socket, {
   hooks: { AshA2ui /* , ...your other hooks */ },

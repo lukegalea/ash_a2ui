@@ -1,6 +1,11 @@
 # Used by "mix format"
 spark_locals_without_parens = [
+  add_render_action?: 1,
+  component: 1,
+  component: 2,
   create_action: 1,
+  field: 1,
+  field: 2,
   fields: 1,
   for_resource: 1,
   format: 1,

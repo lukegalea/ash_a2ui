@@ -56,6 +56,7 @@ end
 |------|------|---------|------|
 | [`surface_id`](#a2ui-surface_id){: #a2ui-surface_id } | `String.t` |  | Unique id of the A2UI surface. Defaults to the underscored short name of the resource. |
 | [`for_resource`](#a2ui-for_resource){: #a2ui-for_resource } | `module` |  | The Ash resource this surface renders. Only used (and required) in standalone UI modules (`use AshA2ui.Standalone`). |
+| [`add_render_action?`](#a2ui-add_render_action?){: #a2ui-add_render_action? } | `boolean` | `true` | Whether to automatically add a generic `render_a2ui` action returning the surface's A2UI messages. Ignored in standalone UI modules. |
 
 
 

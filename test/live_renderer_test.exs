@@ -169,9 +169,6 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     end
 
     describe "integration with real defaults" do
-      # Enabled at the integration step once Tracks 2 (Encoder) and 3
-      # (ActionHandler) merge; until then the defaults raise "TODO Track 2/3".
-      @tag :integration_pending
       test "mount with default surface_fn pushes schema-valid messages", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/defaults")
 

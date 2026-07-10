@@ -12,6 +12,11 @@ defmodule AshA2ui.MixProject do
       app: :ash_a2ui,
       version: @version,
       elixir: "~> 1.15",
+      # NO_PHOENIX builds compile a different dep set (the whole Phoenix
+      # stack is stripped), so they must not share _build with normal builds:
+      # a shared build dir leaves an orphaned .app referencing bandit and
+      # breaks whichever mode runs second. Isolate them instead.
+      build_path: (System.get_env("NO_PHOENIX") && "_build_no_phoenix") || "_build",
       start_permanent: Mix.env() == :prod,
       package: package(),
       aliases: aliases(),

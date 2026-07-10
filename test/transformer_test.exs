@@ -8,6 +8,7 @@ defmodule AshA2ui.TransformerTest do
 
   use ExUnit.Case, async: true
 
+  alias AshA2ui.Test.SchemaHelper
   alias Spark.Dsl.Extension
 
   defmodule InferredTable do
@@ -290,12 +291,26 @@ defmodule AshA2ui.TransformerTest do
   end
 
   describe "AddRenderAction" do
-    test "adds a generic render_a2ui action returning :map" do
+    test "adds a generic render_a2ui action returning {:array, :map}" do
       action = Ash.Resource.Info.action(InferredTable, :render_a2ui)
 
       assert %Ash.Resource.Actions.Action{type: :action} = action
-      assert action.returns == Ash.Type.Map
+      assert action.returns == {:array, Ash.Type.Map}
       assert action.run == {AshA2ui.RenderA2uiAction, []}
+    end
+
+    test "render_a2ui is invocable and returns the surface message list" do
+      messages =
+        AshA2ui.Test.KitchenSink
+        |> Ash.ActionInput.for_action(:render_a2ui, %{})
+        |> Ash.run_action!()
+
+      assert is_list(messages)
+      assert length(messages) == 3
+
+      for message <- messages do
+        SchemaHelper.assert_valid_server_message(message)
+      end
     end
 
     test "is added to the frozen fixtures (no opt-out declared)" do

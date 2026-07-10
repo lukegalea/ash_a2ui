@@ -1,6 +1,6 @@
 defmodule AshA2ui.Transformers.AddRenderAction do
   @moduledoc """
-  Adds a generic `render_a2ui` action returning `:map` to the resource, run by
+  Adds a generic `render_a2ui` action returning `{:array, :map}` to the resource, run by
   `AshA2ui.RenderA2uiAction`, so surface building flows through the normal
   action layer (policies, tracing, code interfaces).
 
@@ -26,7 +26,7 @@ defmodule AshA2ui.Transformers.AddRenderAction do
   def transform(dsl_state) do
     if add_action?(dsl_state) do
       Builder.add_new_action(dsl_state, :action, :render_a2ui,
-        returns: :map,
+        returns: {:array, :map},
         run: {AshA2ui.RenderA2uiAction, []},
         description: "Builds the A2UI surface messages for this resource."
       )

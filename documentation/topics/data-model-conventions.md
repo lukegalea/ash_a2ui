@@ -14,7 +14,8 @@ custom hooks, and tests can rely on them.
 | `/records` | The list of records backing the table component | Initial render; every refresh (action follow-ups, PubSub) |
 | `/form` | The form component's current field values | Initial render; row selection (edit); after submit |
 | `/errors/<field>` | Human-readable validation error text for `<field>` | A submitted action fails validation |
-| `/ui/status` | Operation feedback text/state (the flash-equivalent) | Around action handling (pending/success/error) |
+| `/ui/status` | Operation feedback text (the flash-equivalent) | After every handled action (success/error) |
+| `/ui/action_result` | The map returned by a map-returning generic action | An `invoke`d generic action returns a plain map |
 
 Everything under these paths uses camelCase string keys, matching the rest of
 the wire format.
@@ -47,7 +48,7 @@ refreshes via `refreshes` action metadata are on the roadmap.)
 
 Form inputs bind to `/form/<field>`. Selecting a row (the `select_row`
 action) loads that record's editable values into `/form`; a successful create
-or update clears it back to defaults. Clients that keep local edit state
+or update clears it back to `{}`. Clients that keep local edit state
 should treat a server write to `/form` as authoritative.
 
 ## `/errors/<field>` — validation errors
@@ -71,9 +72,8 @@ Conventions:
 
 - The value is display-ready text (multiple errors on one field are joined),
   not a structured error object.
-- A subsequent successful submit **clears** the error paths (the key at
-  `/errors/<field>` is removed via an `updateDataModel` without `value`, or
-  `/errors` is reset wholesale).
+- A subsequent successful submit **clears** the error paths (`/errors` is
+  reset wholesale to `{}`).
 - Errors that can't be attributed to a field (e.g. a policy denial) go to
   `/ui/status` instead.
 
@@ -84,7 +84,7 @@ message types needed.
 ## `/ui/status` — the flash-equivalent
 
 Stateless protocols have no "flash" concept, so AshA2ui reserves `/ui/status`
-for operation lifecycle feedback. The shape is a small map:
+for operation lifecycle feedback. The value is display-ready text:
 
 ```json
 {
@@ -92,16 +92,44 @@ for operation lifecycle feedback. The shape is a small map:
   "updateDataModel": {
     "surfaceId": "tickets",
     "path": "/ui/status",
-    "value": { "state": "success", "message": "Ticket created" }
+    "value": "Created successfully."
   }
 }
 ```
 
-- `state` is one of `"pending"`, `"success"`, `"error"`.
-- `message` is display-ready text.
-- The handler writes `pending` when a (potentially slow) action starts and
-  the terminal state when it finishes; a surface with a `Text` bound to
-  `/ui/status/message` behaves like a flash bar.
+`AshA2ui.ActionHandler` writes it after every handled action — a success text
+on completion, an explanation on rejected/unknown actions, a "not authorized"
+text on policy denials (deliberately without detail), and a generic failure
+text when errors can't be attributed to a field. The emitted surface includes
+a `Text` component bound to `/ui/status`, so it behaves like a flash bar out
+of the box.
+
+## `/ui/action_result` — generic action results
+
+Row actions (`invoke`) may target **generic actions** — think "generate an
+API secret" or "recompute stats". Two handler conventions apply (both are
+AshA2ui conventions layered on the protocol, not part of the A2UI spec):
+
+- **`:record_id` pass-through** — if the generic action declares a
+  `:record_id` argument, the `invoke` context's `"recordId"` is passed to it,
+  so row-scoped generic actions know which record they were invoked on.
+- **`/ui/action_result`** — when the action returns a plain map, the handler
+  serializes it (JSON-safe values, string keys) and writes it to
+  `/ui/action_result` alongside the usual success follow-ups:
+
+```json
+{
+  "version": "v0.9.1",
+  "updateDataModel": {
+    "surfaceId": "tickets",
+    "path": "/ui/action_result",
+    "value": { "secret": "s3cr3t", "record_id": "…" }
+  }
+}
+```
+
+Surfaces that want to display the result bind components to paths under
+`/ui/action_result`. Non-map results (`:ok`, records) emit no extra message.
 
 ## Why conventions instead of message types
 
