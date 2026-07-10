@@ -39,7 +39,7 @@ defmodule AshA2ui.MixProject do
       ],
       licenses: ["MIT"],
       files: ~w(lib priv .formatter.exs mix.exs README* LICENSE*
-      CHANGELOG* documentation usage-rules.md),
+      CHANGELOG* documentation usage-rules.md usage-rules),
       links: %{
         "GitHub" => "https://github.com/lukegalea/ash_a2ui",
         "Changelog" => "https://github.com/lukegalea/ash_a2ui/blob/main/CHANGELOG.md"

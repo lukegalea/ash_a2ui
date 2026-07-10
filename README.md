@@ -78,6 +78,36 @@ DSL:
 ]
 ```
 
+### Agent usage rules
+
+AshA2ui ships LLM usage rules (`usage-rules.md` plus `usage-rules/actions.md`
+and `usage-rules/liveview.md` sub-rules) compatible with
+[`usage_rules`](https://hexdocs.pm/usage_rules). To sync them into your
+project's AGENTS.md, add `{:usage_rules, "~> 1.1", only: [:dev]}` and
+configure it in your `mix.exs` project config:
+
+```elixir
+def project do
+  [
+    # ...
+    usage_rules: [
+      file: "AGENTS.md",
+      usage_rules: [:ash_a2ui]
+    ]
+  ]
+end
+```
+
+then run:
+
+```bash
+mix usage_rules.sync
+```
+
+`:ash_a2ui` inlines the main rules and both sub-rules. Use
+`"ash_a2ui:actions"` / `"ash_a2ui:liveview"` to pull in a single sub-rule,
+or `{:ash_a2ui, sub_rules: []}` for the main rules only.
+
 ## Quickstart
 
 ### Authoring mode 1: on the resource
@@ -259,7 +289,17 @@ in this repo. POC route cells are filled in when the POC lands.
 v0 deliberately supports exactly what a real CRUD admin page needs: table +
 form components, row actions, field inference, type→widget mapping,
 compile-time verifiers, actor-aware authorization, and PubSub live refresh via
-the LiveView transport. Documented as roadmap (not built):
+the LiveView transport.
+
+Shipped beyond the v0 core:
+
+- ✅ **`usage_rules` support** — the package ships `usage-rules.md` plus
+  `usage-rules/actions.md` and `usage-rules/liveview.md` sub-rules, syncable
+  into a consumer's AGENTS.md via
+  [`mix usage_rules.sync`](https://hexdocs.pm/usage_rules) (see
+  [Agent usage rules](#agent-usage-rules)).
+
+Documented as roadmap (not built):
 
 - **A2UI v1.0 spec support** once it leaves RC — the payload builder is
   isolated behind a versioned encoder (`AshA2ui.Encoder.V0_9_1`) so a new spec

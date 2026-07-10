@@ -7,6 +7,14 @@ in an `a2ui` DSL block; the extension emits the wire messages, routes client
 the docs before assuming prior knowledge — the DSL is small and these rules
 cover most decisions.
 
+Sub-rules (addressable as `ash_a2ui:<name>`):
+
+- `ash_a2ui:actions` — routing client envelopes through
+  `AshA2ui.ActionHandler`, the `row_actions` allowlist, and the reserved
+  data-model paths.
+- `ash_a2ui:liveview` — the `AshA2ui.LiveRenderer` transport and the JS
+  hook wiring contract.
+
 ## When to reach for AshA2ui (preferred ladder)
 
 Work down this ladder and stop at the first rung that fits:
@@ -30,7 +38,8 @@ Work down this ladder and stop at the first rung that fits:
   - **Standalone UI module** (`use AshA2ui.Standalone` + `for_resource` in
     the `a2ui` block) — prefer this for shared domain resources you don't
     want to couple to UI concerns, resources you can't edit, or multiple
-    surfaces per resource.
+    surfaces per resource. Standalone modules are accepted anywhere a
+    resource is (`Info`, `ActionHandler`, `LiveRenderer`).
 
 ```elixir
 defmodule MyApp.UI.TicketUI do
@@ -54,6 +63,14 @@ defmodule MyApp.UI.TicketUI do
 end
 ```
 
+- Section options: `surface_id` (defaults to the underscored short name of
+  the resource), `for_resource` (standalone modules only), and
+  `add_render_action?` (defaults to `true`; on-resource surfaces get a
+  generic `render_a2ui` action returning the surface's messages — set it to
+  `false` if you don't want that action on the resource; it is ignored in
+  standalone modules).
+- Component names are exactly `:table` and `:form` — there are no other
+  component kinds in v0.
 - **Always declare `row_actions` explicitly and minimally.** It is the
   server-side allowlist for the `invoke` action — anything listed becomes
   invokable by any client that can reach the surface; anything not listed is
@@ -73,9 +90,11 @@ end
 ## Building and serving payloads
 
 - **Never hand-write A2UI JSON.** Always produce messages via
-  `AshA2ui.Info.build_surface/2` (full bootstrap) or
-  `AshA2ui.Info.build_data_model/2` (data-only refresh). Hand-rolled maps
-  bypass schema validation and the versioned encoder.
+  `AshA2ui.Info.build_surface/2` (full bootstrap: the ordered
+  `createSurface` → `updateComponents` → `updateDataModel` list) or
+  `AshA2ui.Info.build_data_model/2` (data-only refresh: a single
+  `updateDataModel` message). Hand-rolled maps bypass schema validation and
+  the versioned encoder.
 - Always pass `actor:` (and `tenant:` where relevant). Reads run with
   `authorize?: true`; a nil actor is evaluated by policies as nil, not
   skipped.
@@ -83,9 +102,9 @@ end
   no-op. Transport-level authentication is your only gate there — say so in
   code review rather than assuming enforcement.
 - Prefer `AshA2ui.LiveRenderer` for Phoenix hosts (it also gives PubSub live
-  refresh). Use plain JSON endpoints when the consumer isn't a LiveView
-  page. Both are supported; don't invent a third transport before checking
-  the roadmap.
+  refresh) — see `ash_a2ui:liveview`. Use plain JSON endpoints when the
+  consumer isn't a LiveView page. Both are supported; don't invent a third
+  transport before checking the roadmap.
 
 ## Handling client actions
 
@@ -94,13 +113,15 @@ end
   enforces the DSL allowlist, invokes the Ash action with the actor, and
   maps validation errors onto the reserved data-model paths. Calling Ash
   actions directly from transport code skips the allowlist and the error
-  mapping.
+  mapping. Full contract in `ash_a2ui:actions`.
 - v0 action names are exactly `"submit_form"`, `"select_row"`, and
   `"invoke"`. Don't invent new `action.name` values; add a proper Ash action
   and expose it via `row_actions` instead.
-- Surface feedback through the reserved data-model paths — `/errors/<field>`
-  for validation errors, `/ui/status` for lifecycle feedback — never through
-  ad-hoc paths or custom message types. Renderers depend on these paths.
+- Surface feedback through the reserved data-model paths — `/records`,
+  `/form`, `/errors/<field>` for validation errors, `/ui/status` for
+  lifecycle feedback, `/ui/action_result` for map-returning generic actions
+  — never through ad-hoc paths or custom message types. Renderers depend on
+  these paths.
 
 ## Avoid list
 
