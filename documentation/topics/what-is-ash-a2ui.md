@@ -111,8 +111,14 @@ replace your rendering stack.
 The reference proof-of-concept replaces a hand-written admin LiveView
 (master–detail list, create/edit form, row action, flash feedback) weighing
 **437 lines** (179 LiveView + 258 HEEx) with an `a2ui` block plus a thin
-LiveView shell: **N LOC** *(placeholder — measured when the POC lands; see
-the coverage matrix in the [README](../../README.md))*.
+LiveView shell: **92 lines** (38 standalone UI module + 35 LiveView + 19
+JSON controller, moduledocs included; see the coverage matrix in the
+[README](../../README.md)).
+
+One parity gap surfaced in the POC: the row action returns a secret into the
+client data model (`/ui/action_result`), but no catalog component displays
+it — the old page showed it in a selectable field. That's roadmap material
+(an action-result display component), not a backend workaround.
 
 The honest reading: the win isn't only line count — it's that the replacement
 is a declaration checked at compile time, renders through a standard protocol

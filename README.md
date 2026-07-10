@@ -272,17 +272,17 @@ in this repo. POC route cells are filled in when the POC lands.
 
 | Capability | Demo route | Test |
 |---|---|---|
-| Table render (`List` + `Row`/`Column` composition) | *pending POC* | `test/encoder_test.exs` |
-| Form create/update | *pending POC* | `test/encoder_test.exs`, `test/action_handler_test.exs` |
-| Row actions (`invoke` allowlist) | *pending POC* | `test/action_handler_test.exs` |
-| Validation-error round trip (`/errors/<field>`) | *pending POC* | `test/action_handler_test.exs` |
-| Actor-aware authorization | *pending POC* | `test/action_handler_test.exs` |
+| Table render (`List` + `Row`/`Column` composition) | `/admin-tools/promotions-providers` (ScribbleVet backend) | `test/encoder_test.exs` |
+| Form create/update | `/admin-tools/promotions-providers` (ScribbleVet backend) | `test/encoder_test.exs`, `test/action_handler_test.exs` |
+| Row actions (`invoke` allowlist) | `/admin-tools/promotions-providers` (`generate_webhook_secret`) | `test/action_handler_test.exs` |
+| Validation-error round trip (`/errors/<field>`) | `/admin-tools/promotions-providers` (duplicate name) | `test/action_handler_test.exs` |
+| Actor-aware authorization | `/admin-tools/promotions-providers` (admin live_session actor) | `test/action_handler_test.exs` |
 | Field inference from public attributes | n/a (compile time) | `test/transformer_test.exs` |
 | Compile-time verifiers (bad fields/actions) | n/a (compile time) | `test/verifier_test.exs` |
-| Schema validation of every payload (vendored v0.9.1 schemas) | *pending POC* | `test/schema_helper_test.exs` + every encoder/e2e test |
-| LiveView transport (mount, action round trip) | *pending POC* | `test/live_renderer_test.exs` |
-| PubSub live data refresh | *pending POC* | `test/live_renderer_test.exs` |
-| End-to-end: resource → surface → action → updated data model | *pending POC* | `test/ash_a2ui_test.exs` |
+| Schema validation of every payload (vendored v0.9.1 schemas) | validated in POC transport specs | `test/schema_helper_test.exs` + every encoder/e2e test |
+| LiveView transport (mount, action round trip) | `/admin-tools/promotions-providers` | `test/live_renderer_test.exs` |
+| PubSub live data refresh | `/admin-tools/promotions-providers` (second-session create) | `test/live_renderer_test.exs` |
+| End-to-end: resource → surface → action → updated data model | `/admin-tools/promotions-providers` + `GET /admin-tools/a2ui/promotions-providers` (JSON) | `test/ash_a2ui_test.exs` |
 
 ## Roadmap
 
