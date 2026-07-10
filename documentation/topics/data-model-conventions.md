@@ -16,6 +16,7 @@ custom hooks, and tests can rely on them.
 | `/errors/<field>` | Human-readable validation error text for `<field>` | A submitted action fails validation |
 | `/ui/status` | Operation feedback text (the flash-equivalent) | After every handled action (success/error) |
 | `/ui/action_result` | The map returned by a map-returning generic action | An `invoke`d generic action returns a plain map |
+| `/query` | The current search/filter/sort/pagination state of a query-enabled table | Initial render; after every `query` action; alongside query-aware success refreshes |
 
 Everything under these paths uses camelCase string keys, matching the rest of
 the wire format.
@@ -130,6 +131,41 @@ AshA2ui conventions layered on the protocol, not part of the A2UI spec):
 
 Surfaces that want to display the result bind components to paths under
 `/ui/action_result`. Non-map results (`:ok`, records) emit no extra message.
+
+## `/query` — search/filter/sort/pagination state
+
+When a table component declares a `query` (see
+[Queries and Pagination](queries-and-pagination.md)), the surface carries the
+current query state at `/query`. The exact shape (frozen contract):
+
+```json
+{
+  "search": "",
+  "filters": { "status": "", "category": "" },
+  "sort": { "field": "inserted_at", "dir": "desc" },
+  "page": 1,
+  "pageSize": 25,
+  "totalCount": 42,
+  "hasMore": true
+}
+```
+
+Conventions:
+
+- `filters` always contains **every declared filter name**; an empty string
+  means "inactive", so client bindings at `/query/filters/<name>` are stable.
+- `sort` is `{"field": ..., "dir": "asc" | "desc"}` or `null` when unsorted.
+- `totalCount` is an integer, or `null` when the data layer cannot count.
+- `hasMore` says whether a next page exists.
+- The server writes `/query` on the initial render, after every `query`
+  action, and alongside query-aware success refreshes — client edits to
+  `/query/search` and `/query/filters/...` (via the emitted controls) are
+  local until a `query` action sends them back.
+
+The `query` client action's context is `{"query": <the /query map>}` plus an
+optional literal `"page"` override or relative `"pageDelta"`; everything in
+it is validated against the DSL-declared allowlist and rejected via
+`/ui/status` when not declared.
 
 ## Why conventions instead of message types
 

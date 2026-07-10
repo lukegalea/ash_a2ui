@@ -31,6 +31,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       live("/live-renderer/stubbed", AshA2ui.Test.StubbedLive)
       live("/live-renderer/pubsub", AshA2ui.Test.PubsubStubLive)
       live("/live-renderer/defaults", AshA2ui.Test.DefaultsLive)
+      live("/live-renderer/query", AshA2ui.Test.QueryDefaultsLive)
     end
   end
 

@@ -20,6 +20,7 @@ for the resource named by `for_resource`).
 
 
 ### Nested DSLs
+ * [query](#a2ui-query)
  * [component](#a2ui-component)
  * [field](#a2ui-field)
 
@@ -60,6 +61,59 @@ end
 
 
 
+### a2ui.query
+```elixir
+query name
+```
+
+
+A named, server-enforced allowlist for search, sorting, equality filters,
+and pagination, referenced by a `:table` component via its `query` option.
+Client `"query"` actions are validated against these lists — anything not
+declared here is rejected before Ash is called.
+
+
+
+
+### Examples
+```
+query :default do
+  search_fields [:subject]
+  sortable [:subject, :inserted_at]
+  filters [:status]
+  default_sort inserted_at: :desc
+  page_size 25
+  max_page_size 100
+end
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#a2ui-query-name){: #a2ui-query-name .spark-required} | `atom` |  | The name of the query, referenced by a table component's `query` option. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`search_fields`](#a2ui-query-search_fields){: #a2ui-query-search_fields } | `list(atom)` | `[]` | Public string attributes searched with a case-insensitive contains, OR'd together. Empty means search is rejected. |
+| [`sortable`](#a2ui-query-sortable){: #a2ui-query-sortable } | `list(atom)` | `[]` | Public attributes the client may sort by. Anything else is rejected. |
+| [`filters`](#a2ui-query-filters){: #a2ui-query-filters } | `list(atom)` | `[]` | Public attributes the client may equality-filter on. Anything else is rejected. |
+| [`default_sort`](#a2ui-query-default_sort){: #a2ui-query-default_sort } | `list({atom, :asc \| :desc})` | `[]` | The sort applied when the client requests none, e.g. `default_sort inserted_at: :desc`. |
+| [`page_size`](#a2ui-query-page_size){: #a2ui-query-page_size } | `pos_integer` | `25` | The page size used when the client requests none. |
+| [`max_page_size`](#a2ui-query-max_page_size){: #a2ui-query-max_page_size } | `pos_integer` | `100` | The hard upper bound client-requested page sizes are clamped to. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Query`
+
 ### a2ui.component
 ```elixir
 component name
@@ -98,6 +152,7 @@ end
 | [`create_action`](#a2ui-component-create_action){: #a2ui-component-create_action } | `atom` |  | The create action submitted by the form. |
 | [`update_action`](#a2ui-component-update_action){: #a2ui-component-update_action } | `atom` |  | The update action submitted by the form. |
 | [`row_actions`](#a2ui-component-row_actions){: #a2ui-component-row_actions } | `list(atom)` | `[]` | Actions rendered as per-row buttons (tables). |
+| [`query`](#a2ui-component-query){: #a2ui-component-query } | `atom` |  | Name of a `query` entity providing server-enforced search/sort/filter/pagination (tables). |
 
 
 

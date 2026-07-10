@@ -91,6 +91,7 @@ defmodule AshA2ui.MixProject do
         "documentation/topics/what-is-ash-a2ui.md",
         "documentation/topics/rendering-clients.md",
         "documentation/topics/actions-and-authorization.md",
+        "documentation/topics/queries-and-pagination.md",
         "documentation/topics/data-model-conventions.md",
         {"documentation/dsls/DSL-AshA2ui.md", search_data: Spark.Docs.search_data_for(AshA2ui)},
         "CHANGELOG.md"
@@ -113,7 +114,8 @@ defmodule AshA2ui.MixProject do
           AshA2ui.Info,
           AshA2ui.ResolvedView,
           AshA2ui.Component,
-          AshA2ui.Field
+          AshA2ui.Field,
+          AshA2ui.Query
         ],
         Encoding: [
           AshA2ui.Encoder,
@@ -121,7 +123,8 @@ defmodule AshA2ui.MixProject do
           AshA2ui.TypeMapper
         ],
         Actions: [
-          AshA2ui.ActionHandler
+          AshA2ui.ActionHandler,
+          AshA2ui.QueryRunner
         ],
         "LiveView Transport": [
           AshA2ui.LiveRenderer

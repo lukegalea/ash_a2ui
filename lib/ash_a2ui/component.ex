@@ -12,6 +12,7 @@ defmodule AshA2ui.Component do
     :read_action,
     :create_action,
     :update_action,
+    :query,
     row_actions: [],
     __spark_metadata__: nil
   ]
@@ -22,6 +23,7 @@ defmodule AshA2ui.Component do
           read_action: atom | nil,
           create_action: atom | nil,
           update_action: atom | nil,
+          query: atom | nil,
           row_actions: [atom]
         }
 end

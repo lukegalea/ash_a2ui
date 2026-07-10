@@ -14,6 +14,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   present when the corresponding DSL component is declared):
 
     * `table_heading` — `Text` (h2) with the humanized resource name
+    * `query_controls` — only when the table declares a `query`: a `Row` of a
+      search `TextField` (`query_search_input`, bound to `/query/search`,
+      omitted when the query has no `search_fields`), one `ChoicePicker` per
+      declared filter (`query_filter_<name>`, bound to
+      `/query/filters/<name>`, with an `"All"` option first) and a
+      `query_apply_button` (event `query`, context
+      `{"query": {"path": "/query"}, "page": 1}` — the page-1 reset)
     * `records_list` — `List` whose children are a template
       `{"componentId": "record_row", "path": "/records"}`; `record_row` is a
       `Row` of per-field `Text` cells (`table_cell_<field>`, bound to the
@@ -23,6 +30,10 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       `{"action": "<name>", "recordId": {"path": "id"}}`) and a
       `row_select_button` (event `select_row`, context
       `{"recordId": {"path": "id"}}`)
+    * `query_pagination` — only when the table declares a `query`: a `Row` of
+      `query_prev_button` / `query_page_text` (bound to `/query/page`) /
+      `query_next_button`; the buttons carry event `query` with context
+      `{"query": {"path": "/query"}, "pageDelta": -1 | 1}`
     * `form` — `Column` of `form_input_<field>` + `form_error_<field>` pairs
       and a `form_submit_button` (event `submit_form`, context
       `{"values": {"path": "/form"}, "recordId": {"path": "/form/id"}}`).
@@ -41,6 +52,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "errors" => %{},
         "ui" => %{"status" => ""}
       }
+
+  Query-enabled surfaces additionally carry `"query"` — the `/query` state
+  shape documented on `AshA2ui.QueryRunner` — and their `submit_form`/`invoke`
+  contexts include `"query": {"path": "/query"}` so success refreshes respect
+  the client's active search/filters/sort/page.
 
   Record values are JSON-safe: dates/datetimes via `to_iso8601`, decimals and
   atoms via `to_string`.
@@ -101,7 +117,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
              "form" => %{},
              "errors" => %{},
              "ui" => %{"status" => ""}
-           }}
+           }
+           |> put_query_state(resolved_view, opts)}
       end
 
     %{
@@ -119,14 +136,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp components(view) do
     table = Enum.find(view.components, &(&1.name == :table))
     form = Enum.find(view.components, &(&1.name == :form))
+    query = (table && view.query) || nil
 
     table_components = (table && table_components(view, table)) || []
+    query_components = (query && query_components(view, query)) || []
     form_components = (form && form_components(view, form)) || []
 
     root = %{
       "id" => "root",
       "component" => "Column",
-      "children" => Enum.map(table_components ++ form_components, & &1["id"]) ++ ["status_text"]
+      "children" => root_children(table, query, form)
     }
 
     status = %{
@@ -135,8 +154,23 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "text" => %{"path" => "/ui/status"}
     }
 
-    [root | table_components ++ form_components ++ table_descendants(view, table)] ++
-      form_descendants(view, form) ++ [status]
+    [root | table_components ++ query_components ++ form_components] ++
+      table_descendants(view, table) ++ form_descendants(view, form) ++ [status]
+  end
+
+  # Root order: heading, query controls, the list, pagination, form, status —
+  # each section present only when declared.
+  defp root_children(table, query, form) do
+    sections = [
+      {"table_heading", table},
+      {"query_controls", query},
+      {"records_list", table},
+      {"query_pagination", query},
+      {"form", form},
+      {"status_text", true}
+    ]
+
+    for {id, present} <- sections, present, do: id
   end
 
   defp table_components(view, _table) do
@@ -155,6 +189,92 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     ]
   end
 
+  # --- query controls (search / filters / pagination) ---
+
+  # The `"query"` action wire contract: every control sends
+  # `{"query": {"path": "/query"}}` — the current query state — plus either a
+  # literal page reset (`"page" => 1`, Apply) or a relative page change
+  # (`"pageDelta" => -1 | 1`, prev/next). The server validates everything
+  # against the declared allowlist (`AshA2ui.QueryRunner`).
+  defp query_components(view, query) do
+    search = (query.search_fields != [] && [search_input()]) || []
+    filters = Enum.map(query.filters, &filter_picker(view.resource, &1))
+
+    controls = %{
+      "id" => "query_controls",
+      "component" => "Row",
+      "children" => Enum.map(search ++ filters, & &1["id"]) ++ ["query_apply_button"]
+    }
+
+    [controls | search ++ filters] ++ apply_button() ++ pagination_components()
+  end
+
+  defp search_input do
+    %{
+      "id" => "query_search_input",
+      "component" => "TextField",
+      "label" => "Search",
+      "value" => %{"path" => "/query/search"}
+    }
+  end
+
+  defp filter_picker(resource, field) do
+    %{
+      "id" => "query_filter_#{field}",
+      "component" => "ChoicePicker",
+      "label" => humanize(field),
+      "variant" => "mutuallyExclusive",
+      "value" => %{"path" => "/query/filters/#{field}"},
+      "options" => [%{"label" => "All", "value" => ""} | filter_options(resource, field)]
+    }
+  end
+
+  defp filter_options(resource, field) do
+    if attribute_type(resource, field) == Ash.Type.Boolean do
+      [%{"label" => "True", "value" => "true"}, %{"label" => "False", "value" => "false"}]
+    else
+      choice_options(resource, field)
+    end
+  end
+
+  defp apply_button do
+    [
+      query_button("query_apply", %{"query" => %{"path" => "/query"}, "page" => 1}),
+      %{"id" => "query_apply_text", "component" => "Text", "text" => "Apply"}
+    ]
+  end
+
+  defp pagination_components do
+    [
+      %{
+        "id" => "query_pagination",
+        "component" => "Row",
+        "children" => ["query_prev_button", "query_page_text", "query_next_button"]
+      },
+      query_button("query_prev", %{"query" => %{"path" => "/query"}, "pageDelta" => -1}),
+      %{"id" => "query_prev_text", "component" => "Text", "text" => "Previous"},
+      %{"id" => "query_page_text", "component" => "Text", "text" => %{"path" => "/query/page"}},
+      query_button("query_next", %{"query" => %{"path" => "/query"}, "pageDelta" => 1}),
+      %{"id" => "query_next_text", "component" => "Text", "text" => "Next"}
+    ]
+  end
+
+  defp query_button(id_prefix, context) do
+    %{
+      "id" => "#{id_prefix}_button",
+      "component" => "Button",
+      "child" => "#{id_prefix}_text",
+      "action" => %{"event" => %{"name" => "query", "context" => context}}
+    }
+  end
+
+  # Write-action contexts carry the current /query so success refreshes can
+  # re-read with the client's active search/filters/sort/page.
+  defp put_query_binding(context, %{query: nil}), do: context
+
+  defp put_query_binding(context, _view),
+    do: Map.put(context, "query", %{"path" => "/query"})
+
   defp table_descendants(_view, nil), do: []
 
   defp table_descendants(view, table) do
@@ -168,7 +288,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
 
     cells = Enum.map(table.fields, &cell(view, &1))
-    action_buttons = Enum.flat_map(table.row_actions, &row_action_button/1)
+    action_buttons = Enum.flat_map(table.row_actions, &row_action_button(view, &1))
 
     select_button = [
       %{
@@ -213,7 +333,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   defp cell_text(field), do: %{"path" => to_string(field.name)}
 
-  defp row_action_button(action) do
+  defp row_action_button(view, action) do
     [
       %{
         "id" => "row_action_#{action}_button",
@@ -222,10 +342,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "action" => %{
           "event" => %{
             "name" => "invoke",
-            "context" => %{
-              "action" => to_string(action),
-              "recordId" => %{"path" => "id"}
-            }
+            "context" =>
+              put_query_binding(
+                %{
+                  "action" => to_string(action),
+                  "recordId" => %{"path" => "id"}
+                },
+                view
+              )
           }
         }
       },
@@ -260,10 +384,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "action" => %{
           "event" => %{
             "name" => "submit_form",
-            "context" => %{
-              "values" => %{"path" => "/form"},
-              "recordId" => %{"path" => "/form/id"}
-            }
+            "context" =>
+              put_query_binding(
+                %{
+                  "values" => %{"path" => "/form"},
+                  "recordId" => %{"path" => "/form/id"}
+                },
+                view
+              )
           }
         }
       },
@@ -340,6 +468,27 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{constraints: constraints} when is_list(constraints) -> constraints
       _ -> []
     end
+  end
+
+  # --- /query state ---
+
+  # The initial data model carries the query state under "query". Callers that
+  # ran the query (AshA2ui.Info) pass the real state via `:query_state`; direct
+  # encoder calls fall back to the declared defaults with counts derived from
+  # the records at hand.
+  defp put_query_state(value, %{query: nil}, _opts), do: value
+
+  defp put_query_state(value, view, opts) do
+    state =
+      Keyword.get(opts, :query_state) ||
+        AshA2ui.QueryRunner.state(
+          view.query,
+          AshA2ui.QueryRunner.default_params(view.query),
+          length(value["records"]),
+          false
+        )
+
+    Map.put(value, "query", state)
   end
 
   # --- record serialization ---

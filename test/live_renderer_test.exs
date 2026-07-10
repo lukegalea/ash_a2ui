@@ -176,6 +176,36 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert messages != []
         Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
       end
+
+      test "a query action round-trips through the LiveView transport", %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/live-renderer/query")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+
+        envelope = %{
+          "version" => "v0.9.1",
+          "action" => %{
+            "name" => "query",
+            "surfaceId" => "paginated",
+            "sourceComponentId" => "query_apply_button",
+            "timestamp" => "2026-07-10T12:00:00Z",
+            "context" => %{"query" => %{"search" => "nothing matches this"}, "page" => 1}
+          }
+        }
+
+        SchemaHelper.assert_valid_client_message(envelope)
+        render_hook(view, "a2ui:action", envelope)
+
+        assert_push_event(view, "a2ui:messages", %{messages: messages})
+        Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
+
+        assert [
+                 %{"updateDataModel" => %{"path" => "/records", "value" => []}},
+                 %{"updateDataModel" => %{"path" => "/query", "value" => query_state}}
+               ] = messages
+
+        assert %{"search" => "nothing matches this", "page" => 1, "hasMore" => false} =
+                 query_state
+      end
     end
   end
 end

@@ -80,8 +80,9 @@ DSL:
 
 ### Agent usage rules
 
-AshA2ui ships LLM usage rules (`usage-rules.md` plus `usage-rules/actions.md`
-and `usage-rules/liveview.md` sub-rules) compatible with
+AshA2ui ships LLM usage rules (`usage-rules.md` plus `usage-rules/actions.md`,
+`usage-rules/liveview.md`, and `usage-rules/queries.md` sub-rules) compatible
+with
 [`usage_rules`](https://hexdocs.pm/usage_rules). To sync them into your
 project's AGENTS.md, add `{:usage_rules, "~> 1.1", only: [:dev]}` and
 configure it in your `mix.exs` project config:
@@ -104,9 +105,10 @@ then run:
 mix usage_rules.sync
 ```
 
-`:ash_a2ui` inlines the main rules and both sub-rules. Use
-`"ash_a2ui:actions"` / `"ash_a2ui:liveview"` to pull in a single sub-rule,
-or `{:ash_a2ui, sub_rules: []}` for the main rules only.
+`:ash_a2ui` inlines the main rules and all sub-rules. Use
+`"ash_a2ui:actions"` / `"ash_a2ui:liveview"` / `"ash_a2ui:queries"` to pull
+in a single sub-rule, or `{:ash_a2ui, sub_rules: []}` for the main rules
+only.
 
 ## Quickstart
 
@@ -181,6 +183,35 @@ end
 
 Standalone modules are accepted anywhere a resource is:
 `AshA2ui.Info.build_surface(MyApp.UI.TicketUI, actor: user)`.
+
+### Search, filtering, sorting, pagination
+
+Tables get server-enforced querying through a named `query` allowlist — the
+client references it by name and can only use what you declare (arbitrary
+client sort/filter params are rejected before Ash is called):
+
+```elixir
+a2ui do
+  query :default do
+    search_fields [:subject]          # case-insensitive contains, OR'd
+    sortable [:subject, :inserted_at]
+    filters [:status]                 # equality filters
+    default_sort inserted_at: :desc
+    page_size 25
+    max_page_size 100
+  end
+
+  component :table do
+    fields [:subject, :status, :inserted_at]
+    query :default
+  end
+end
+```
+
+The encoder emits the search field, filter pickers, and pagination buttons;
+the `"query"` action validates every request against the allowlist and
+answers with `/records` + `/query` data-model updates. See
+[Queries and Pagination](documentation/topics/queries-and-pagination.md).
 
 ### Building the surface
 
@@ -293,9 +324,13 @@ the LiveView transport.
 
 Shipped beyond the v0 core:
 
+- ✅ **Named server-enforced `query` allowlists** — declarative
+  search/sort/filter/pagination per table, referenced by name and validated
+  server-side (see
+  [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
 - ✅ **`usage_rules` support** — the package ships `usage-rules.md` plus
-  `usage-rules/actions.md` and `usage-rules/liveview.md` sub-rules, syncable
-  into a consumer's AGENTS.md via
+  `usage-rules/actions.md`, `usage-rules/liveview.md`, and
+  `usage-rules/queries.md` sub-rules, syncable into a consumer's AGENTS.md via
   [`mix usage_rules.sync`](https://hexdocs.pm/usage_rules) (see
   [Agent usage rules](#agent-usage-rules)).
 
@@ -304,9 +339,8 @@ Documented as roadmap (not built):
 - **A2UI v1.0 spec support** once it leaves RC — the payload builder is
   isolated behind a versioned encoder (`AshA2ui.Encoder.V0_9_1`) so a new spec
   version is a new encoder module.
-- **`ui_query`-style declarative allowlist** — named, server-enforced
-  search/sort/filter/pagination configs referenced by the client by name;
-  never arbitrary client-supplied query params.
+- **Richer `query` filters** — ranged/custom filter shapes beyond the shipped
+  equality filters, and multiple queries per table.
 - **`refreshes` metadata on actions** — after a successful action, push
   `updateDataModel` only for the named data regions it affects (v0 refreshes
   the whole surface data model).
@@ -335,6 +369,7 @@ Documented as roadmap (not built):
 - [Rendering Clients](documentation/topics/rendering-clients.md) — transports,
   hook contract, `@a2ui/lit` / `@a2ui/react`
 - [Actions and Authorization](documentation/topics/actions-and-authorization.md)
+- [Queries and Pagination](documentation/topics/queries-and-pagination.md)
 - [Data Model Conventions](documentation/topics/data-model-conventions.md)
 - [DSL reference](documentation/dsls/DSL-AshA2ui.md)
 

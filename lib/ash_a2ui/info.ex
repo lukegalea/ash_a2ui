@@ -36,6 +36,16 @@ defmodule AshA2ui.Info do
   end
 
   @doc """
+  The `query` entities declared in the `a2ui` section.
+  """
+  @spec queries(module) :: [AshA2ui.Query.t()]
+  def queries(resource_or_ui_module) do
+    resource_or_ui_module
+    |> Extension.get_entities([:a2ui])
+    |> Enum.filter(&is_struct(&1, AshA2ui.Query))
+  end
+
+  @doc """
   Resolves the Ash resource behind `resource_or_ui_module`: the module's
   `for_resource` option if set (standalone UI modules), otherwise the module
   itself (which must be an `Ash.Resource`).
@@ -72,7 +82,7 @@ defmodule AshA2ui.Info do
   @spec build_surface(module, keyword) :: [map]
   def build_surface(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
-    records = load_records!(resolved_view, opts)
+    {records, opts} = load_records!(resolved_view, opts)
 
     V0_9_1.encode_surface(resolved_view, records, opts)
   end
@@ -86,36 +96,57 @@ defmodule AshA2ui.Info do
   @spec build_data_model(module, keyword) :: map
   def build_data_model(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
-    records = load_records!(resolved_view, opts)
+    {records, opts} = load_records!(resolved_view, opts)
 
     V0_9_1.encode_data_model(resolved_view, records, opts)
   end
 
   # Loads the surface's records through a normal `Ash.read` (policies apply).
-  # Surfaces without a table component render no records.
+  # Surfaces without a table component render no records. With a `query`
+  # configured, the read runs through `AshA2ui.QueryRunner` with the query's
+  # declared defaults (default sort, page 1) and the resulting `/query` state
+  # is handed to the encoder via the `:query_state` option.
   defp load_records!(resolved_view, opts) do
     cond do
       not Enum.any?(resolved_view.components, &(&1.name == :table)) ->
-        []
+        {[], opts}
 
       is_nil(resolved_view.read_action) ->
         raise ArgumentError,
               "cannot load records for #{inspect(resolved_view.resource)}: the resource has " <>
                 "no read action (declare one, or set `read_action` on the table component)"
 
-      true ->
-        domain =
-          opts[:domain] || ResourceInfo.domain(resolved_view.resource) ||
-            raise(ArgumentError, "no domain configured for #{inspect(resolved_view.resource)}")
+      resolved_view.query ->
+        params = AshA2ui.QueryRunner.default_params(resolved_view.query)
 
-        resolved_view.resource
-        |> Ash.Query.for_read(resolved_view.read_action)
-        |> Ash.read!(
-          domain: domain,
-          actor: opts[:actor],
-          tenant: opts[:tenant],
-          authorize?: Keyword.get(opts, :authorize?, true)
-        )
+        case AshA2ui.QueryRunner.run(resolved_view, params, read_opts(resolved_view, opts)) do
+          {:ok, records, query_state} ->
+            {records, Keyword.put(opts, :query_state, query_state)}
+
+          {:error, error} ->
+            raise Ash.Error.to_error_class(error)
+        end
+
+      true ->
+        records =
+          resolved_view.resource
+          |> Ash.Query.for_read(resolved_view.read_action)
+          |> Ash.read!(read_opts(resolved_view, opts))
+
+        {records, opts}
     end
+  end
+
+  defp read_opts(resolved_view, opts) do
+    domain =
+      opts[:domain] || ResourceInfo.domain(resolved_view.resource) ||
+        raise(ArgumentError, "no domain configured for #{inspect(resolved_view.resource)}")
+
+    [
+      domain: domain,
+      actor: opts[:actor],
+      tenant: opts[:tenant],
+      authorize?: Keyword.get(opts, :authorize?, true)
+    ]
   end
 end

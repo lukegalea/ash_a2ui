@@ -29,6 +29,7 @@ defmodule AshA2ui.ResolvedView do
     :read_action,
     :create_action,
     :update_action,
+    :query,
     components: [],
     fields: %{},
     row_actions: []
@@ -42,6 +43,7 @@ defmodule AshA2ui.ResolvedView do
           read_action: atom | nil,
           create_action: atom | nil,
           update_action: atom | nil,
+          query: AshA2ui.Query.t() | nil,
           row_actions: [atom]
         }
 
@@ -80,9 +82,21 @@ defmodule AshA2ui.ResolvedView do
       read_action: component_action(table, :read_action, resource, :read),
       create_action: component_action(form, :create_action, resource, :create),
       update_action: component_action(form, :update_action, resource, :update),
+      query: resolve_query(resource_or_ui_module, table),
       row_actions: (table && table.row_actions) || []
     }
   end
+
+  # The query config referenced by the table component; the reference is
+  # verified at compile time (VerifyQueries), so a miss here only happens for
+  # surfaces without a table or without a query option.
+  defp resolve_query(resource_or_ui_module, %{query: query_name}) when not is_nil(query_name) do
+    resource_or_ui_module
+    |> AshA2ui.Info.queries()
+    |> Enum.find(&(&1.name == query_name))
+  end
+
+  defp resolve_query(_resource_or_ui_module, _table), do: nil
 
   defp surface_id(resource_or_ui_module, resource) do
     case AshA2ui.Info.a2ui_surface_id(resource_or_ui_module) do

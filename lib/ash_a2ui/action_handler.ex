@@ -51,6 +51,15 @@ defmodule AshA2ui.ActionHandler do
       `updateDataModel` populating `/form` with the record's field values
       (edit-form population), including `"id"`.
 
+    * `"query"` — context `%{"query" => <the /query map>}` plus an optional
+      literal `"page"` override or relative `"pageDelta"` (used by the
+      emitted Apply / prev / next controls). Requires the surface's table to
+      declare a `query`; every requested search/sort/filter/page value is
+      validated against that named allowlist by `AshA2ui.QueryRunner` —
+      non-allowlisted values are rejected with a `/ui/status` error before
+      Ash is called. On success returns `updateDataModel` messages for
+      `/records` and `/query`.
+
   Unknown action names and malformed messages return
   `{:error, [updateDataModel]}` with an explanation at `/ui/status`.
 
@@ -62,7 +71,10 @@ defmodule AshA2ui.ActionHandler do
     * on success: `/records` (re-read row maps, each including `"id"`),
       `/form` cleared to `%{}`, `/errors` cleared to `%{}`, and `/ui/status`
       set to a success text — plus `/ui/action_result` for map-returning
-      generic actions;
+      generic actions. On query-enabled surfaces the re-read runs through
+      the query (`submit_form`/`invoke` contexts may carry the current
+      `/query` map under `"query"`; missing or invalid state falls back to
+      the query's defaults) and a `/query` state message is included;
     * on validation errors: `/errors/<field>` per failing field and
       `/ui/status`;
     * on `Ash.Error.Forbidden`: only a `/ui/status` "not authorized" message
@@ -73,6 +85,7 @@ defmodule AshA2ui.ActionHandler do
   """
 
   alias Ash.Resource.Info, as: ResourceInfo
+  alias AshA2ui.QueryRunner
   alias AshA2ui.ResolvedView
 
   @version "v0.9.1"
@@ -102,12 +115,29 @@ defmodule AshA2ui.ActionHandler do
 
     case parse(action_message) do
       {:ok, name, context} ->
-        dispatch(name, context, view, ash_opts)
+        env = %{view: view, ash_opts: ash_opts, refresh: refresh_params(view, context)}
+        dispatch(name, context, env)
 
       :error ->
         {:error, [status(view, "Malformed action message: expected an A2UI action envelope.")]}
     end
   end
+
+  # Success refreshes respect the client's current query state when the
+  # surface has a `query` configured: any action context may carry the
+  # current `/query` map under `"query"`. A missing or invalid carried state
+  # falls back to the query's declared defaults (the write itself is never
+  # failed over refresh state). Surfaces without a query refresh as before.
+  defp refresh_params(%{query: nil}, _context), do: nil
+
+  defp refresh_params(view, context) when is_map(context) do
+    case QueryRunner.parse(view, Map.take(context, ["query"])) do
+      {:ok, params} -> params
+      {:error, _reason} -> QueryRunner.default_params(view.query)
+    end
+  end
+
+  defp refresh_params(view, _context), do: QueryRunner.default_params(view.query)
 
   defp parse(%{"action" => %{"name" => name} = action}) when is_binary(name),
     do: {:ok, name, Map.get(action, "context") || %{}}
@@ -128,16 +158,16 @@ defmodule AshA2ui.ActionHandler do
 
   # --- dispatch --------------------------------------------------------------
 
-  defp dispatch("submit_form", context, view, ash_opts) do
+  defp dispatch("submit_form", context, env) do
     values = Map.get(context, "values") || %{}
 
     case Map.get(context, "recordId") do
-      nil -> create(view, values, ash_opts)
-      record_id -> update(view, record_id, values, ash_opts)
+      nil -> create(env, values)
+      record_id -> update(env, record_id, values)
     end
   end
 
-  defp dispatch("invoke", context, view, ash_opts) do
+  defp dispatch("invoke", context, %{view: view} = env) do
     requested = Map.get(context, "action")
     allowed = requested && Enum.find(view.row_actions, &(to_string(&1) == requested))
 
@@ -156,11 +186,11 @@ defmodule AshA2ui.ActionHandler do
          ]}
 
       true ->
-        invoke(allowed, Map.get(context, "recordId"), view, ash_opts)
+        invoke(allowed, Map.get(context, "recordId"), env)
     end
   end
 
-  defp dispatch("select_row", context, view, ash_opts) do
+  defp dispatch("select_row", context, %{view: view, ash_opts: ash_opts}) do
     case Map.get(context, "recordId") do
       nil ->
         {:error, [status(view, ~s(Malformed select_row action: context is missing "recordId".))]}
@@ -170,22 +200,39 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  defp dispatch(name, _context, view, _ash_opts) do
+  defp dispatch("query", context, %{view: view, ash_opts: ash_opts}) do
+    with {:parse, {:ok, params}} <- {:parse, QueryRunner.parse(view, context)},
+         {:run, {:ok, records, query_state}} <-
+           {:run, QueryRunner.run(view, params, ash_opts)} do
+      rows = Enum.map(records, &record_values(&1, table_fields(view)))
+
+      {:ok,
+       [
+         update_data_model(view, "/records", rows),
+         update_data_model(view, "/query", query_state)
+       ]}
+    else
+      {:parse, {:error, reason}} -> {:error, [status(view, reason)]}
+      {:run, {:error, error}} -> {:error, error_messages(view, error)}
+    end
+  end
+
+  defp dispatch(name, _context, %{view: view}) do
     {:error, [status(view, "Unknown action #{inspect(name)}.")]}
   end
 
   # --- submit_form -----------------------------------------------------------
 
-  defp create(view, values, ash_opts) do
+  defp create(%{view: view, ash_opts: ash_opts} = env, values) do
     action = view.create_action || primary_action(view.resource, :create)
 
     view.resource
     |> Ash.Changeset.for_create(action, cast_values(view.resource, action, values), ash_opts)
     |> Ash.create()
-    |> after_write(view, ash_opts, "Created successfully.")
+    |> after_write(env, "Created successfully.")
   end
 
-  defp update(view, record_id, values, ash_opts) do
+  defp update(%{view: view, ash_opts: ash_opts} = env, record_id, values) do
     action = view.update_action || primary_action(view.resource, :update)
 
     result =
@@ -195,21 +242,21 @@ defmodule AshA2ui.ActionHandler do
         |> Ash.update()
       end
 
-    after_write(result, view, ash_opts, "Updated successfully.")
+    after_write(result, env, "Updated successfully.")
   end
 
   # --- invoke ----------------------------------------------------------------
 
-  defp invoke(action_name, record_id, view, ash_opts) do
+  defp invoke(action_name, record_id, %{view: view} = env) do
     case ResourceInfo.action(view.resource, action_name) do
       %{type: :destroy} ->
-        invoke_destroy(action_name, record_id, view, ash_opts)
+        invoke_destroy(action_name, record_id, env)
 
       %{type: :update} ->
-        update(view, record_id, %{}, ash_opts)
+        update(env, record_id, %{})
 
       %{type: :action} = action ->
-        invoke_generic(action, record_id, view, ash_opts)
+        invoke_generic(action, record_id, env)
 
       _other ->
         {:error,
@@ -217,7 +264,7 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  defp invoke_destroy(action_name, record_id, view, ash_opts) do
+  defp invoke_destroy(action_name, record_id, %{view: view, ash_opts: ash_opts} = env) do
     result =
       with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
         record
@@ -225,28 +272,28 @@ defmodule AshA2ui.ActionHandler do
         |> Ash.destroy()
       end
 
-    after_write(result, view, ash_opts, "Action #{inspect(to_string(action_name))} completed.")
+    after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
   end
 
-  defp invoke_generic(action, record_id, view, ash_opts) do
+  defp invoke_generic(action, record_id, %{view: view, ash_opts: ash_opts} = env) do
     view.resource
     |> Ash.ActionInput.for_action(action.name, generic_params(action, record_id), ash_opts)
     |> Ash.run_action()
-    |> generic_result(view, ash_opts, "Action #{inspect(to_string(action.name))} completed.")
+    |> generic_result(env, "Action #{inspect(to_string(action.name))} completed.")
   end
 
-  defp generic_result({:ok, result}, view, ash_opts, status_text)
+  defp generic_result({:ok, result}, %{view: view} = env, status_text)
        when is_map(result) and not is_struct(result) do
     extra = [update_data_model(view, "/ui/action_result", json_map(result))]
-    success(view, ash_opts, status_text, extra)
+    success(env, status_text, extra)
   end
 
-  defp generic_result({:error, error}, view, _ash_opts, _status_text) do
+  defp generic_result({:error, error}, %{view: view}, _status_text) do
     {:error, error_messages(view, error)}
   end
 
-  defp generic_result(_ok_or_other, view, ash_opts, status_text) do
-    success(view, ash_opts, status_text)
+  defp generic_result(_ok_or_other, env, status_text) do
+    success(env, status_text)
   end
 
   # If the generic action declares a `:record_id` argument, pass the
@@ -273,30 +320,48 @@ defmodule AshA2ui.ActionHandler do
 
   # --- success follow-ups ----------------------------------------------------
 
-  defp after_write(:ok, view, ash_opts, status_text), do: success(view, ash_opts, status_text)
+  defp after_write(:ok, env, status_text), do: success(env, status_text)
+  defp after_write({:ok, _record}, env, status_text), do: success(env, status_text)
 
-  defp after_write({:ok, _record}, view, ash_opts, status_text),
-    do: success(view, ash_opts, status_text)
-
-  defp after_write({:error, error}, view, _ash_opts, _status_text),
+  defp after_write({:error, error}, %{view: view}, _status_text),
     do: {:error, error_messages(view, error)}
 
-  defp success(view, ash_opts, status_text, extra \\ []) do
+  # With a query configured the refresh runs through the QueryRunner (using
+  # the carried-or-default query state, see refresh_params/2) and additionally
+  # writes the resulting /query state; without one it re-reads everything.
+  defp success(env, status_text, extra \\ [])
+
+  defp success(%{view: view, ash_opts: ash_opts, refresh: nil}, status_text, extra) do
     case read_records(view, ash_opts) do
       {:ok, records} ->
-        rows = Enum.map(records, &record_values(&1, table_fields(view)))
-
-        {:ok,
-         [
-           update_data_model(view, "/records", rows),
-           update_data_model(view, "/form", %{}),
-           update_data_model(view, "/errors", %{}),
-           update_data_model(view, "/ui/status", status_text)
-         ] ++ extra}
+        {:ok, success_messages(view, records, [], status_text, extra)}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
     end
+  end
+
+  defp success(%{view: view, ash_opts: ash_opts, refresh: params}, status_text, extra) do
+    case QueryRunner.run(view, params, ash_opts) do
+      {:ok, records, query_state} ->
+        query_message = [update_data_model(view, "/query", query_state)]
+        {:ok, success_messages(view, records, query_message, status_text, extra)}
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  defp success_messages(view, records, query_message, status_text, extra) do
+    rows = Enum.map(records, &record_values(&1, table_fields(view)))
+
+    [update_data_model(view, "/records", rows)] ++
+      query_message ++
+      [
+        update_data_model(view, "/form", %{}),
+        update_data_model(view, "/errors", %{}),
+        update_data_model(view, "/ui/status", status_text)
+      ] ++ extra
   end
 
   # --- Ash invocation helpers ------------------------------------------------

@@ -80,6 +80,9 @@ end
   list fields explicitly.
 - Use `field` blocks for presentation (`label`, `widget`, `order`, `hidden`,
   `format`) instead of renaming attributes or adding calculated duplicates.
+- Give tables that need search/sort/filter/pagination a `query` entity and
+  keep its allowlists (`search_fields`, `sortable`, `filters`) minimal —
+  every entry is client-reachable (`ash_a2ui:queries`).
 - Trust the type→widget mapping first (`AshA2ui.TypeMapper`); override with
   `widget` only when the default is wrong for the specific field.
 - **Verifier errors are your friend.** Referenced fields and actions are
@@ -114,14 +117,18 @@ end
   maps validation errors onto the reserved data-model paths. Calling Ash
   actions directly from transport code skips the allowlist and the error
   mapping. Full contract in `ash_a2ui:actions`.
-- v0 action names are exactly `"submit_form"`, `"select_row"`, and
-  `"invoke"`. Don't invent new `action.name` values; add a proper Ash action
+- Action names are exactly `"submit_form"`, `"select_row"`, `"invoke"`, and
+  `"query"`. Don't invent new `action.name` values; add a proper Ash action
   and expose it via `row_actions` instead.
+- **Search/sort/filter/pagination go through a declared `query` entity**
+  (see `ash_a2ui:queries`): a named allowlist the server enforces. Never
+  accept client sort/filter params not declared in a query, and never feed
+  client query input into `Ash.Query` yourself.
 - Surface feedback through the reserved data-model paths — `/records`,
   `/form`, `/errors/<field>` for validation errors, `/ui/status` for
-  lifecycle feedback, `/ui/action_result` for map-returning generic actions
-  — never through ad-hoc paths or custom message types. Renderers depend on
-  these paths.
+  lifecycle feedback, `/ui/action_result` for map-returning generic actions,
+  `/query` for query state — never through ad-hoc paths or custom message
+  types. Renderers depend on these paths.
 
 ## Avoid list
 

@@ -177,4 +177,13 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     # :integration_pending test until Tracks 2/3 merge.
     use AshA2ui.LiveRenderer, ui: AshA2ui.Test.MinimalUI
   end
+
+  defmodule AshA2ui.Test.QueryDefaultsLive do
+    @moduledoc false
+
+    # Real defaults against the query-enabled fixture, proving the "query"
+    # action needs no LiveRenderer changes: it flows through the same
+    # "a2ui:action" event into AshA2ui.ActionHandler.handle/3.
+    use AshA2ui.LiveRenderer, ui: AshA2ui.Test.Paginated
+  end
 end

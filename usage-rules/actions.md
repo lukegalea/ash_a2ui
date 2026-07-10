@@ -27,10 +27,10 @@ AshA2ui.ActionHandler.handle(resource_or_ui_module, envelope,
   `{:error, _}`** — error messages carry the validation feedback the
   renderer must display.
 
-## The three v0 action names
+## The four action names
 
-Only `"submit_form"`, `"invoke"` and `"select_row"` exist. Don't invent new
-`action.name` values; add a proper Ash action and expose it via
+Only `"submit_form"`, `"invoke"`, `"select_row"` and `"query"` exist. Don't
+invent new `action.name` values; add a proper Ash action and expose it via
 `row_actions` instead.
 
 - `"submit_form"` — context `%{"values" => %{...}, "recordId" => id | nil}`.
@@ -48,6 +48,11 @@ Only `"submit_form"`, `"invoke"` and `"select_row"` exist. Don't invent new
 - `"select_row"` — context `%{"recordId" => id}`. Returns one
   `updateDataModel` populating `/form` with the record's values (edit-form
   population).
+- `"query"` — context `%{"query" => <the /query map>}` plus optional
+  `"page"`/`"pageDelta"`. Requires the table to declare a `query` entity;
+  every search/sort/filter/page value is validated against that allowlist
+  and rejected via `/ui/status` when undeclared. Returns `updateDataModel`
+  messages for `/records` and `/query`. Full rules in `ash_a2ui:queries`.
 
 ## Reserved data-model paths
 
@@ -64,6 +69,8 @@ them:
   reasons, "not authorized").
 - `/ui/action_result` — the map result of a map-returning generic action
   (an AshA2ui handler convention, not part of the A2UI spec).
+- `/query` — the authoritative query state on query-enabled surfaces,
+  written after `query` actions and query-aware success refreshes.
 
 On `Ash.Error.Forbidden` only a `/ui/status` "not authorized" message is
 emitted — no field errors, to avoid leaking policy details.
