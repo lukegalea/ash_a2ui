@@ -29,19 +29,22 @@ if Mix.env() == :test do
   config :logger, level: :warning
 
   # Minimal Phoenix endpoint used only by (future) LiveRenderer tests.
-  # Harmless when the Phoenix stack is excluded (NO_PHOENIX=1): the endpoint
-  # module is never compiled or started in that case.
-  config :ash_a2ui, AshA2ui.Test.Endpoint,
-    url: [host: "localhost", port: 4002],
-    secret_key_base: String.duplicate("a", 64),
-    live_view: [signing_salt: "aaaaaaaaaaaaaaaa"],
-    render_errors: [
-      formats: [html: AshA2ui.Test.ErrorHTML],
-      layout: false
-    ],
-    check_origin: false,
-    server: false,
-    pubsub_server: AshA2ui.Test.PubSub
+  # Skipped when the Phoenix stack is excluded (NO_PHOENIX=1, see mix.exs):
+  # the endpoint module is never compiled or started in that case, and
+  # configuring the missing :phoenix app would warn.
+  if is_nil(System.get_env("NO_PHOENIX")) do
+    config :ash_a2ui, AshA2ui.Test.Endpoint,
+      url: [host: "localhost", port: 4002],
+      secret_key_base: String.duplicate("a", 64),
+      live_view: [signing_salt: "aaaaaaaaaaaaaaaa"],
+      render_errors: [
+        formats: [html: AshA2ui.Test.ErrorHTML],
+        layout: false
+      ],
+      check_origin: false,
+      server: false,
+      pubsub_server: AshA2ui.Test.PubSub
 
-  config :phoenix, :json_library, Jason
+    config :phoenix, :json_library, Jason
+  end
 end
