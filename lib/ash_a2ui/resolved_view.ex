@@ -5,6 +5,19 @@ defmodule AshA2ui.ResolvedView do
   that the encoder consumes. The encoder never reads compiled DSL state
   directly.
 
+  Normalization semantics:
+
+    * each component's `fields` list becomes the *effective rendering list*:
+      `hidden` fields are dropped and the rest are ordered by the field's
+      `order` (stable by declaration order within the component otherwise)
+    * `fields` maps every field referenced by a component or declared as a
+      `field` entity to fully-defaulted metadata: `label` defaults to the
+      humanized field name, `widget` defaults via `AshA2ui.TypeMapper` on the
+      attribute's Ash type/constraints, `format` is carried through
+    * `read_action`/`create_action`/`update_action` fall back to the
+      resource's primary action of the matching type when a component omits
+      them
+
   FROZEN CONTRACT — the struct fields and `resolve/2` signature are the
   interface every parallel track codes against; do not change outside an
   integration commit.
@@ -32,6 +45,8 @@ defmodule AshA2ui.ResolvedView do
           row_actions: [atom]
         }
 
+  @resolve_opts [:actor, :tenant, :domain, :authorize?]
+
   @doc """
   Resolves the `a2ui` DSL of `resource_or_ui_module` (an `Ash.Resource` using
   the `AshA2ui` extension, or an `AshA2ui.Standalone` UI module with
@@ -39,38 +54,102 @@ defmodule AshA2ui.ResolvedView do
 
   ## Options
 
-    * `:actor` / `:tenant` — passed through to data loading (Track 2/3).
+    * `:actor` / `:tenant` / `:authorize?` / `:domain` — reserved for data
+      loading (see `AshA2ui.Info.build_surface/2`); validated and passed
+      through, not consumed by normalization itself.
   """
   @spec resolve(module, keyword) :: t()
-  # TODO Track 2: rename _opts back to opts once normalization consumes it.
-  def resolve(resource_or_ui_module, _opts \\ []) do
+  def resolve(resource_or_ui_module, opts \\ []) do
+    Keyword.validate!(opts, @resolve_opts)
+
     resource = AshA2ui.Info.resource!(resource_or_ui_module)
     components = AshA2ui.Info.components(resource_or_ui_module)
-    fields = Map.new(AshA2ui.Info.fields(resource_or_ui_module), &{&1.name, &1})
+    declared_fields = AshA2ui.Info.fields(resource_or_ui_module)
 
-    surface_id =
-      case AshA2ui.Info.a2ui_surface_id(resource_or_ui_module) do
-        {:ok, surface_id} -> surface_id
-        :error -> default_surface_id(resource)
-      end
+    fields = normalize_fields(resource, components, declared_fields)
+    components = Enum.map(components, &normalize_component(&1, fields))
 
     table = Enum.find(components, &(&1.name == :table))
     form = Enum.find(components, &(&1.name == :form))
 
-    # TODO Track 2: full normalization — merge inferred/declared fields per
-    # component, apply Field overrides (order/hidden/label defaults), resolve
-    # default actions from the resource's primary actions, honor opts
-    # (actor/tenant and future overrides/context).
     %__MODULE__{
       resource: resource,
-      surface_id: surface_id,
+      surface_id: surface_id(resource_or_ui_module, resource),
       components: components,
       fields: fields,
-      read_action: table && table.read_action,
-      create_action: form && form.create_action,
-      update_action: form && form.update_action,
+      read_action: component_action(table, :read_action, resource, :read),
+      create_action: component_action(form, :create_action, resource, :create),
+      update_action: component_action(form, :update_action, resource, :update),
       row_actions: (table && table.row_actions) || []
     }
+  end
+
+  defp surface_id(resource_or_ui_module, resource) do
+    case AshA2ui.Info.a2ui_surface_id(resource_or_ui_module) do
+      {:ok, surface_id} -> surface_id
+      :error -> default_surface_id(resource)
+    end
+  end
+
+  # A declared action wins; otherwise fall back to the resource's primary
+  # action of the matching type. No component of that kind -> no action.
+  defp component_action(nil, _key, _resource, _type), do: nil
+
+  defp component_action(component, key, resource, type) do
+    Map.fetch!(component, key) || primary_action_name(resource, type)
+  end
+
+  # Effective field metadata for every field referenced by a component or
+  # declared as a `field` entity, with label/widget defaults applied.
+  defp normalize_fields(resource, components, declared_fields) do
+    declared = Map.new(declared_fields, &{&1.name, &1})
+
+    components
+    |> Enum.flat_map(&(&1.fields || []))
+    |> Enum.concat(Map.keys(declared))
+    |> Enum.uniq()
+    |> Map.new(fn name ->
+      field = declared[name] || %AshA2ui.Field{name: name}
+
+      {name,
+       %{
+         field
+         | label: field.label || humanize(name),
+           widget: field.widget || default_widget(resource, name)
+       }}
+    end)
+  end
+
+  # Effective rendering list: hidden fields dropped, ordered by field order
+  # (Enum.sort_by is stable, preserving declaration order on ties).
+  defp normalize_component(component, fields) do
+    effective =
+      (component.fields || [])
+      |> Enum.reject(&fields[&1].hidden)
+      |> Enum.sort_by(&fields[&1].order)
+
+    %{component | fields: effective}
+  end
+
+  defp default_widget(resource, name) do
+    case Ash.Resource.Info.attribute(resource, name) do
+      %{type: type, constraints: constraints} -> AshA2ui.TypeMapper.widget_for(type, constraints)
+      nil -> AshA2ui.TypeMapper.widget_for(nil)
+    end
+  end
+
+  defp primary_action_name(resource, type) do
+    case Ash.Resource.Info.primary_action(resource, type) do
+      %{name: name} -> name
+      nil -> nil
+    end
+  end
+
+  defp humanize(name) do
+    name
+    |> to_string()
+    |> String.replace("_", " ")
+    |> String.capitalize()
   end
 
   defp default_surface_id(resource) do
