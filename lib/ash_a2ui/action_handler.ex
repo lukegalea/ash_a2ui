@@ -651,7 +651,7 @@ defmodule AshA2ui.ActionHandler do
   defp query_table(%ResolvedView{tables: []} = view, _context), do: {:ok, view}
 
   defp query_table(view, context) do
-    case is_map(context) && Map.get(context, "component") do
+    case Map.get(context, "component") do
       component when is_binary(component) ->
         case Enum.find(view.tables, &(to_string(&1.name) == component)) do
           nil -> {:error, "Unknown table component #{inspect(component)}."}
