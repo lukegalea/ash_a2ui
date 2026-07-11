@@ -92,6 +92,55 @@ defmodule AshA2ui.ActionHandlerTest.Gadget do
   end
 end
 
+defmodule AshA2ui.ActionHandlerTest.Widget do
+  @moduledoc false
+  use Ash.Resource,
+    domain: AshA2ui.ActionHandlerTest.TestDomain,
+    data_layer: Ash.DataLayer.Ets,
+    extensions: [AshA2ui]
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :name, :string, public?: true
+    attribute :touched, :boolean, public?: true, default: false
+  end
+
+  actions do
+    defaults [:read, :destroy, create: :*]
+
+    update :update do
+      primary? true
+      accept [:name]
+    end
+
+    update :touch do
+      accept []
+      change set_attribute(:touched, true)
+    end
+  end
+
+  a2ui do
+    surface_id "widget"
+
+    component :table do
+      fields [:name, :touched]
+      read_action :read
+      row_actions [:touch, :destroy]
+    end
+
+    component :form do
+      fields [:name]
+      create_action :create
+      update_action :update
+    end
+  end
+end
+
 defmodule AshA2ui.ActionHandlerTest do
   @moduledoc """
   Round-trip tests for `AshA2ui.ActionHandler.handle/3` against the frozen
@@ -104,7 +153,7 @@ defmodule AshA2ui.ActionHandlerTest do
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
-  alias AshA2ui.ActionHandlerTest.{Gadget, Protected}
+  alias AshA2ui.ActionHandlerTest.{Gadget, Protected, Widget}
   alias AshA2ui.Test.{KitchenSink, Minimal, MinimalUI}
 
   @actor %{id: "test-actor"}
@@ -282,6 +331,26 @@ defmodule AshA2ui.ActionHandlerTest do
       text = last_value_at(messages, "/ui/action_result_text")
       assert text =~ "Secret: s3cr3t"
       assert text =~ "Record id: #{record.id}"
+    end
+
+    test "invokes an update action listed in row_actions on the identified record" do
+      record = Ash.create!(Widget, %{name: "W"}, authorize?: false)
+
+      env = envelope("invoke", "widget", %{"action" => "touch", "recordId" => record.id})
+      assert_valid_client_message(env)
+
+      assert {:ok, messages} = ActionHandler.handle(Widget, env)
+      assert_all_valid(messages)
+
+      # the *invoked* update action ran (not the form's :update, which would
+      # have been a no-op empty-param update)
+      updated = Ash.get!(Widget, record.id, authorize?: false)
+      assert updated.touched == true
+      assert updated.name == "W"
+
+      assert [row] = value_at(messages, "/records")
+      assert row["touched"] == true
+      assert value_at(messages, "/ui/status") =~ "touch"
     end
 
     test "subsequent actions clear /ui/action_result and /ui/action_result_text" do

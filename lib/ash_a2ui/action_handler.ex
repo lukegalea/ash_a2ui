@@ -44,7 +44,11 @@ defmodule AshA2ui.ActionHandler do
       Invokes a destroy/update/generic action by name. The action **must be
       listed in the resolved view's `row_actions`** — that allowlist is the
       authorization surface for client-triggered actions; anything else is
-      rejected with a `/ui/status` error before touching Ash. For generic
+      rejected with a `/ui/status` error before touching Ash. Destroy- and
+      update-type actions run **the named action** on the record identified
+      by `"recordId"` with empty params (update row actions are touch-style:
+      their changes come from `change` blocks and defaults, never client
+      input). For generic
       actions that define a `:record_id` argument, the context's `"recordId"`
       is passed through. A generic action returning a map has its raw result
       placed at `/ui/action_result` and a human-readable rendering (one
@@ -260,7 +264,7 @@ defmodule AshA2ui.ActionHandler do
         invoke_destroy(action_name, record_id, env)
 
       %{type: :update} ->
-        update(env, record_id, %{})
+        invoke_update(action_name, record_id, env)
 
       %{type: :action} = action ->
         invoke_generic(action, record_id, env)
@@ -277,6 +281,20 @@ defmodule AshA2ui.ActionHandler do
         record
         |> Ash.Changeset.for_destroy(action_name, %{}, ash_opts)
         |> Ash.destroy()
+      end
+
+    after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
+  end
+
+  # An `invoke` on an update-type row action runs *that* action on the
+  # identified record with empty params (touch-style actions whose changes
+  # come from `change` blocks / defaults) — never the form's update action.
+  defp invoke_update(action_name, record_id, %{view: view, ash_opts: ash_opts} = env) do
+    result =
+      with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
+        record
+        |> Ash.Changeset.for_update(action_name, %{}, ash_opts)
+        |> Ash.update()
       end
 
     after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
