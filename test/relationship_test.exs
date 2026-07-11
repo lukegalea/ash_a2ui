@@ -313,7 +313,7 @@ defmodule AshA2ui.RelationshipTest do
       components = components_by_id(messages)
 
       assert %{"component" => "Text", "text" => %{"path" => "author_email"}} =
-               components["table_cell_author_email"]
+               components["table_cell_author_email_value"]
 
       records = value_at(messages, "/")["records"]
       assert [%{"title" => "Loaded", "author_email" => "ada@example.com"}] = records

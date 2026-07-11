@@ -134,7 +134,13 @@ defmodule AshA2ui.MultiTableTest do
              } =
                components["records_list_done_items"]
 
-      assert components["record_row_new_items"]["children"] == [
+      assert components["record_row_new_items"] == %{
+               "id" => "record_row_new_items",
+               "component" => "Card",
+               "child" => "record_row_new_items_content"
+             }
+
+      assert components["record_row_new_items_content"]["children"] == [
                "table_cell_new_items_name",
                "table_cell_new_items_count",
                "row_action_new_items_approve_button",
@@ -142,7 +148,7 @@ defmodule AshA2ui.MultiTableTest do
                "row_select_new_items_button"
              ]
 
-      assert components["table_cell_done_items_state"]["text"] == %{"path" => "state"}
+      assert components["table_cell_done_items_state_value"]["text"] == %{"path" => "state"}
     end
 
     test "headings show the humanized component names", %{components: components} do

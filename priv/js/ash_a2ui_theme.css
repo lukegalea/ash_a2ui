@@ -1,0 +1,84 @@
+/*
+ * AshA2ui neutral theme for the @a2ui/lit basic catalog.
+ *
+ * The A2UI basic catalog components render inside shadow DOM, so regular
+ * page CSS (Tailwind classes, element selectors) cannot reach them. Their
+ * one styling contract is CSS custom properties: every component reads
+ * `--a2ui-*` variables that inherit through shadow boundaries, and the
+ * catalog's built-in defaults are declared at zero specificity
+ * (`:where(:root)`, injected via `document.adoptedStyleSheets`) precisely
+ * so host apps can override them. See
+ * https://a2ui.org/guides/theming/ for the upstream contract.
+ *
+ * This file is a neutral, admin-friendly default theme for AshA2ui
+ * surfaces. It only sets `--a2ui-*` variables (plus `color-scheme`
+ * plumbing), at `:root` specificity (0,1,0) — enough to beat the
+ * upstream `:where(:root)` defaults, low enough that any later or more
+ * specific declaration in your app CSS wins.
+ *
+ * Usage (Phoenix app): import it into your bundled CSS before your own
+ * token mapping, e.g. in `assets/css/app.css`:
+ *
+ *     @import "../../deps/ash_a2ui/priv/js/ash_a2ui_theme.css";
+ *
+ * then redeclare any variable below (same `:root {}` block, later in the
+ * file) to map your design system's tokens onto the surface. Colors use
+ * `light-dark()` and follow the user's `prefers-color-scheme`; add the
+ * `a2ui-dark` (or `a2ui-light`) class to <html> to force a scheme — the
+ * upstream default stylesheet wires those classes to `color-scheme`.
+ */
+
+:root {
+  /* ---- Color tokens ------------------------------------------------ */
+  --a2ui-color-background: light-dark(#f8fafc, #0f172a);
+  --a2ui-color-on-background: light-dark(#0f172a, #e2e8f0);
+
+  /* Cards, modals, buttons at rest. */
+  --a2ui-color-surface: light-dark(#ffffff, #1e293b);
+  --a2ui-color-on-surface: light-dark(#0f172a, #e2e8f0);
+
+  /* Primary actions (submit buttons, active states). */
+  --a2ui-color-primary: light-dark(#4f46e5, #6366f1);
+  --a2ui-color-on-primary: #ffffff;
+
+  /* Secondary chrome (default buttons, active tab header). */
+  --a2ui-color-secondary: light-dark(#f1f5f9, #334155);
+  --a2ui-color-on-secondary: light-dark(#0f172a, #e2e8f0);
+
+  /* Text inputs, selects, date inputs. */
+  --a2ui-color-input: light-dark(#ffffff, #1e293b);
+  --a2ui-color-on-input: light-dark(#0f172a, #e2e8f0);
+
+  --a2ui-color-border: light-dark(#cbd5e1, #475569);
+
+  /* ---- Shape ------------------------------------------------------- */
+  --a2ui-border-radius: 0.5rem;
+  --a2ui-card-border-radius: 0.75rem;
+  --a2ui-button-border-radius: 0.5rem;
+  --a2ui-textfield-border-radius: 0.5rem;
+  --a2ui-choicepicker-select-border-radius: 0.5rem;
+
+  /* ---- Depth ------------------------------------------------------- */
+  --a2ui-card-box-shadow: light-dark(
+    0 1px 3px rgb(15 23 42 / 0.08),
+    0 1px 3px rgb(0 0 0 / 0.4)
+  );
+  --a2ui-button-box-shadow: none;
+
+  /* ---- Spacing & layout -------------------------------------------- */
+  /* The upstream defaults give Buttons and Cards an outer margin of
+   * --a2ui-spacing-m, which stacks with Row/List/Column gaps and makes
+   * generated layouts feel ragged. Zero them and let the gap system own
+   * the rhythm. */
+  --a2ui-button-margin: 0;
+  --a2ui-card-margin: 0;
+  --a2ui-card-padding: 1rem;
+  --a2ui-button-padding: 0.5rem 1rem;
+  --a2ui-list-gap: 0.75rem;
+  --a2ui-row-gap: 0.75rem;
+  --a2ui-column-gap: 0.75rem;
+
+  /* ---- Type -------------------------------------------------------- */
+  --a2ui-button-font-weight: 500;
+  --a2ui-label-font-weight: 600;
+}

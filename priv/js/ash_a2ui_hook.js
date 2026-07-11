@@ -23,6 +23,17 @@
  *          configureAshA2ui({MessageProcessor, catalogs: [basicCatalog]});
  *          const liveSocket = new LiveSocket("/live", Socket, {hooks: {AshA2ui}});
  *
+ * Optional extras shipped alongside this hook (see the Theming topic):
+ *
+ *   - `ash_a2ui_theme.css` — a neutral `--a2ui-*` CSS-variable theme for
+ *     the basic catalog; import it into your app CSS and override tokens.
+ *   - `ash_a2ui_catalog.js` — `createAshA2uiCatalog(deps)` builds a merged
+ *     catalog (registered under the basic catalog id) whose ChoicePicker
+ *     renders a native `<select>` for single-choice pickers.
+ *   - `configureAshA2ui({..., markdown})` — wires a markdown renderer so
+ *     Text headings render as headings instead of literal `##` markdown
+ *     (see the configureAshA2ui docs below).
+ *
  * Verified against @a2ui/lit / @a2ui/web_core 0.10.x sources
  * (https://github.com/a2ui-project/a2ui, renderers/web_core + renderers/lit,
  * v0_9 entry points):
@@ -54,7 +65,31 @@ let hookDeps = null;
  * Registers the renderer classes the hook needs. Call once from the host
  * bundle before the LiveSocket mounts any AshA2ui hook.
  *
- * @param {{MessageProcessor: Function, catalogs: Array<object>}} deps
+ * `markdown` is optional but strongly recommended: without a markdown
+ * renderer the basic catalog's Text component prints headings as literal
+ * markdown (`## Title`) — an upstream design decision, see
+ * https://github.com/google/A2UI/issues/1226. Pass the three pieces and
+ * the hook wires them up with a Lit context provider on the hook element:
+ *
+ *     import {ContextProvider} from "@lit/context";
+ *     import {Context} from "@a2ui/lit/v0_9";
+ *     import {renderMarkdown} from "@a2ui/markdown-it";
+ *
+ *     configureAshA2ui({
+ *       MessageProcessor,
+ *       catalogs: [catalog],
+ *       markdown: {ContextProvider, context: Context.markdown, render: renderMarkdown},
+ *     });
+ *
+ * (`ContextProvider` attaches its `context-request` listeners directly to
+ * the host element, so a plain hook container works as the provider host —
+ * verified against @lit/context 1.x `context-provider.js`.)
+ *
+ * @param {{
+ *   MessageProcessor: Function,
+ *   catalogs: Array<object>,
+ *   markdown?: {ContextProvider: Function, context: object, render: Function},
+ * }} deps
  */
 export function configureAshA2ui(deps) {
   hookDeps = deps;
@@ -73,12 +108,28 @@ function resolveDeps() {
     );
   }
 
-  return {MessageProcessor: deps.MessageProcessor, catalogs: deps.catalogs || []};
+  return {
+    MessageProcessor: deps.MessageProcessor,
+    catalogs: deps.catalogs || [],
+    markdown: deps.markdown || null,
+  };
 }
 
 export const AshA2ui = {
   mounted() {
-    const {MessageProcessor, catalogs} = resolveDeps();
+    const {MessageProcessor, catalogs, markdown} = resolveDeps();
+
+    // Provide the markdown renderer to Text components (which consume the
+    // `Context.markdown` Lit context) from the hook container, an ancestor
+    // of every rendered component. The renderer contract is
+    // `(value, options) => Promise<string>`; wrap sync renderers so both
+    // shapes work.
+    if (markdown && markdown.ContextProvider && markdown.context && markdown.render) {
+      this.markdownProvider = new markdown.ContextProvider(this.el, {
+        context: markdown.context,
+        initialValue: (value, options) => Promise.resolve(markdown.render(value, options)),
+      });
+    }
 
     this.surfaceEl = document.createElement("a2ui-surface");
     this.el.appendChild(this.surfaceEl);
@@ -119,6 +170,9 @@ export const AshA2ui = {
 
     this.processor = null;
     this.surfaceEl = null;
+    // The ContextProvider's listeners are attached to this.el, which the
+    // LiveView is discarding — dropping the reference is enough.
+    this.markdownProvider = null;
   },
 
   /** Feeds pushed server->client messages into the renderer. */

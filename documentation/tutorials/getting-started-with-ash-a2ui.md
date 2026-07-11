@@ -234,6 +234,12 @@ That's all the client code. The `LiveRenderer` renders a container `div` with
 feeds it every A2UI message the server pushes, and forwards the renderer's
 `action` envelopes back to the server as the `"a2ui:action"` LiveView event.
 
+Out of the box the basic catalog looks like unstyled browser defaults —
+before shipping, follow the [Theming](../topics/theming.md) guide to import
+the shipped CSS-variable theme, swap in the merged catalog (native
+`<select>`s for single-choice pickers), and wire `@a2ui/markdown-it` so
+headings render as headings.
+
 ## Step 5: Handle actions
 
 You already did — there's no step 5 code to write.

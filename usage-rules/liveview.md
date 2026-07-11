@@ -66,6 +66,22 @@ common wiring mistake — the hook throws on mount with an explanatory error.
 (`globalThis.__ASH_A2UI_DEPS__` is an equivalent fallback for separately
 bundled hooks.)
 
+For production-quality surfaces, prefer the full wiring (see the Theming
+topic and the docs in the shipped JS files):
+
+- pass `markdown: {ContextProvider, context: Context.markdown, render:
+  renderMarkdown}` (from `@lit/context`, `@a2ui/lit/v0_9` and
+  `@a2ui/markdown-it`) to `configureAshA2ui` — otherwise Text headings
+  render as literal `## ...` markdown;
+- pass the merged catalog from `priv/js/ash_a2ui_catalog.js`
+  (`createAshA2uiCatalog(deps)`) instead of `basicCatalog`, so
+  single-choice ChoicePickers render as native `<select>`s (never pass
+  both — they share the same catalog id and the first match wins);
+- import `priv/js/ash_a2ui_theme.css` into the app CSS and override the
+  `--a2ui-*` variables with the app's design tokens (the components render
+  in shadow DOM — CSS variables are the only styling seam; Tailwind
+  classes cannot reach them).
+
 The rendered container is
 `<div id="ash-a2ui-surface" phx-hook="AshA2ui" phx-update="ignore">` —
 `phx-update="ignore"` is required; the renderer owns that DOM.

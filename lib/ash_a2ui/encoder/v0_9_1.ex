@@ -26,9 +26,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       `{"query": {"path": "/query"}, "page": 1}` — the page-1 reset)
     * `records_list` — `List` whose children are a template
       `{"componentId": "record_row", "path": "/records"}`; `record_row` is a
-      `Row` of per-field `Text` cells (`table_cell_<field>`, bound to the
-      template-relative path `<field>`, `format: :date` rendered through
-      `formatDate`), one `Button` per row action
+      `Card` wrapping `record_row_content`, a `Row` of per-field labeled
+      cells — each `table_cell_<field>` is a `Row` of a caption `Text`
+      (`table_cell_<field>_label`, the humanized field name) and a value
+      `Text` (`table_cell_<field>_value`, bound to the template-relative
+      path `<field>`, `format: :date` rendered through `formatDate`) —
+      one `Button` per row action
       (`row_action_<action>_button`: event `invoke`, context
       `{"action": "<name>", "recordId": {"path": "id"}}`) and a
       `row_select_button` (event `select_row`, context
@@ -482,13 +485,22 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       |> Enum.map(&row_action_components(view, table, &1, sfx))
       |> Enum.unzip()
 
-    row = %{
+    # Each record renders as a Card (chrome themed via --a2ui-card-*)
+    # wrapping the actual Row of cells; the List template still points at
+    # record_row, so this stays invisible to the data model and actions.
+    card = %{
       "id" => "record_row#{sfx}",
+      "component" => "Card",
+      "child" => "record_row#{sfx}_content"
+    }
+
+    row = %{
+      "id" => "record_row#{sfx}_content",
       "component" => "Row",
       "children" => cell_ids ++ action_ids ++ ["row_select#{sfx}_button"]
     }
 
-    cells = Enum.map(fields, &cell(view, &1, sfx))
+    cells = Enum.flat_map(fields, &cell(view, &1, sfx))
 
     select_button = [
       %{
@@ -508,17 +520,34 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{"id" => "row_select#{sfx}_text", "component" => "Text", "text" => "Select"}
     ]
 
-    [row] ++ cells ++ List.flatten(action_components) ++ select_button
+    [card, row] ++ cells ++ List.flatten(action_components) ++ select_button
   end
 
+  # A cell is a labeled pair: a caption Text with the humanized field name
+  # and a body Text bound to the field value — so generated rows read
+  # "Name: Fido" instead of a bare value soup.
   defp cell(view, field_name, sfx) do
     field = view.fields[field_name]
+    base = "table_cell#{sfx}_#{field_name}"
 
-    %{
-      "id" => "table_cell#{sfx}_#{field_name}",
-      "component" => "Text",
-      "text" => cell_text(field)
-    }
+    [
+      %{
+        "id" => base,
+        "component" => "Row",
+        "children" => ["#{base}_label", "#{base}_value"]
+      },
+      %{
+        "id" => "#{base}_label",
+        "component" => "Text",
+        "text" => humanize(field_name),
+        "variant" => "caption"
+      },
+      %{
+        "id" => "#{base}_value",
+        "component" => "Text",
+        "text" => cell_text(field)
+      }
+    ]
   end
 
   # Template-relative binding: paths inside a List item template resolve

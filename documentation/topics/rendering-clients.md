@@ -95,7 +95,9 @@ mounts it:
   forwarded to the server as the **`"a2ui:action"`** LiveView event, wrapped
   in the A2UI v0.9.1 client envelope.
 
-Wiring in `assets/js/app.js`:
+Wiring in `assets/js/app.js` (minimal — see the
+[Theming](theming.md) guide for the recommended full setup with the merged
+catalog and markdown renderer):
 
 ```javascript
 import "@a2ui/lit/v0_9"; // registers <a2ui-surface>
@@ -114,6 +116,14 @@ const liveSocket = new LiveSocket("/live", Socket, {
 (Bundling the hook separately from your app code? Setting
 `globalThis.__ASH_A2UI_DEPS__ = {MessageProcessor, catalogs}` works as an
 alternative to calling `configureAshA2ui`.)
+
+`configureAshA2ui` also accepts an optional `markdown` entry
+(`{ContextProvider, context, render}`) that wires a markdown renderer into
+the surface — without it, Text headings render as literal `## ...`
+markdown. The package additionally ships a neutral CSS-variable theme
+(`priv/js/ash_a2ui_theme.css`) and a merged component catalog
+(`priv/js/ash_a2ui_catalog.js`) whose ChoicePicker is a native `<select>`.
+All three are covered in [Theming](theming.md).
 
 ## Transport 2: plain JSON endpoints
 
@@ -179,8 +189,11 @@ Notes:
   feed.
 - AshA2ui emits the **basic catalog** (`Text`, `TextField`, `CheckBox`,
   `ChoicePicker`, `DateTimeInput`, `Button`, `List`, `Row`, `Column`, `Card`,
-  ...). Tables are `List` + `Row`/`Column` composition — the basic catalog
-  has no Table component. Custom catalogs are on the roadmap.
+  ...). Tables are `List` templated over Card-wrapped `Row`s of labeled
+  cells — the basic catalog has no Table component.
+- Styling is CSS-custom-property driven (the components render in shadow
+  DOM), and the package ships a starter theme plus a merged catalog with a
+  `<select>`-based ChoicePicker — see [Theming](theming.md).
 
 Anything else that speaks A2UI v0.9.x — including agent canvases that accept
 A2UI surfaces — can consume the same messages without changes on the server.

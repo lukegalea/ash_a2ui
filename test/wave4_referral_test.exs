@@ -212,7 +212,13 @@ defmodule AshA2ui.Wave4ReferralTest do
     test "conditional actions render as visibility slots in the row" do
       components = components()
 
-      assert components["record_row"]["children"] == [
+      assert components["record_row"] == %{
+               "id" => "record_row",
+               "component" => "Card",
+               "child" => "record_row_content"
+             }
+
+      assert components["record_row_content"]["children"] == [
                "table_cell_code",
                "table_cell_status",
                "table_cell_status_label",

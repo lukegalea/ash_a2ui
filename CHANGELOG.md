@@ -10,6 +10,29 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Theming toolkit for `@a2ui/lit`-rendered surfaces (see the new
+  [Theming](documentation/topics/theming.md) topic):
+  - `priv/js/ash_a2ui_theme.css` — a neutral, dependency-free CSS-variable
+    theme for the basic catalog (`--a2ui-*` tokens; shadow DOM makes CSS
+    custom properties the only styling seam), designed to be imported and
+    then overridden with the host app's design tokens.
+  - `priv/js/ash_a2ui_catalog.js` — `createAshA2uiCatalog(deps)` builds a
+    merged catalog registered under the basic catalog id whose
+    ChoicePicker renders a native, token-themed `<select>` for
+    `mutuallyExclusive` pickers (checkbox list for `multipleSelection`);
+    the basic catalog has no dropdown display style through spec v1.0.
+  - `configureAshA2ui` accepts an optional
+    `markdown: {ContextProvider, context, render}` entry; the hook mounts
+    a Lit context provider on its container so Text headings render as
+    real headings instead of literal `## ...` markdown
+    (upstream renders raw markdown without an injected renderer —
+    google/A2UI#1226).
+- Encoder: each table record now renders as a `Card` (`record_row`)
+  wrapping `record_row_content` (the `Row` of cells), and every cell is a
+  labeled pair — `table_cell_<field>` is a `Row` of a caption `Text`
+  (`table_cell_<field>_label`, humanized field name) and the value `Text`
+  (`table_cell_<field>_value`) — giving themed surfaces card chrome and
+  readable "Label: value" rows with no DSL changes.
 - Searchable relationship selects: the `field` entity gains `option_search`
   (a list of public string-typed destination attributes, compile-verified).
   Non-empty `option_search` swaps the static ChoicePicker for a composite —

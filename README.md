@@ -400,6 +400,13 @@ for the router and JS wiring, and
 [Rendering Clients](documentation/topics/rendering-clients.md) for the full
 hook contract.
 
+Making the surface match your app's design system is covered in
+[Theming](documentation/topics/theming.md): the package ships a neutral
+`--a2ui-*` CSS-variable theme (`priv/js/ash_a2ui_theme.css`), a merged
+component catalog whose single-choice ChoicePicker is a native `<select>`
+(`priv/js/ash_a2ui_catalog.js`), and hook support for wiring
+`@a2ui/markdown-it` so headings render as headings.
+
 ### Plain JSON endpoint
 
 Transport-agnosticism proof — a read-only surface is just a controller:

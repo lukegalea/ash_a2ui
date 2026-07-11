@@ -95,8 +95,8 @@ defmodule AshA2ui.EncoderTest do
     end
   end
 
-  describe "table composition (List + Row template)" do
-    test "the List is bound to /records with the row component as item template" do
+  describe "table composition (List + Card/Row template)" do
+    test "the List is bound to /records with a Card-wrapped row as item template" do
       components = encode_kitchen_sink() |> components_by_id()
 
       assert %{
@@ -104,7 +104,11 @@ defmodule AshA2ui.EncoderTest do
                "children" => %{"componentId" => "record_row", "path" => "/records"}
              } = components["records_list"]
 
-      assert %{"component" => "Row", "children" => row_children} = components["record_row"]
+      assert %{"component" => "Card", "child" => "record_row_content"} =
+               components["record_row"]
+
+      assert %{"component" => "Row", "children" => row_children} =
+               components["record_row_content"]
 
       assert row_children ==
                [
@@ -120,17 +124,25 @@ defmodule AshA2ui.EncoderTest do
                  ["row_action_update_button", "row_action_destroy_button", "row_select_button"]
     end
 
-    test "cells are Texts bound to template-relative field paths" do
+    test "cells are labeled Rows: a caption label plus the bound value Text" do
       components = encode_kitchen_sink() |> components_by_id()
 
+      assert %{
+               "component" => "Row",
+               "children" => ["table_cell_name_label", "table_cell_name_value"]
+             } = components["table_cell_name"]
+
+      assert %{"component" => "Text", "text" => "Name", "variant" => "caption"} =
+               components["table_cell_name_label"]
+
       assert %{"component" => "Text", "text" => %{"path" => "name"}} =
-               components["table_cell_name"]
+               components["table_cell_name_value"]
 
       assert %{"component" => "Text", "text" => %{"path" => "status"}} =
-               components["table_cell_status"]
+               components["table_cell_status_value"]
     end
 
-    test "a :date format renders the cell through formatDate" do
+    test "a :date format renders the cell value through formatDate" do
       components = encode_kitchen_sink() |> components_by_id()
 
       assert %{
@@ -140,7 +152,7 @@ defmodule AshA2ui.EncoderTest do
                  "args" => %{"value" => %{"path" => "inserted_at"}, "format" => format},
                  "returnType" => "string"
                }
-             } = components["table_cell_inserted_at"]
+             } = components["table_cell_inserted_at_value"]
 
       assert is_binary(format)
     end

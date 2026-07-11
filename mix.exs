@@ -90,6 +90,7 @@ defmodule AshA2ui.MixProject do
         "documentation/tutorials/getting-started-with-ash-a2ui.md",
         "documentation/topics/what-is-ash-a2ui.md",
         "documentation/topics/rendering-clients.md",
+        "documentation/topics/theming.md",
         "documentation/topics/actions-and-authorization.md",
         "documentation/topics/queries-and-pagination.md",
         "documentation/topics/multi-section-surfaces.md",
