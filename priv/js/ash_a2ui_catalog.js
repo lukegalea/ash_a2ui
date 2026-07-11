@@ -172,7 +172,11 @@ function defineChoicePickerElement({A2uiLitElement, A2uiController, ChoicePicker
       const props = this.controller?.props;
       if (!props) return nothing;
 
-      const selected = Array.isArray(props.value) ? props.value : [];
+      // The A2UI schema types ChoicePicker value as a string list, but a
+      // server data-model refresh can echo a scalar back into the binding
+      // (e.g. AshA2ui's /query/filters/<name>); accept both.
+      const raw = props.value;
+      const selected = Array.isArray(raw) ? raw : raw == null ? [] : [String(raw)];
       const options = props.options || [];
 
       const body =
