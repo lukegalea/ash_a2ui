@@ -209,6 +209,38 @@ defmodule AshA2ui.ContextTest do
       assert "detail_appointment_detail" in ids
       assert "row_context_button" in ids
 
+      by_id = Map.new(components, &{&1["id"], &1})
+
+      # Picker sections and details render as Cards over a _body layout
+      # (section chrome for every renderer, no client smarts required).
+      assert %{"component" => "Card", "child" => "context_owner_body"} = by_id["context_owner"]
+
+      assert %{
+               "component" => "Column",
+               "children" => [
+                 "context_owner_label",
+                 "context_owner_selected_row",
+                 "context_owner_controls",
+                 "context_owner_options"
+               ]
+             } = by_id["context_owner_body"]
+
+      # The clinic picker is not searchable: no _controls child.
+      assert %{
+               "component" => "Column",
+               "children" => [
+                 "context_clinic_label",
+                 "context_clinic_selected_row",
+                 "context_clinic_options"
+               ]
+             } = by_id["context_clinic_body"]
+
+      assert %{"component" => "Card", "child" => "detail_owner_card_body"} =
+               by_id["detail_owner_card"]
+
+      assert %{"component" => "Column", "children" => ["detail_owner_card_heading" | _]} =
+               by_id["detail_owner_card_body"]
+
       # The owner picker is searchable; the clinic picker (no option_search)
       # emits no search controls.
       assert "context_owner_search_input" in ids

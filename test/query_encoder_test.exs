@@ -42,10 +42,13 @@ defmodule AshA2ui.QueryEncoderTest do
              ]
     end
 
-    test "query_controls is a Row of search input, filter pickers, and the apply button" do
+    test "query_controls is a Card over a Row of search, filters, and the apply button" do
       components = encode() |> components_by_id()
 
-      assert %{"component" => "Row", "children" => children} = components["query_controls"]
+      assert %{"component" => "Card", "child" => "query_controls_body"} =
+               components["query_controls"]
+
+      assert %{"component" => "Row", "children" => children} = components["query_controls_body"]
 
       assert children == [
                "query_search_input",
@@ -77,7 +80,7 @@ defmodule AshA2ui.QueryEncoderTest do
       components = components_by_id(messages)
       refute Map.has_key?(components, "query_search_input")
 
-      assert components["query_controls"]["children"] == [
+      assert components["query_controls_body"]["children"] == [
                "query_filter_status",
                "query_filter_category",
                "query_apply_button"
@@ -166,6 +169,7 @@ defmodule AshA2ui.QueryEncoderTest do
              ]
 
       refute Map.has_key?(components, "query_controls")
+      refute Map.has_key?(components, "query_controls_body")
       refute Map.has_key?(components, "query_pagination")
     end
   end

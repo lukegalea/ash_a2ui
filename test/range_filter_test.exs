@@ -166,7 +166,7 @@ defmodule AshA2ui.RangeFilterTest do
 
       [_create, %{"updateComponents" => %{"components" => components}}, data_model] = messages
 
-      controls = Enum.find(components, &(&1["id"] == "query_controls"))
+      controls = Enum.find(components, &(&1["id"] == "query_controls_body"))
       assert "query_range_scheduled_for_from" in controls["children"]
       assert "query_range_scheduled_for_to" in controls["children"]
 

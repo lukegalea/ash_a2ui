@@ -74,11 +74,24 @@ by `AshA2ui.Verifiers.VerifyContexts`.
 ## The emitted picker
 
 Each context with `picker true` (the default) renders a surface-level
-composite (ids frozen): a `context_<name>` Column with a label, the current
-selection's label + a **Clear** button, a search input + button (only with
-`option_search`), and an option `List` over `/options/<name>` whose buttons
-select. Pickerless contexts (`picker false`) render nothing — they are
-selected through a table's `select_context` row button.
+composite (ids frozen): a `context_<name>` **Card** over a
+`context_<name>_body` Column with a label, the current selection's label +
+a **Clear** button, a search input + button (only with `option_search`),
+and an option `List` over `/options/<name>` whose buttons select.
+Pickerless contexts (`picker false`) render nothing — they are selected
+through a table's `select_context` row button.
+
+Everything on the wire is plain basic catalog, so any A2UI renderer shows
+a working (if flat) picker. The shipped merged catalog
+(`priv/js/ash_a2ui_catalog.js`, see [Theming](theming.md)) recognizes the
+composite by its frozen ids and upgrades it client-side: searchable
+pickers become a **typeahead combobox** (debounced search-as-you-type over
+the same `context_search` wire action, options in an anchored overlay with
+keyboard navigation — never a pre-search flat list — and the selection
+collapsed to a chip with Clear); non-searchable pickers render their
+option page as a **chip group** with the selection highlighted. No custom
+component types are emitted — renderers without the merged catalog fall
+back to the flat composite (progressive enhancement).
 
 Three client actions drive selection (wire contract, frozen):
 
@@ -136,8 +149,9 @@ themselves authorized); authorization stays in Ash policies.
 
 ## `:detail` components
 
-A `:detail` component renders its context's selected record: a heading and
-one label/value row per field, each value bound to
+A `:detail` component renders its context's selected record as a Card
+(`detail_<name>` over a `detail_<name>_body` Column): a heading and one
+label/value row per field, each value bound to
 `/detail/<context>/<field>`. Fields default to the **context resource's**
 public attributes and may include public calculations/aggregates (loads are
 computed against the context's resource). Multiple details may render the

@@ -81,4 +81,9 @@
   /* ---- Type -------------------------------------------------------- */
   --a2ui-button-font-weight: 500;
   --a2ui-label-font-weight: 600;
+
+  /* ---- Search pickers (merged-catalog combobox & chips) ------------- */
+  --a2ui-combobox-max-height: 18rem;
+  --a2ui-combobox-z-index: 30;
+  --a2ui-chip-border-radius: 999px;
 }

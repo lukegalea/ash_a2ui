@@ -418,15 +418,24 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     filters = Enum.map(query.filters, &filter_picker(view.resource, table, &1, sfx))
     ranges = Enum.flat_map(query.range_filters, &range_inputs(table, &1, sfx))
 
-    controls = %{
+    # Query controls render as a Card (`query<sfx>_controls`, the id root
+    # children reference) over a `_body` Row — section chrome on every
+    # renderer, same shape as form groups and the context/detail sections.
+    card = %{
       "id" => "query#{sfx}_controls",
+      "component" => "Card",
+      "child" => "query#{sfx}_controls_body"
+    }
+
+    controls = %{
+      "id" => "query#{sfx}_controls_body",
       "component" => "Row",
       "children" =>
         Enum.map(search ++ presets ++ filters ++ ranges, & &1["id"]) ++
           ["query#{sfx}_apply_button"]
     }
 
-    [controls | search ++ presets ++ filters ++ ranges] ++
+    [card, controls | search ++ presets ++ filters ++ ranges] ++
       apply_button(view, table, sfx) ++ pagination_components(view, table, sfx)
   end
 
@@ -1247,7 +1256,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # --- contexts and details ---
 
   # A picker context renders as a surface-level composite mirroring the
-  # searchable-select pattern: a label, the current selection (bound to
+  # searchable-select pattern: a Card (`context_<name>`, the root child)
+  # over a `_body` Column holding a label, the current selection (bound to
   # /context/<name>/label) with a Clear button (`context_clear`), a search
   # TextField (bound to /context/<name>/search) with a Button dispatching
   # `context_search` when the context declares option_search, and a result
@@ -1264,8 +1274,18 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     name = to_string(context.name)
     searchable? = context.search_fields != []
 
-    section = %{
+    # The section renders as a Card (keeping the frozen `context_<name>` id
+    # root children reference) over a `_body` Column holding the composite —
+    # card chrome for every renderer; enhanced catalogs (see
+    # priv/js/ash_a2ui_catalog.js) upgrade the body to a combobox.
+    card = %{
       "id" => base,
+      "component" => "Card",
+      "child" => "#{base}_body"
+    }
+
+    section = %{
+      "id" => "#{base}_body",
       "component" => "Column",
       "children" =>
         ["#{base}_label", "#{base}_selected_row"] ++
@@ -1273,6 +1293,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
 
     header = [
+      card,
       section,
       %{
         "id" => "#{base}_label",
@@ -1391,6 +1412,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     [
       %{
         "id" => base,
+        "component" => "Card",
+        "child" => "#{base}_body"
+      },
+      %{
+        "id" => "#{base}_body",
         "component" => "Column",
         "children" => ["#{base}_heading" | Enum.map(detail.fields, &"#{base}_field_#{&1}")]
       },

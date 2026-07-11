@@ -1,26 +1,43 @@
 /**
  * AshA2ui merged component catalog for the `@a2ui/lit` renderer.
  *
- * The A2UI basic catalog's ChoicePicker renders every single-choice picker
- * as a radio-button list (its only `displayStyle`s are `checkbox` and
- * `chips` — there is no dropdown, through spec v1.0). For admin-style
- * surfaces with filter/preset/enum pickers that is the wrong control, and
- * no amount of CSS-variable theming can fix it because it is structural.
+ * The A2UI basic catalog is deliberately small, and two of its structures
+ * are the wrong control for admin-style surfaces:
  *
- * `createAshA2uiCatalog(deps)` builds a Catalog registered under the SAME
- * catalog id the AshA2ui encoder emits (the basic catalog id), reusing
- * every basic-catalog component and function except ChoicePicker, which is
- * replaced by `<ash-a2ui-choicepicker>`:
+ *   1. **ChoicePicker** renders every single-choice picker as a radio list
+ *      (its only `displayStyle`s are `checkbox` and `chips` — there is no
+ *      dropdown, through spec v1.0).
+ *   2. **Search pickers** (AshA2ui's surface-context pickers and searchable
+ *      relationship selects) are emitted as a basic-catalog composite —
+ *      label + selected text + search TextField + Search Button + a flat
+ *      option List — because the basic catalog has no combobox. Rendered
+ *      literally, every option shows before the user searches and nothing
+ *      overlays.
  *
- *   - `variant: "mutuallyExclusive"` (the default) renders a native
- *     `<select>` — themed via the same `--a2ui-*` variables as the rest of
- *     the catalog, plus `--a2ui-choicepicker-select-*` overrides.
- *   - `variant: "multipleSelection"` falls back to a checkbox list
- *     (matching the basic catalog's behavior).
- *   - `filterable` is ignored for single-choice pickers: native selects
- *     already support keyboard search, and AshA2ui's searchable
- *     relationship selects use a server-mediated TextField + List
- *     composite, not ChoicePicker.
+ * No amount of CSS-variable theming can fix either, because both are
+ * structural. `createAshA2uiCatalog(deps)` builds a Catalog registered
+ * under the SAME catalog id the AshA2ui encoder emits (the basic catalog
+ * id) with catalog-level fixes:
+ *
+ *   - **ChoicePicker** → `<ash-a2ui-choicepicker>`: a native, token-themed
+ *     `<select>` for `mutuallyExclusive` pickers (checkbox list for
+ *     `multipleSelection`).
+ *   - **Column** → `<ash-a2ui-column>` (only when `ColumnApi` is passed):
+ *     renders exactly like the basic Column, EXCEPT when the component is
+ *     an AshA2ui picker composite — detected through the extension's
+ *     frozen id contract (`context_<name>_body`, `form_select_<field>`)
+ *     plus structural verification against the live component tree. Then:
+ *       - a **searchable** composite renders as a real typeahead combobox:
+ *         debounced search-as-you-type driving the emitted
+ *         `context_search` / `option_search` action, results in an
+ *         anchored overlay with keyboard navigation, and the selection
+ *         collapsed to a compact chip with a Clear affordance;
+ *       - a **non-searchable** context picker renders its options as a
+ *         horizontal chip group with the selection highlighted.
+ *     Composites the detector cannot fully verify fall back to the plain
+ *     column rendering, which is also what any stock basic-catalog
+ *     renderer shows — the emitted tree stays 100% basic catalog
+ *     (progressive enhancement, no custom component types on the wire).
  *
  * ## Contract with the host bundle
  *
@@ -32,13 +49,14 @@
  *     import {html, css, nothing} from "lit";
  *     import {basicCatalog, A2uiLitElement, A2uiController} from "@a2ui/lit/v0_9";
  *     import {Catalog} from "@a2ui/web_core/v0_9";
- *     import {ChoicePickerApi} from "@a2ui/web_core/v0_9/basic_catalog";
+ *     import {ChoicePickerApi, ColumnApi} from "@a2ui/web_core/v0_9/basic_catalog";
  *     import {createAshA2uiCatalog} from "../../deps/ash_a2ui/priv/js/ash_a2ui_catalog.js";
  *
  *     const catalog = createAshA2uiCatalog({
  *       Catalog,
  *       basicCatalog,
  *       ChoicePickerApi,
+ *       ColumnApi, // optional: omit to keep the stock Column (no combobox)
  *       A2uiLitElement,
  *       A2uiController,
  *       lit: {html, css, nothing},
@@ -49,19 +67,25 @@
  * `new Catalog(id, components, functions, themeSchema)` takes
  * `{...ComponentApi, tagName}` entries; the renderer resolves
  * `createSurface.catalogId` by exact string match and renders each
- * component type via `catalog.components.get(type).tagName`.
+ * component type via `catalog.components.get(type).tagName`. Custom
+ * elements reach the surface state through `this.context`
+ * (`componentModel.id`, `dataContext.surface.{dataModel,componentsModel,
+ * dispatchAction}`) — the same seams the basic catalog uses.
  */
 
-const TAG_NAME = "ash-a2ui-choicepicker";
+const CHOICEPICKER_TAG = "ash-a2ui-choicepicker";
+const COLUMN_TAG = "ash-a2ui-column";
 
 /**
  * Builds the merged catalog. See the module docs for the `deps` contract.
  *
  * @returns {object} a `@a2ui/web_core` Catalog registered under the basic
- *   catalog's id, with ChoicePicker replaced.
+ *   catalog's id, with ChoicePicker (and, when `ColumnApi` is given,
+ *   Column) replaced.
  */
 export function createAshA2uiCatalog(deps) {
-  const {Catalog, basicCatalog, ChoicePickerApi, A2uiLitElement, A2uiController, lit} = deps;
+  const {Catalog, basicCatalog, ChoicePickerApi, ColumnApi, A2uiLitElement, A2uiController, lit} =
+    deps;
 
   if (
     !Catalog ||
@@ -73,16 +97,19 @@ export function createAshA2uiCatalog(deps) {
   ) {
     throw new Error(
       "createAshA2uiCatalog: missing deps. Pass {Catalog, basicCatalog, " +
-        "ChoicePickerApi, A2uiLitElement, A2uiController, lit: {html, css, nothing}}.",
+        "ChoicePickerApi, A2uiLitElement, A2uiController, lit: {html, css, nothing}} " +
+        "(plus ColumnApi for the search-picker combobox).",
     );
   }
 
   defineChoicePickerElement(deps);
+  if (ColumnApi) defineColumnElement(deps);
 
-  const choicePicker = {...ChoicePickerApi, tagName: TAG_NAME};
+  const overrides = new Map([["ChoicePicker", {...ChoicePickerApi, tagName: CHOICEPICKER_TAG}]]);
+  if (ColumnApi) overrides.set("Column", {...ColumnApi, tagName: COLUMN_TAG});
 
-  const components = [...basicCatalog.components.values()].map((component) =>
-    component.name === "ChoicePicker" ? choicePicker : component,
+  const components = [...basicCatalog.components.values()].map(
+    (component) => overrides.get(component.name) || component,
   );
 
   return new Catalog(
@@ -93,11 +120,33 @@ export function createAshA2uiCatalog(deps) {
   );
 }
 
+// --- shared helpers ---------------------------------------------------------
+
+// Resolves an A2UI data binding leaf ({"path": ...}) against the surface
+// data model; relative paths resolve under basePath (the option row's
+// template scope). Non-binding values pass through, matching the
+// GenericBinder's action-context resolution semantics.
+function resolveEventContext(value, dataModel, basePath) {
+  if (value === null || typeof value !== "object") return value;
+  if (typeof value.path === "string" && Object.keys(value).length === 1) {
+    const abs = value.path.startsWith("/")
+      ? value.path
+      : `${basePath.replace(/\/$/, "")}/${value.path}`;
+    return dataModel.get(abs);
+  }
+  if (Array.isArray(value)) return value.map((v) => resolveEventContext(v, dataModel, basePath));
+  const out = {};
+  for (const [k, v] of Object.entries(value)) out[k] = resolveEventContext(v, dataModel, basePath);
+  return out;
+}
+
+// --- ChoicePicker override ---------------------------------------------------
+
 // Defines <ash-a2ui-choicepicker> once (idempotent across LiveView
 // remounts and hot reloads). Written without decorators so the file stays
 // plain JS with injected dependencies.
 function defineChoicePickerElement({A2uiLitElement, A2uiController, ChoicePickerApi, lit}) {
-  if (customElements.get(TAG_NAME)) return;
+  if (customElements.get(CHOICEPICKER_TAG)) return;
 
   const {html, css, nothing} = lit;
 
@@ -262,7 +311,574 @@ function defineChoicePickerElement({A2uiLitElement, A2uiController, ChoicePicker
     }
   }
 
-  customElements.define(TAG_NAME, AshA2uiChoicePickerElement);
+  customElements.define(CHOICEPICKER_TAG, AshA2uiChoicePickerElement);
+}
+
+// --- Column override (search-picker combobox / chip group) -------------------
+
+const SEARCH_DEBOUNCE_MS = 250;
+
+// AshA2ui's frozen picker-composite id contract (see the extension's
+// Contexts and Details topic — ids are part of the wire contract):
+//
+//   context picker  : Card `context_<name>` > Column `context_<name>_body`
+//                     holding `_label`, `_selected_row` (`_selected` +
+//                     `_clear_button`), optional `_controls` (`_search_input`
+//                     + `_search_button`), and `_options` (List over
+//                     /options/<name> of `_option_button` > `_option_text`).
+//   searchable select: Column `form_select_<field>` holding `_label`,
+//                     `_selected`, `_controls`, `_options` (same shapes,
+//                     no clear button).
+//
+// detectPicker inspects the live component tree and only enhances when
+// every structural piece it needs is present and correctly shaped, so an
+// encoder from a different version (or a hand-built surface reusing the id
+// prefix) degrades to the plain column rendering.
+function detectPicker(surface, id) {
+  const contextMatch = /^context_(.+)_body$/.exec(id);
+  const selectMatch = /^form_select_(.+)$/.exec(id);
+  if (!contextMatch && !selectMatch) return null;
+
+  const base = contextMatch ? `context_${contextMatch[1]}` : id;
+  const get = (suffix) => surface.componentsModel.get(`${base}${suffix}`);
+
+  const options = get("_options");
+  const optionButton = get("_option_button");
+  const selected = get("_selected");
+  const label = get("_label");
+  if (!options || !optionButton || !selected || !label) return null;
+
+  const optionsChildren = options.properties?.children;
+  const optionEvent = optionButton.properties?.action?.event;
+  const labelPath = selected.properties?.text?.path;
+  const labelText = label.properties?.text;
+
+  if (
+    options.type !== "List" ||
+    typeof optionsChildren?.path !== "string" ||
+    typeof optionEvent?.name !== "string" ||
+    typeof labelPath !== "string" ||
+    typeof labelText !== "string"
+  ) {
+    return null;
+  }
+
+  const searchInput = get("_search_input");
+  const searchButton = get("_search_button");
+  const searchPath = searchInput?.properties?.value?.path;
+  const searchEvent = searchButton?.properties?.action?.event;
+  const searchable =
+    typeof searchPath === "string" && typeof searchEvent?.name === "string";
+
+  const clearEvent = get("_clear_button")?.properties?.action?.event;
+
+  return {
+    base,
+    label: labelText,
+    labelPath,
+    // The picker's selected value lives next to its label in the reserved
+    // state shape ({value, label, search}).
+    valuePath: labelPath.replace(/\/label$/, "/value"),
+    optionsPath: optionsChildren.path,
+    optionEvent,
+    optionButtonId: `${base}_option_button`,
+    searchable,
+    searchPath: searchable ? searchPath : null,
+    searchEvent: searchable ? searchEvent : null,
+    searchButtonId: searchable ? `${base}_search_button` : null,
+    clearEvent: clearEvent && typeof clearEvent.name === "string" ? clearEvent : null,
+    clearButtonId: `${base}_clear_button`,
+  };
+}
+
+// Defines <ash-a2ui-column> once (idempotent across LiveView remounts and
+// hot reloads).
+function defineColumnElement({A2uiLitElement, A2uiController, ColumnApi, lit}) {
+  if (customElements.get(COLUMN_TAG)) return;
+
+  const {html, css, nothing} = lit;
+
+  const JUSTIFY_MAP = {
+    start: "flex-start",
+    center: "center",
+    end: "flex-end",
+    spaceBetween: "space-between",
+    spaceAround: "space-around",
+    spaceEvenly: "space-evenly",
+    stretch: "stretch",
+  };
+
+  const ALIGN_MAP = {
+    start: "flex-start",
+    center: "center",
+    end: "flex-end",
+    stretch: "stretch",
+  };
+
+  class AshA2uiColumnElement extends A2uiLitElement {
+    /**
+     * Plain columns use the basic catalog's variable (`--a2ui-column-gap`).
+     * Enhanced pickers add (all optional):
+     *
+     * - `--a2ui-combobox-max-height`: overlay max height (default 18rem).
+     * - `--a2ui-combobox-z-index`: overlay stacking (default 30).
+     * - `--a2ui-combobox-option-padding`: option row padding.
+     * - `--a2ui-chip-background` / `--a2ui-chip-color`: chip at rest
+     *   (default secondary tokens).
+     * - `--a2ui-chip-selected-background` / `--a2ui-chip-selected-color`:
+     *   selected chip (default primary tokens).
+     * - `--a2ui-chip-border-radius`: chip rounding (default 999px pill).
+     *
+     * Shared input/surface/border/label tokens come from the same
+     * `--a2ui-*` set as the rest of the catalog.
+     */
+    static styles = css`
+      :host {
+        display: flex;
+        flex-direction: column;
+        gap: var(--a2ui-column-gap, var(--a2ui-spacing-m));
+      }
+      .picker {
+        display: flex;
+        flex-direction: column;
+        gap: var(--a2ui-spacing-s, 0.5rem);
+      }
+      .picker-label {
+        font-size: var(--a2ui-label-font-size, var(--a2ui-font-size-s));
+        font-weight: var(--a2ui-label-font-weight, bold);
+      }
+      .combobox-anchor {
+        position: relative;
+        max-width: 28rem;
+      }
+      .combobox-input {
+        width: 100%;
+        box-sizing: border-box;
+        background-color: var(--a2ui-color-input, #fff);
+        color: var(--a2ui-color-on-input, #333);
+        border: var(--a2ui-textfield-border, var(--a2ui-border, 1px solid #ccc));
+        border-radius: var(--a2ui-textfield-border-radius, var(--a2ui-spacing-m));
+        padding: var(--a2ui-textfield-padding, var(--a2ui-spacing-m));
+        font-family: inherit;
+        font-size: inherit;
+      }
+      .combobox-input:focus {
+        outline: none;
+        border-color: var(
+          --a2ui-textfield-color-border-focus,
+          var(--a2ui-color-primary, #17e)
+        );
+      }
+      .combobox-popup {
+        position: absolute;
+        top: calc(100% + 0.25rem);
+        left: 0;
+        right: 0;
+        z-index: var(--a2ui-combobox-z-index, 30);
+        background: var(--a2ui-color-surface, #fff);
+        color: var(--a2ui-color-on-surface, #333);
+        border: var(--a2ui-border, 1px solid var(--a2ui-color-border, #ccc));
+        border-radius: var(--a2ui-border-radius, 0.5rem);
+        box-shadow: var(
+          --a2ui-combobox-box-shadow,
+          var(--a2ui-card-box-shadow, 0 4px 12px rgb(0 0 0 / 0.15))
+        );
+        max-height: var(--a2ui-combobox-max-height, 18rem);
+        overflow-y: auto;
+        margin: 0;
+        padding: var(--a2ui-spacing-xs, 0.25rem);
+        list-style: none;
+      }
+      .combobox-option {
+        padding: var(
+          --a2ui-combobox-option-padding,
+          var(--a2ui-spacing-s, 0.375rem) var(--a2ui-spacing-m, 0.5rem)
+        );
+        border-radius: calc(var(--a2ui-border-radius, 0.5rem) - 0.125rem);
+        cursor: pointer;
+      }
+      .combobox-option.active,
+      .combobox-option:hover {
+        background: var(--a2ui-color-secondary, #eee);
+        color: var(--a2ui-color-on-secondary, inherit);
+      }
+      .combobox-hint {
+        padding: var(--a2ui-spacing-s, 0.375rem) var(--a2ui-spacing-m, 0.5rem);
+        opacity: 0.65;
+        font-size: var(--a2ui-font-size-s, 0.875rem);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--a2ui-spacing-s, 0.5rem);
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        background: var(--a2ui-chip-background, var(--a2ui-color-secondary, #eee));
+        color: var(--a2ui-chip-color, var(--a2ui-color-on-secondary, inherit));
+        border: var(--a2ui-border-width, 1px) solid transparent;
+        border-radius: var(--a2ui-chip-border-radius, 999px);
+        padding: 0.25rem 0.75rem;
+        font: inherit;
+        font-size: var(--a2ui-font-size-s, 0.875rem);
+        cursor: pointer;
+      }
+      .chip:hover {
+        border-color: var(--a2ui-color-border, #ccc);
+      }
+      .chip.selected {
+        background: var(--a2ui-chip-selected-background, var(--a2ui-color-primary, #17e));
+        color: var(--a2ui-chip-selected-color, var(--a2ui-color-on-primary, #fff));
+      }
+      .chip .chip-x {
+        font-weight: bold;
+        opacity: 0.75;
+      }
+      .chip-hint {
+        opacity: 0.65;
+        font-size: var(--a2ui-font-size-s, 0.875rem);
+      }
+    `;
+
+    constructor() {
+      super();
+      this.picker = null;
+      this.open = false;
+      this.activeIndex = -1;
+      this.debounceTimer = null;
+      this.dataSubscriptions = [];
+    }
+
+    createController() {
+      return new A2uiController(this, ColumnApi);
+    }
+
+    get surface() {
+      return this.context?.dataContext?.surface;
+    }
+
+    willUpdate(changedProperties) {
+      super.willUpdate(changedProperties);
+
+      if (changedProperties.has("context") && this.context) {
+        this.teardownPicker();
+        try {
+          this.picker = detectPicker(this.surface, this.context.componentModel.id);
+        } catch {
+          this.picker = null;
+        }
+        if (this.picker) this.subscribePickerData();
+      }
+
+      const props = this.controller?.props;
+      if (props && props.weight !== undefined) {
+        this.style.flex = String(props.weight);
+      } else {
+        this.style.removeProperty("flex");
+      }
+    }
+
+    updated(changedProperties) {
+      super.updated(changedProperties);
+      if (this.picker) return;
+      const props = this.controller?.props;
+      if (props) {
+        this.style.justifyContent = JUSTIFY_MAP[props.justify ?? ""] ?? "flex-start";
+        this.style.alignItems = ALIGN_MAP[props.align ?? ""] ?? "stretch";
+      }
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.teardownPicker();
+    }
+
+    teardownPicker() {
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+      }
+      for (const sub of this.dataSubscriptions) sub.unsubscribe();
+      this.dataSubscriptions = [];
+      this.picker = null;
+      this.open = false;
+      this.activeIndex = -1;
+    }
+
+    // The picker rendering reads live values straight from the data model;
+    // these subscriptions only exist to re-render when the server rewrites
+    // the selection, the options page, or the search text.
+    subscribePickerData() {
+      const {dataModel} = this.surface;
+      const paths = [this.picker.labelPath, this.picker.optionsPath];
+      if (this.picker.searchPath) paths.push(this.picker.searchPath);
+      for (const path of paths) {
+        this.dataSubscriptions.push(dataModel.subscribe(path, () => this.requestUpdate()));
+      }
+    }
+
+    dispatch(event, sourceComponentId, basePath = "/") {
+      const {dataModel} = this.surface;
+      const context = resolveEventContext(event.context || {}, dataModel, basePath);
+      this.surface.dispatchAction({event: {name: event.name, context}}, sourceComponentId);
+    }
+
+    readPickerState() {
+      const {dataModel} = this.surface;
+      const rawOptions = dataModel.get(this.picker.optionsPath);
+      return {
+        selectedLabel: String(dataModel.get(this.picker.labelPath) ?? ""),
+        selectedValue: String(dataModel.get(this.picker.valuePath) ?? ""),
+        search: this.picker.searchPath
+          ? String(dataModel.get(this.picker.searchPath) ?? "")
+          : "",
+        options: Array.isArray(rawOptions) ? rawOptions : [],
+      };
+    }
+
+    render() {
+      const props = this.controller?.props;
+      if (!props) return nothing;
+
+      if (this.picker && this.surface) {
+        const state = this.readPickerState();
+        return this.picker.searchable
+          ? this.renderCombobox(state)
+          : this.renderChipGroup(state);
+      }
+
+      const children = Array.isArray(props.children) ? props.children : [];
+      return html`${children.map((child) => html`${this.renderNode(child)}`)}`;
+    }
+
+    // --- typeahead combobox ---
+
+    renderCombobox(state) {
+      const listboxId = `${this.picker.base}_listbox`;
+
+      // A selection with a clear action collapses to just the chip; without
+      // one (searchable relationship selects have no clear button) the
+      // input stays visible so a new search can replace the selection.
+      const collapsed = state.selectedLabel && this.picker.clearEvent;
+
+      const input = html`
+        <div class="combobox-anchor">
+          <input
+            class="combobox-input"
+            type="text"
+            role="combobox"
+            aria-expanded=${this.open ? "true" : "false"}
+            aria-controls=${listboxId}
+            aria-autocomplete="list"
+            aria-activedescendant=${this.activeIndex >= 0
+              ? `${listboxId}_opt_${this.activeIndex}`
+              : ""}
+            placeholder="Type to search…"
+            autocomplete="off"
+            .value=${state.search}
+            @input=${(e) => this.onSearchInput(e.target.value)}
+            @focus=${() => this.setOpen(true)}
+            @blur=${() => this.setOpen(false)}
+            @keydown=${(e) => this.onSearchKeydown(e, state)}
+          />
+          ${this.open ? this.renderPopup(state, listboxId) : nothing}
+        </div>
+      `;
+
+      return html`
+        <div class="picker">
+          <span class="picker-label">${this.picker.label}</span>
+          ${state.selectedLabel ? this.renderSelectionChip(state) : nothing}
+          ${collapsed ? nothing : input}
+        </div>
+      `;
+    }
+
+    renderSelectionChip(state) {
+      const clearable = !!this.picker.clearEvent;
+      return html`
+        <div class="chips">
+          <button
+            type="button"
+            class="chip selected"
+            title=${clearable ? "Clear selection" : "Current selection"}
+            @click=${() => this.clearSelection()}
+          >
+            ${state.selectedLabel}
+            ${clearable ? html`<span class="chip-x" aria-hidden="true">×</span>` : nothing}
+          </button>
+        </div>
+      `;
+    }
+
+    // The popup never lists options before the user has typed: the server
+    // pre-loads a default option page, but surfacing it unprompted is
+    // exactly the flat-list UX this component replaces.
+    renderPopup(state, listboxId) {
+      // Keep focus in the input when the popup chrome (scrollbar, padding)
+      // is clicked, so blur doesn't close the popup mid-interaction.
+      const keepFocus = (e) => e.preventDefault();
+
+      if (state.search.trim() === "") {
+        return html`<ul id=${listboxId} role="listbox" class="combobox-popup" @mousedown=${keepFocus}>
+          <li class="combobox-hint">Type to search…</li>
+        </ul>`;
+      }
+
+      if (state.options.length === 0) {
+        return html`<ul id=${listboxId} role="listbox" class="combobox-popup" @mousedown=${keepFocus}>
+          <li class="combobox-hint">No matches</li>
+        </ul>`;
+      }
+
+      return html`
+        <ul id=${listboxId} role="listbox" class="combobox-popup" @mousedown=${keepFocus}>
+          ${state.options.map(
+            (option, index) => html`
+              <li
+                id="${listboxId}_opt_${index}"
+                class="combobox-option ${index === this.activeIndex ? "active" : ""}"
+                role="option"
+                aria-selected=${index === this.activeIndex ? "true" : "false"}
+                @mousedown=${(e) => {
+                  e.preventDefault();
+                  this.selectOption(index);
+                }}
+                @mousemove=${() => this.setActiveIndex(index)}
+              >
+                ${String(option?.label ?? "")}
+              </li>
+            `,
+          )}
+        </ul>
+      `;
+    }
+
+    onSearchInput(value) {
+      this.surface.dataModel.set(this.picker.searchPath, value);
+      this.setOpen(true);
+      this.setActiveIndex(-1);
+      if (this.debounceTimer) clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null;
+        this.dispatchSearch();
+      }, SEARCH_DEBOUNCE_MS);
+      this.requestUpdate();
+    }
+
+    dispatchSearch() {
+      this.dispatch(this.picker.searchEvent, this.picker.searchButtonId);
+    }
+
+    onSearchKeydown(event, state) {
+      const optionCount = state.search.trim() === "" ? 0 : state.options.length;
+
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          this.setOpen(true);
+          if (optionCount > 0) this.setActiveIndex((this.activeIndex + 1) % optionCount);
+          break;
+        case "ArrowUp":
+          event.preventDefault();
+          if (optionCount > 0) {
+            this.setActiveIndex((this.activeIndex - 1 + optionCount) % optionCount);
+          }
+          break;
+        case "Enter":
+          event.preventDefault();
+          if (this.debounceTimer) {
+            // A pending debounce means the visible options are stale for
+            // the typed text — flush the search instead of selecting.
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
+            this.dispatchSearch();
+          } else if (this.open && this.activeIndex >= 0 && this.activeIndex < optionCount) {
+            this.selectOption(this.activeIndex);
+          }
+          break;
+        case "Escape":
+          this.setOpen(false);
+          break;
+        default:
+          break;
+      }
+    }
+
+    selectOption(index) {
+      this.dispatch(
+        this.picker.optionEvent,
+        this.picker.optionButtonId,
+        `${this.picker.optionsPath}/${index}`,
+      );
+      this.setOpen(false);
+      this.setActiveIndex(-1);
+    }
+
+    clearSelection() {
+      if (!this.picker.clearEvent) return;
+      this.dispatch(this.picker.clearEvent, this.picker.clearButtonId);
+      this.setOpen(false);
+      this.setActiveIndex(-1);
+    }
+
+    setOpen(open) {
+      if (this.open !== open) {
+        this.open = open;
+        this.requestUpdate();
+      }
+    }
+
+    setActiveIndex(index) {
+      if (this.activeIndex !== index) {
+        this.activeIndex = index;
+        this.requestUpdate();
+      }
+    }
+
+    // --- non-searchable context picker: chip group ---
+
+    renderChipGroup(state) {
+      let body;
+      if (state.options.length === 0 && !state.selectedLabel) {
+        body = html`<span class="chip-hint">No options yet — make a selection above.</span>`;
+      } else {
+        body = html`
+          <div class="chips" role="group" aria-label=${this.picker.label}>
+            ${state.options.map((option, index) => {
+              const value = String(option?.value ?? "");
+              const isSelected = value !== "" && value === state.selectedValue;
+              return html`
+                <button
+                  type="button"
+                  class="chip ${isSelected ? "selected" : ""}"
+                  aria-pressed=${isSelected ? "true" : "false"}
+                  @click=${() => (isSelected ? this.clearSelection() : this.selectOption(index))}
+                >
+                  ${String(option?.label ?? "")}
+                  ${isSelected && this.picker.clearEvent
+                    ? html`<span class="chip-x" aria-hidden="true">×</span>`
+                    : nothing}
+                </button>
+              `;
+            })}
+          </div>
+        `;
+      }
+
+      return html`
+        <div class="picker">
+          <span class="picker-label">${this.picker.label}</span>
+          ${body}
+        </div>
+      `;
+    }
+  }
+
+  customElements.define(COLUMN_TAG, AshA2uiColumnElement);
 }
 
 export default createAshA2uiCatalog;

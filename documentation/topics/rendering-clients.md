@@ -122,8 +122,10 @@ alternative to calling `configureAshA2ui`.)
 the surface — without it, Text headings render as literal `## ...`
 markdown. The package additionally ships a neutral CSS-variable theme
 (`priv/js/ash_a2ui_theme.css`) and a merged component catalog
-(`priv/js/ash_a2ui_catalog.js`) whose ChoicePicker is a native `<select>`.
-All three are covered in [Theming](theming.md).
+(`priv/js/ash_a2ui_catalog.js`) whose ChoicePicker is a native `<select>`
+and whose Column upgrades AshA2ui's search-picker composites to a
+typeahead combobox with an anchored results overlay. All three are covered
+in [Theming](theming.md).
 
 ## Transport 2: plain JSON endpoints
 

@@ -29,7 +29,9 @@
  *     the basic catalog; import it into your app CSS and override tokens.
  *   - `ash_a2ui_catalog.js` — `createAshA2uiCatalog(deps)` builds a merged
  *     catalog (registered under the basic catalog id) whose ChoicePicker
- *     renders a native `<select>` for single-choice pickers.
+ *     renders a native `<select>` for single-choice pickers and whose
+ *     Column upgrades AshA2ui search-picker composites to a typeahead
+ *     combobox (pass `ColumnApi` in the deps to enable).
  *   - `configureAshA2ui({..., markdown})` — wires a markdown renderer so
  *     Text headings render as headings instead of literal `##` markdown
  *     (see the configureAshA2ui docs below).

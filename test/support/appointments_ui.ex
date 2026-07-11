@@ -30,15 +30,15 @@ defmodule AshA2ui.Test.AppointmentsUI do
     context :clinic do
       resource AshA2ui.Test.Clinic
       option_label :name
-      depends_on(:owner)
-      depends_on_path([:memberships, :owner_id])
-      auto_select_single(true)
+      depends_on :owner
+      depends_on_path [:memberships, :owner_id]
+      auto_select_single true
     end
 
     context :appointment do
       resource AshA2ui.Test.Appointment
       option_label :title
-      picker(false)
+      picker false
     end
 
     query :default do

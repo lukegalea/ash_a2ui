@@ -10,6 +10,30 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Section card chrome: context picker sections, `:detail` panels, and query
+  controls now emit as a basic-catalog `Card` over a `_body` container
+  (`context_<name>` > `context_<name>_body`, `detail_<name>` >
+  `detail_<name>_body`, `query<sfx>_controls` > `query<sfx>_controls_body`)
+  — the same shape as form groups and card-style table rows, so every
+  renderer gets consistent section chrome via the `--a2ui-card-*` theme
+  variables. Root children ids are unchanged.
+- Typeahead comboboxes for search pickers: the merged catalog
+  (`priv/js/ash_a2ui_catalog.js`) now also overrides `Column` (opt-in by
+  passing `ColumnApi` in the deps). The override renders exactly like the
+  basic Column unless the component is an AshA2ui picker composite —
+  detected via the frozen id contract (`context_<name>_body`,
+  `form_select_<field>`) plus structural verification of the live
+  component tree. Searchable composites become a real combobox: debounced
+  search-as-you-type dispatching the existing `context_search` /
+  `option_search` wire actions, results in an anchored overlay with
+  keyboard navigation (arrows/Enter/Escape), a "Type to search…" hint
+  instead of the pre-search option dump, and the selection collapsed to a
+  chip with Clear. Non-searchable context pickers render their option page
+  as a chip group with the selection highlighted. The wire format is
+  unchanged (plain basic catalog) — renderers without the merged catalog
+  fall back to the flat composite. New theme knobs: `--a2ui-combobox-*`
+  and `--a2ui-chip-*`.
+
 - Surface contexts: the new `context` DSL entity declares a named,
   server-validated record selection over any Ash resource that scopes the
   rest of the surface. Picker contexts emit a searchable surface-level

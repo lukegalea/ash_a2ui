@@ -201,7 +201,7 @@ defmodule AshA2ui.Wave4ReferralTest do
       assert Enum.map(picker["options"], & &1["value"]) ==
                ["active", "pending", "closed", "deleted"]
 
-      assert "query_preset_picker" in components()["query_controls"]["children"]
+      assert "query_preset_picker" in components()["query_controls_body"]["children"]
     end
   end
 

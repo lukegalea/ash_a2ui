@@ -58,16 +58,41 @@ specificity win:
 }
 ```
 
-### `priv/js/ash_a2ui_catalog.js` — a merged catalog with a real `<select>`
+### `priv/js/ash_a2ui_catalog.js` — a merged catalog with structural fixes
 
-The basic catalog's ChoicePicker renders single-choice pickers as **radio
-lists** (its only display styles are `checkbox` and `chips` — the spec has
-no dropdown, through v1.0). That is structural, not cosmetic, so the
-extension ships a catalog-level fix: `createAshA2uiCatalog(deps)` builds a
-catalog registered under the **same catalog id the encoder emits**, reusing
-every basic-catalog component and function except ChoicePicker, which
-becomes a native, token-themed `<select>` for `mutuallyExclusive` pickers
-(checkbox list for `multipleSelection`).
+Two basic-catalog structures are wrong for admin surfaces, and both are
+structural (no CSS variable can fix them):
+
+1. **ChoicePicker** renders single-choice pickers as **radio lists** (its
+   only display styles are `checkbox` and `chips` — the spec has no
+   dropdown, through v1.0).
+2. **Search pickers** (surface-context pickers and searchable relationship
+   selects) are emitted as a label + selected text + search field + Search
+   button + flat option `List` composite — the basic catalog has no
+   combobox, so a stock renderer shows every option before the user
+   searches, with no overlay and no keyboard navigation.
+
+`createAshA2uiCatalog(deps)` builds a catalog registered under the **same
+catalog id the encoder emits**, reusing every basic-catalog component and
+function except:
+
+- **ChoicePicker** → a native, token-themed `<select>` for
+  `mutuallyExclusive` pickers (checkbox list for `multipleSelection`).
+- **Column** (only when `ColumnApi` is passed) → identical to the basic
+  Column, except when the component is one of AshA2ui's picker composites,
+  recognized through the extension's frozen id contract
+  (`context_<name>_body`, `form_select_<field>`) plus structural checks
+  against the live component tree. Searchable composites render as a
+  **typeahead combobox**: debounced search-as-you-type driving the same
+  `context_search`/`option_search` wire actions, results in an anchored
+  overlay with arrow-key/Enter/Escape navigation, a "Type to search…"
+  hint instead of a pre-search option dump, and the selection collapsed to
+  a chip with Clear. Non-searchable context pickers render their options
+  as a horizontal **chip group** with the selection highlighted.
+  Composites the detector cannot fully verify — and every other Column —
+  render exactly like the basic catalog, so the wire format stays plain
+  basic catalog (progressive enhancement; stock renderers show the flat
+  composite).
 
 Like the hook, the file has no bundled dependencies — the host bundle
 passes the renderer classes in:
@@ -76,13 +101,14 @@ passes the renderer classes in:
 import {html, css, nothing} from "lit";
 import {basicCatalog, A2uiLitElement, A2uiController} from "@a2ui/lit/v0_9";
 import {Catalog} from "@a2ui/web_core/v0_9";
-import {ChoicePickerApi} from "@a2ui/web_core/v0_9/basic_catalog";
+import {ChoicePickerApi, ColumnApi} from "@a2ui/web_core/v0_9/basic_catalog";
 import {createAshA2uiCatalog} from "../../deps/ash_a2ui/priv/js/ash_a2ui_catalog.js";
 
 const catalog = createAshA2uiCatalog({
   Catalog,
   basicCatalog,
   ChoicePickerApi,
+  ColumnApi, // optional: omit to keep the stock Column (no combobox)
   A2uiLitElement,
   A2uiController,
   lit: {html, css, nothing},
@@ -94,6 +120,13 @@ configureAshA2ui({MessageProcessor, catalogs: [catalog]});
 Pass **only** the merged catalog — it answers for the basic catalog id, so
 also passing `basicCatalog` would shadow it (the processor takes the first
 id match).
+
+Combobox/chip styling rides the same token system, with a few extra knobs:
+`--a2ui-combobox-max-height`, `--a2ui-combobox-z-index`,
+`--a2ui-combobox-box-shadow`, `--a2ui-combobox-option-padding`,
+`--a2ui-chip-background`/`--a2ui-chip-color`,
+`--a2ui-chip-selected-background`/`--a2ui-chip-selected-color`, and
+`--a2ui-chip-border-radius` (see the JSDoc in the file).
 
 ### Markdown rendering (fixes literal `##` headings)
 
@@ -129,6 +162,13 @@ Since v0.9.1 encoder updates, each record in a table renders as a `Card`
 `Text` with the humanized field name next to the bound value `Text` — so
 themed surfaces get card chrome and readable "Label: value" rows without
 any DSL changes.
+
+Section chrome is Card-wrapped the same way: context picker sections
+(`context_<name>` > `context_<name>_body`), detail panels (`detail_<name>`
+> `detail_<name>_body`), query controls (`query<sfx>_controls` >
+`query<sfx>_controls_body`), and form groups (`form_group_<name>`) all
+emit as a basic-catalog `Card` over a body container, themed via the
+`--a2ui-card-*` variables on every renderer.
 
 ## Protocol limits (what theming cannot do)
 
