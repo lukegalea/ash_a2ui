@@ -15,6 +15,7 @@ a2ui do
     search_fields [:subject, [:requester, :email]]  # string attrs or rel paths, ci-contains, OR'd
     sortable [:subject, :inserted_at]
     filters [:status]                   # equality filters
+    range_filters [:inserted_at]        # client-driven inclusive from/to bounds
     default_sort inserted_at: :desc
     page_size 25
     max_page_size 100
@@ -48,6 +49,13 @@ end
   calculations have no data-layer expression and are rejected everywhere;
   aggregates are sort-only). All verified at compile
   time — fix the declaration, do not work around the verifier.
+- **`range_filters` is the only client-driven bound mechanism.** Each
+  declared field (public attributes only) gets `/query/ranges/<field>/from`
+  and `/to` string bindings, cast to the attribute's type and ANDed as
+  inclusive `>=`/`<=`; `""` means inactive. Plain `YYYY-MM-DD` bounds on
+  datetime fields expand to the day's start/end, so a same-day from/to
+  covers the whole day. Non-allowlisted fields and uncastable bounds are
+  rejected before any read.
 - **Presets are the composite-filter mechanism.** The client selects a
   preset **by name** (`"preset"` in the query state; a `ChoicePicker` is
   emitted) — predicates never travel over the wire. Use a keyword `filter`
@@ -93,8 +101,9 @@ end
 - ❌ Widening `sortable`/`filters` to every public attribute.
 - ❌ Inventing a second query mechanism (custom action names, ad-hoc context
   keys) instead of declaring a `query` entity.
-- ❌ Expecting range/fuzzy/custom *client-driven* filters — filters are
-  equality-only by design. Composite/rich predicates belong in a named
-  `preset` (or a preset `read_action`), selected by name.
+- ❌ Expecting fuzzy/custom *client-driven* predicates — filters are
+  equality-only and client-driven bounds go through `range_filters`.
+  Composite/rich predicates belong in a named `preset` (or a preset
+  `read_action`), selected by name.
 - ❌ Accepting client-sent predicates for presets — the wire carries only
   the preset **name**.

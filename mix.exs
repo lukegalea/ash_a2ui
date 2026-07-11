@@ -94,6 +94,7 @@ defmodule AshA2ui.MixProject do
         "documentation/topics/actions-and-authorization.md",
         "documentation/topics/queries-and-pagination.md",
         "documentation/topics/multi-section-surfaces.md",
+        "documentation/topics/contexts-and-details.md",
         "documentation/topics/relationships.md",
         "documentation/topics/layout.md",
         "documentation/topics/data-model-conventions.md",

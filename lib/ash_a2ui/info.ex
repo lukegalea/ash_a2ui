@@ -36,6 +36,16 @@ defmodule AshA2ui.Info do
   end
 
   @doc """
+  The `context` entities declared in the `a2ui` section.
+  """
+  @spec contexts(module) :: [AshA2ui.Context.t()]
+  def contexts(resource_or_ui_module) do
+    resource_or_ui_module
+    |> Extension.get_entities([:a2ui])
+    |> Enum.filter(&is_struct(&1, AshA2ui.Context))
+  end
+
+  @doc """
   The `query` entities declared in the `a2ui` section.
   """
   @spec queries(module) :: [AshA2ui.Query.t()]
@@ -93,12 +103,18 @@ defmodule AshA2ui.Info do
       (validated against the query allowlist; invalid or missing state falls
       back to the query's declared defaults). Lets refreshes preserve the
       user's current search/filters/sort/page instead of resetting them.
+    * `:context_state` — a client `/context` state map to load under
+      (sanitized like any client input — see
+      `AshA2ui.ContextRunner.selected/2`). Lets refreshes preserve the
+      user's current context selections: dependent option lists stay
+      filtered, `/detail/<context>` records re-fetch, and scoped tables
+      keep their context filters (tables with an unmet `require_context`
+      load no records).
   """
   @spec build_surface(module, keyword) :: [map]
   def build_surface(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
-    {records, opts} = load_records!(resolved_view, opts)
-    opts = Keyword.put(opts, :options, load_options!(resolved_view, opts))
+    {records, opts} = load_and_put_state!(resolved_view, opts)
 
     V0_9_1.encode_surface(resolved_view, records, opts)
   end
@@ -112,10 +128,33 @@ defmodule AshA2ui.Info do
   @spec build_data_model(module, keyword) :: map
   def build_data_model(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
-    {records, opts} = load_records!(resolved_view, opts)
-    opts = Keyword.put(opts, :options, load_options!(resolved_view, opts))
+    {records, opts} = load_and_put_state!(resolved_view, opts)
 
     V0_9_1.encode_data_model(resolved_view, records, opts)
+  end
+
+  # The shared loading pipeline: sanitize the carried /context state, load
+  # records under its scope, load option lists (contexts included), fetch
+  # the selected contexts' /detail records, and hand the encoder the
+  # resolved context/detail values.
+  defp load_and_put_state!(resolved_view, opts) do
+    selected = AshA2ui.ContextRunner.selected(resolved_view, opts[:context_state])
+    {records, opts} = load_records!(resolved_view, selected, opts)
+
+    opts =
+      opts
+      |> Keyword.put(:options, load_options!(resolved_view, selected, opts))
+      |> put_context_values(resolved_view, selected)
+
+    {records, opts}
+  end
+
+  defp put_context_values(opts, %{contexts: contexts}, _selected) when contexts == %{}, do: opts
+
+  defp put_context_values(opts, resolved_view, selected) do
+    opts
+    |> Keyword.put(:context_values, AshA2ui.ContextRunner.state(resolved_view, selected))
+    |> Keyword.put(:detail_values, load_details!(resolved_view, selected, opts))
   end
 
   # Loads the surface's records through normal `Ash.read`s (policies apply).
@@ -129,17 +168,17 @@ defmodule AshA2ui.Info do
   # sort, page 1) — and the resulting `/query` state (per table on
   # multi-table surfaces) is handed to the encoder via the `:query_state`
   # option.
-  defp load_records!(resolved_view, opts) do
+  defp load_records!(resolved_view, selected, opts) do
     case resolved_view.tables do
       [] ->
         {[], opts}
 
       [single] ->
-        {records, query_state} = load_table!(resolved_view, single, opts)
+        {records, query_state} = load_table!(resolved_view, single, selected, opts)
         {records, (query_state && Keyword.put(opts, :query_state, query_state)) || opts}
 
       tables ->
-        loaded = Enum.map(tables, &{&1.name, load_table!(resolved_view, &1, opts)})
+        loaded = Enum.map(tables, &{&1.name, load_table!(resolved_view, &1, selected, opts)})
 
         records = Map.new(loaded, fn {name, {records, _state}} -> {name, records} end)
 
@@ -150,29 +189,48 @@ defmodule AshA2ui.Info do
     end
   end
 
-  defp load_table!(resolved_view, table, opts) do
-    cond do
-      is_nil(table.read_action) ->
-        raise ArgumentError,
-              "cannot load records for #{inspect(resolved_view.resource)}: the resource has " <>
-                "no read action (declare one, or set `read_action` on the table component)"
+  defp load_table!(resolved_view, table, selected, opts) do
+    if is_nil(table.read_action) do
+      raise ArgumentError,
+            "cannot load records for #{inspect(resolved_view.resource)}: the resource has " <>
+              "no read action (declare one, or set `read_action` on the table component)"
+    end
 
-      table.query ->
-        params = query_params(resolved_view, table, opts)
+    case AshA2ui.ContextRunner.table_scope(resolved_view, table, selected) do
+      :require_unmet ->
+        state =
+          table.query &&
+            AshA2ui.QueryRunner.state(
+              table.query,
+              query_params(resolved_view, table, opts),
+              0,
+              false
+            )
 
-        case AshA2ui.QueryRunner.run(table, params, read_opts(resolved_view, opts)) do
-          {:ok, records, query_state} -> {records, query_state}
-          {:error, error} -> raise Ash.Error.to_error_class(error)
-        end
+        {[], state}
 
-      true ->
-        records =
-          table.resource
-          |> Ash.Query.for_read(table.read_action)
-          |> Ash.Query.load(table.loads)
-          |> Ash.read!(read_opts(resolved_view, opts))
+      {:ok, scope} ->
+        load_scoped_table!(resolved_view, table, scope, opts)
+    end
+  end
 
-        {records, nil}
+  defp load_scoped_table!(resolved_view, table, scope, opts) do
+    if table.query do
+      params = query_params(resolved_view, table, opts)
+
+      case AshA2ui.QueryRunner.run(table, params, read_opts(resolved_view, opts), scope) do
+        {:ok, records, query_state} -> {records, query_state}
+        {:error, error} -> raise Ash.Error.to_error_class(error)
+      end
+    else
+      records =
+        table.resource
+        |> Ash.Query.for_read(table.read_action)
+        |> AshA2ui.ContextRunner.apply_scope(scope)
+        |> Ash.Query.load(table.loads)
+        |> Ash.read!(read_opts(resolved_view, opts))
+
+      {records, nil}
     end
   end
 
@@ -201,19 +259,76 @@ defmodule AshA2ui.Info do
   # `%{name => [%{"label" => _, "value" => _}]}` — the shape written to the
   # reserved `/options/<name>` paths. Searchable sources load the same
   # initial page; the `"option_search"` action refreshes them.
-  defp load_options!(resolved_view, opts) do
-    resolved_view
-    |> ResolvedView.option_sources()
-    |> Map.new(fn {name, source} ->
-      records =
-        source.destination
-        |> Ash.Query.for_read(ResourceInfo.primary_action!(source.destination, :read).name)
-        |> Ash.Query.sort([{source.option_sort, :asc}])
-        |> Ash.Query.limit(source.option_limit)
-        |> Ash.read!(option_read_opts(source.destination, opts))
+  #
+  # Picker contexts load through `AshA2ui.ContextRunner.load_options/5`
+  # (dependency-filtered by the carried selections; a dependent context
+  # whose parent is unselected loads `[]`).
+  defp load_options!(resolved_view, selected, opts) do
+    select_options =
+      resolved_view
+      |> ResolvedView.option_sources()
+      |> Map.new(fn {name, source} ->
+        records =
+          source.destination
+          |> Ash.Query.for_read(ResourceInfo.primary_action!(source.destination, :read).name)
+          |> Ash.Query.sort([{source.option_sort, :asc}])
+          |> Ash.Query.limit(source.option_limit)
+          |> Ash.read!(option_read_opts(source.destination, opts))
 
-      {name, Enum.map(records, &option_entry(&1, source))}
+        {name, Enum.map(records, &option_entry(&1, source))}
+      end)
+
+    context_options =
+      for {name, context} <- resolved_view.contexts, context.picker, into: %{} do
+        case AshA2ui.ContextRunner.load_options(
+               resolved_view,
+               context,
+               selected,
+               "",
+               read_opts(resolved_view, opts)
+             ) do
+          {:ok, options} -> {name, options}
+          {:error, error} -> raise Ash.Error.to_error_class(error)
+        end
+      end
+
+    Map.merge(select_options, context_options)
+  end
+
+  # The initial /detail/<context> values: selected contexts fetch their
+  # record (authorized, with the detail components' loads), unselected ones
+  # render %{}.
+  defp load_details!(resolved_view, selected, opts) do
+    resolved_view.details
+    |> Enum.group_by(& &1.context)
+    |> Map.new(fn {context_name, details} ->
+      {context_name, detail_value!(resolved_view, context_name, details, selected, opts)}
     end)
+  end
+
+  defp detail_value!(resolved_view, context_name, details, selected, opts) do
+    case Map.get(selected, context_name) do
+      nil ->
+        %{}
+
+      %{value: value} ->
+        context = resolved_view.contexts[context_name]
+        loads = details |> Enum.flat_map(& &1.loads) |> Enum.uniq()
+        fields = details |> Enum.flat_map(& &1.fields) |> Enum.uniq()
+
+        case AshA2ui.ContextRunner.fetch_selected(
+               resolved_view,
+               context,
+               value,
+               selected,
+               read_opts(resolved_view, opts),
+               loads
+             ) do
+          {:ok, record} -> ResolvedView.record_values(resolved_view, record, fields)
+          :not_found -> %{}
+          {:error, error} -> raise Ash.Error.to_error_class(error)
+        end
+    end
   end
 
   @doc false

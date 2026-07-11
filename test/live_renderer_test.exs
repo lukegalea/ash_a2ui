@@ -245,6 +245,43 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert %{"search" => "needle", "page" => 1} = value["query"]
       end
 
+      test "a PubSub refresh re-runs the client's last context state, not unselected", %{
+        conn: conn
+      } do
+        {:ok, view, _html} = live(conn, "/live-renderer/context-pubsub")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+
+        envelope = %{
+          "version" => "v0.9.1",
+          "action" => %{
+            "name" => "context_select",
+            "surfaceId" => Fixtures.surface_id(),
+            "sourceComponentId" => "context_owner_option_button",
+            "timestamp" => "2026-07-10T12:00:00Z",
+            "context" => %{"context" => "owner", "value" => "o-1", "contexts" => %{}}
+          }
+        }
+
+        SchemaHelper.assert_valid_client_message(envelope)
+        render_hook(view, "a2ui:action", envelope)
+
+        # The stub's follow-up rewrites /context; the LiveRenderer must
+        # track it and hand it to the next refresh as :context_state.
+        assert_push_event(view, "a2ui:messages", %{messages: [_context_update]})
+
+        Phoenix.PubSub.broadcast(
+          AshA2ui.Test.PubSub,
+          "ash_a2ui_test:appointments",
+          %Ash.Notifier.Notification{resource: AshA2ui.Test.Minimal}
+        )
+
+        assert_receive {:data_model_fn, MinimalUI, opts}, 1_000
+
+        assert opts[:context_state] == %{
+                 "owner" => %{"search" => "", "value" => "o-1", "label" => "Ada"}
+               }
+      end
+
       test "a PubSub refresh on a multi-table surface rebuilds every table", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/multi-table")
         assert_push_event(view, "a2ui:messages", %{messages: _initial})

@@ -177,7 +177,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
            }
            |> put_query_state(resolved_view, opts)
            |> put_prompt_state(resolved_view)
-           |> put_select_state(resolved_view)}
+           |> put_select_state(resolved_view)
+           |> put_context_data(resolved_view, opts)}
       end
 
     %{
@@ -218,10 +219,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # `%{name => [%{"label" => _, "value" => _}]}`. Direct encoder calls
   # without the option fall back to empty option lists per source.
   defp select_options(view, opts) do
+    context_defaults =
+      for {name, %{picker: true}} <- view.contexts, into: %{}, do: {name, []}
+
     defaults =
       view
       |> ResolvedView.option_sources()
       |> Map.new(fn {name, _source} -> {name, []} end)
+      |> Map.merge(context_defaults)
 
     Map.merge(defaults, Keyword.get(opts, :options) || %{})
   end
@@ -244,6 +249,40 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     |> Map.new(fn {name, options} -> {to_string(name), options} end)
   end
 
+  # The reserved /context and /detail state (see AshA2ui.ContextRunner):
+  # the caller-resolved values when given (AshA2ui.Info passes them after
+  # loading under the carried :context_state), the empty initial shapes
+  # otherwise. Omitted entirely on context-less surfaces (frozen shape
+  # unchanged).
+  defp put_context_data(value, view, opts) do
+    if ResolvedView.contexts?(view) do
+      value
+      |> Map.put(
+        "context",
+        Keyword.get(opts, :context_values) || ResolvedView.context_state(view)
+      )
+      |> put_detail_data(view, opts)
+    else
+      value
+    end
+  end
+
+  defp put_detail_data(value, view, opts) do
+    case ResolvedView.detail_state(view) do
+      state when state == %{} ->
+        value
+
+      state ->
+        resolved =
+          Map.new(
+            Keyword.get(opts, :detail_values) || %{},
+            fn {name, detail_value} -> {to_string(name), detail_value} end
+          )
+
+        Map.put(value, "detail", Map.merge(state, resolved))
+    end
+  end
+
   # --- component tree ---
 
   # Multi-table id scheme: single-table surfaces keep the frozen unsuffixed
@@ -254,6 +293,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp components(view, options) do
     form = Enum.find(view.components, &(&1.name == :form))
 
+    context_sections =
+      Enum.flat_map(view.context_order, &context_picker_components(view, view.contexts[&1]))
+
     table_sections =
       Enum.flat_map(view.tables, fn table ->
         sfx = table_suffix(view, table)
@@ -262,6 +304,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           query_components(view, table, sfx) ++
           table_descendants(view, table, sfx)
       end)
+
+    detail_sections = Enum.flat_map(view.details, &detail_components(view, &1))
 
     form_components = (form && form_components(view, form)) || []
 
@@ -277,7 +321,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "text" => %{"path" => "/ui/status"}
     }
 
-    [root | table_sections ++ form_components] ++
+    [root | context_sections ++ table_sections ++ detail_sections ++ form_components] ++
       form_descendants(view, form, options) ++ [status | action_result_components()]
   end
 
@@ -285,22 +329,36 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     if ResolvedView.multi_table?(view), do: "_#{table.name}", else: ""
   end
 
-  # Root order: per table (in declaration order) heading, query controls,
-  # the list, pagination; then form, status, action-result panel — each
-  # section present only when declared.
+  # Root order: context pickers (in declaration order), then per
+  # table/detail component (in declaration order) its section — a table's
+  # heading, query controls, list, pagination; a detail's column — then
+  # form, status, action-result panel; each section present only when
+  # declared. Surfaces without contexts/details keep the frozen pre-context
+  # root order.
   defp root_children(view, form) do
-    table_children =
-      Enum.flat_map(view.tables, fn table ->
-        sfx = table_suffix(view, table)
+    context_children =
+      for name <- view.context_order, view.contexts[name].picker, do: "context_#{name}"
 
-        ["table_heading#{sfx}"] ++
-          ((table.query && ["query#{sfx}_controls"]) || []) ++
-          ["records_list#{sfx}"] ++
-          ((table.query && ["query#{sfx}_pagination"]) || [])
-      end)
+    component_children = Enum.flat_map(view.components, &component_root_children(view, &1))
 
-    table_children ++ ((form && ["form"]) || []) ++ ["status_text", "action_result_panel"]
+    context_children ++
+      component_children ++ ((form && ["form"]) || []) ++ ["status_text", "action_result_panel"]
   end
+
+  defp component_root_children(view, %{name: :table} = component) do
+    table = Enum.find(view.tables, &(&1.component == component))
+    sfx = table_suffix(view, table)
+
+    ["table_heading#{sfx}"] ++
+      ((table.query && ["query#{sfx}_controls"]) || []) ++
+      ["records_list#{sfx}"] ++
+      ((table.query && ["query#{sfx}_pagination"]) || [])
+  end
+
+  defp component_root_children(_view, %{name: :detail} = component),
+    do: ["detail_#{AshA2ui.Component.key(component)}"]
+
+  defp component_root_children(_view, _form), do: []
 
   # The result panel displays map-returning generic action results: a Column
   # wrapping a Text bound to the reserved /ui/action_result_text path (see
@@ -358,16 +416,18 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     search = (query.search_fields != [] && [search_input(table, sfx)]) || []
     presets = (query.presets != [] && [preset_picker(query, table, sfx)]) || []
     filters = Enum.map(query.filters, &filter_picker(view.resource, table, &1, sfx))
+    ranges = Enum.flat_map(query.range_filters, &range_inputs(table, &1, sfx))
 
     controls = %{
       "id" => "query#{sfx}_controls",
       "component" => "Row",
       "children" =>
-        Enum.map(search ++ presets ++ filters, & &1["id"]) ++ ["query#{sfx}_apply_button"]
+        Enum.map(search ++ presets ++ filters ++ ranges, & &1["id"]) ++
+          ["query#{sfx}_apply_button"]
     }
 
-    [controls | search ++ presets ++ filters] ++
-      apply_button(table, sfx) ++ pagination_components(table, sfx)
+    [controls | search ++ presets ++ filters ++ ranges] ++
+      apply_button(view, table, sfx) ++ pagination_components(view, table, sfx)
   end
 
   defp search_input(table, sfx) do
@@ -423,14 +483,28 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     end
   end
 
-  defp apply_button(table, sfx) do
+  # Each range_filters field emits a from/to TextField pair bound to the
+  # frozen /query/ranges/<field>/from|to paths; the shared Apply button
+  # submits them with the rest of the query state.
+  defp range_inputs(table, field, sfx) do
+    Enum.map(["from", "to"], fn side ->
+      %{
+        "id" => "query#{sfx}_range_#{field}_#{side}",
+        "component" => "TextField",
+        "label" => "#{humanize(field)} #{side}",
+        "value" => %{"path" => "#{table.query_path}/ranges/#{field}/#{side}"}
+      }
+    end)
+  end
+
+  defp apply_button(view, table, sfx) do
     [
-      query_button("query#{sfx}_apply", table, %{"page" => 1}),
+      query_button("query#{sfx}_apply", table, %{"page" => 1}, view),
       %{"id" => "query#{sfx}_apply_text", "component" => "Text", "text" => "Apply"}
     ]
   end
 
-  defp pagination_components(table, sfx) do
+  defp pagination_components(view, table, sfx) do
     [
       %{
         "id" => "query#{sfx}_pagination",
@@ -441,23 +515,24 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "query#{sfx}_next_button"
         ]
       },
-      query_button("query#{sfx}_prev", table, %{"pageDelta" => -1}),
+      query_button("query#{sfx}_prev", table, %{"pageDelta" => -1}, view),
       %{"id" => "query#{sfx}_prev_text", "component" => "Text", "text" => "Previous"},
       %{
         "id" => "query#{sfx}_page_text",
         "component" => "Text",
         "text" => %{"path" => "#{table.query_path}/page"}
       },
-      query_button("query#{sfx}_next", table, %{"pageDelta" => 1}),
+      query_button("query#{sfx}_next", table, %{"pageDelta" => 1}, view),
       %{"id" => "query#{sfx}_next_text", "component" => "Text", "text" => "Next"}
     ]
   end
 
-  defp query_button(id_prefix, table, context) do
+  defp query_button(id_prefix, table, context, view) do
     context =
       context
       |> Map.put("query", %{"path" => table.query_path})
       |> Map.put("component", to_string(table.name))
+      |> put_contexts_binding(view)
 
     %{
       "id" => "#{id_prefix}_button",
@@ -478,11 +553,28 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     end
   end
 
+  # Action contexts on context-enabled surfaces carry the current /context
+  # map, so server reads (refreshes, query, context cascades) run under the
+  # client's active selections. Context-less surfaces are unchanged (frozen
+  # contract).
+  defp put_contexts_binding(context, view) do
+    if ResolvedView.contexts?(view) do
+      Map.put(context, "contexts", %{"path" => "/context"})
+    else
+      context
+    end
+  end
+
   defp table_descendants(view, table, sfx) do
     {action_ids, action_components} =
       table.row_actions
       |> Enum.map(&row_action_components(view, table, &1, sfx))
       |> Enum.unzip()
+
+    # The context-select button (master/detail hook) rides along with the
+    # row-action anchors in either layout.
+    {context_select_ids, context_select_components} = context_select_button(view, table, sfx)
+    action_ids = action_ids ++ context_select_ids
 
     row_components =
       case table.component.row_layout do
@@ -490,7 +582,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         layout -> card_row_components(view, layout, action_ids, sfx)
       end
 
-    row_components ++ List.flatten(action_components) ++ select_button(table, sfx)
+    row_components ++
+      List.flatten(action_components) ++ context_select_components ++ select_button(table, sfx)
   end
 
   # Each record renders as a Card (chrome themed via --a2ui-card-*)
@@ -658,6 +751,44 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     ]
   end
 
+  # A table with `select_context` gets a per-row Button dispatching
+  # `context_select` for the named context with the row's id — the
+  # master/detail hook: the row's record becomes the context's selection,
+  # cascading like a picker selection would.
+  defp context_select_button(_view, %{select_context: nil}, _sfx), do: {[], []}
+
+  defp context_select_button(view, table, sfx) do
+    name = table.select_context
+    base = "row_context#{sfx}_button"
+
+    components = [
+      %{
+        "id" => base,
+        "component" => "Button",
+        "child" => "row_context#{sfx}_text",
+        "action" => %{
+          "event" => %{
+            "name" => "context_select",
+            "context" =>
+              %{
+                "context" => to_string(name),
+                "value" => %{"path" => "id"}
+              }
+              |> put_query_binding(view)
+              |> put_contexts_binding(view)
+          }
+        }
+      },
+      %{
+        "id" => "row_context#{sfx}_text",
+        "component" => "Text",
+        "text" => "View #{String.downcase(humanize(name))}"
+      }
+    ]
+
+    {[base], components}
+  end
+
   # A cell is a labeled pair: a caption Text with the humanized field name
   # and a body Text bound to the field value — so generated rows read
   # "Name: Fido" instead of a bare value soup.
@@ -737,14 +868,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "event" => %{
             "name" => "invoke",
             "context" =>
-              put_query_binding(
-                %{
-                  "action" => to_string(action),
-                  "recordId" => %{"path" => "id"},
-                  "component" => to_string(table.name)
-                },
-                view
-              )
+              %{
+                "action" => to_string(action),
+                "recordId" => %{"path" => "id"},
+                "component" => to_string(table.name)
+              }
+              |> put_query_binding(view)
+              |> put_contexts_binding(view)
           }
         }
       },
@@ -847,15 +977,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
             "event" => %{
               "name" => "invoke",
               "context" =>
-                put_query_binding(
-                  %{
-                    "action" => to_string(action),
-                    "recordId" => %{"path" => "id"},
-                    "component" => to_string(table.name),
-                    "values" => %{"path" => "/prompt/values/#{action}"}
-                  },
-                  view
-                )
+                %{
+                  "action" => to_string(action),
+                  "recordId" => %{"path" => "id"},
+                  "component" => to_string(table.name),
+                  "values" => %{"path" => "/prompt/values/#{action}"}
+                }
+                |> put_query_binding(view)
+                |> put_contexts_binding(view)
             }
           }
         },
@@ -998,13 +1127,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "event" => %{
             "name" => "submit_form",
             "context" =>
-              put_query_binding(
-                %{
-                  "values" => %{"path" => "/form"},
-                  "recordId" => %{"path" => "/form/id"}
-                },
-                view
-              )
+              %{
+                "values" => %{"path" => "/form"},
+                "recordId" => %{"path" => "/form/id"}
+              }
+              |> put_query_binding(view)
+              |> put_contexts_binding(view)
           }
         }
       },
@@ -1114,6 +1242,173 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "text" => %{"path" => "label"}
       }
     ]
+  end
+
+  # --- contexts and details ---
+
+  # A picker context renders as a surface-level composite mirroring the
+  # searchable-select pattern: a label, the current selection (bound to
+  # /context/<name>/label) with a Clear button (`context_clear`), a search
+  # TextField (bound to /context/<name>/search) with a Button dispatching
+  # `context_search` when the context declares option_search, and a result
+  # List templated over /options/<name> whose per-option Button dispatches
+  # `context_select` with the template-relative option "value". Every
+  # context action carries the current /context map (and /query state on
+  # query-enabled surfaces) so the server cascades under the client's
+  # active state. Pickerless contexts (`picker false`) emit nothing — they
+  # are selected through a table's `select_context` button.
+  defp context_picker_components(_view, %{picker: false}), do: []
+
+  defp context_picker_components(view, context) do
+    base = "context_#{context.name}"
+    name = to_string(context.name)
+    searchable? = context.search_fields != []
+
+    section = %{
+      "id" => base,
+      "component" => "Column",
+      "children" =>
+        ["#{base}_label", "#{base}_selected_row"] ++
+          ((searchable? && ["#{base}_controls"]) || []) ++ ["#{base}_options"]
+    }
+
+    header = [
+      section,
+      %{
+        "id" => "#{base}_label",
+        "component" => "Text",
+        "text" => context.label,
+        "variant" => "h3"
+      },
+      %{
+        "id" => "#{base}_selected_row",
+        "component" => "Row",
+        "children" => ["#{base}_selected", "#{base}_clear_button"]
+      },
+      %{
+        "id" => "#{base}_selected",
+        "component" => "Text",
+        "text" => %{"path" => "/context/#{name}/label"}
+      },
+      %{
+        "id" => "#{base}_clear_button",
+        "component" => "Button",
+        "variant" => "borderless",
+        "child" => "#{base}_clear_text",
+        "action" => %{
+          "event" => %{
+            "name" => "context_clear",
+            "context" =>
+              %{"context" => name}
+              |> put_query_binding(view)
+              |> put_contexts_binding(view)
+          }
+        }
+      },
+      %{"id" => "#{base}_clear_text", "component" => "Text", "text" => "Clear"}
+    ]
+
+    controls =
+      if searchable? do
+        [
+          %{
+            "id" => "#{base}_controls",
+            "component" => "Row",
+            "children" => ["#{base}_search_input", "#{base}_search_button"]
+          },
+          %{
+            "id" => "#{base}_search_input",
+            "component" => "TextField",
+            "label" => "Search",
+            "value" => %{"path" => "/context/#{name}/search"}
+          },
+          %{
+            "id" => "#{base}_search_button",
+            "component" => "Button",
+            "child" => "#{base}_search_text",
+            "action" => %{
+              "event" => %{
+                "name" => "context_search",
+                "context" =>
+                  %{
+                    "context" => name,
+                    "search" => %{"path" => "/context/#{name}/search"}
+                  }
+                  |> put_contexts_binding(view)
+              }
+            }
+          },
+          %{"id" => "#{base}_search_text", "component" => "Text", "text" => "Search"}
+        ]
+      else
+        []
+      end
+
+    options =
+      option_list(base, "/options/#{name}", %{
+        "name" => "context_select",
+        "context" =>
+          %{
+            "context" => name,
+            "value" => %{"path" => "value"}
+          }
+          |> put_query_binding(view)
+          |> put_contexts_binding(view)
+      })
+
+    header ++ controls ++ options
+  end
+
+  # A :detail component renders its context's selected record: a heading
+  # and one label/value Row per field, each value Text bound to the
+  # absolute /detail/<context>/<field> path (an unselected context renders
+  # empty values — the server writes %{}).
+  defp detail_components(view, detail) do
+    base = "detail_#{detail.name}"
+
+    field_rows =
+      Enum.flat_map(detail.fields, fn field ->
+        [
+          %{
+            "id" => "#{base}_field_#{field}",
+            "component" => "Row",
+            "children" => ["#{base}_label_#{field}", "#{base}_value_#{field}"]
+          },
+          %{
+            "id" => "#{base}_label_#{field}",
+            "component" => "Text",
+            "text" => detail_field_label(view, field),
+            "variant" => "h5"
+          },
+          %{
+            "id" => "#{base}_value_#{field}",
+            "component" => "Text",
+            "text" => %{"path" => "/detail/#{detail.context}/#{field}"}
+          }
+        ]
+      end)
+
+    [
+      %{
+        "id" => base,
+        "component" => "Column",
+        "children" => ["#{base}_heading" | Enum.map(detail.fields, &"#{base}_field_#{&1}")]
+      },
+      %{
+        "id" => "#{base}_heading",
+        "component" => "Text",
+        "text" => humanize(detail.name),
+        "variant" => "h3"
+      }
+      | field_rows
+    ]
+  end
+
+  defp detail_field_label(view, field) do
+    case view.fields[field] do
+      %{label: label} when is_binary(label) -> label
+      _undeclared -> humanize(field)
+    end
   end
 
   # --- nested forms ---

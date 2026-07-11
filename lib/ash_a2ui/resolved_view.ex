@@ -65,7 +65,10 @@ defmodule AshA2ui.ResolvedView do
     tables: [],
     actions: %{},
     refreshes: %{},
-    nested_forms: %{}
+    nested_forms: %{},
+    contexts: %{},
+    context_order: [],
+    details: []
   ]
 
   @typedoc """
@@ -127,7 +130,49 @@ defmodule AshA2ui.ResolvedView do
           loads: list,
           row_actions: [atom],
           records_path: String.t(),
-          query_path: String.t() | nil
+          query_path: String.t() | nil,
+          context_filter: [{atom, atom}],
+          require_context: [atom],
+          select_context: atom | nil
+        }
+
+  @typedoc """
+  A resolved `context` entity: the surface-level record selection's resource
+  and fully-defaulted option-loading config (`option_*` keys resolved like a
+  relationship select's; `search_fields` from `option_search`), plus the
+  dependency (`depends_on` + `depends_on_path`), `auto_select_single` and
+  `picker` settings. Selection state lives at `/context/<name>`, options at
+  `/options/<name>`.
+  """
+  @type context :: %{
+          name: atom,
+          resource: module,
+          label: String.t(),
+          option_label: atom,
+          option_value: atom,
+          option_sort: atom,
+          option_limit: pos_integer,
+          search_fields: [atom],
+          depends_on: atom | nil,
+          depends_on_path: [atom] | nil,
+          auto_select_single: boolean,
+          picker: boolean
+        }
+
+  @typedoc """
+  A resolved `:detail` component: the component key (`name`), the context it
+  renders, the effective field list, and the `Ash.Query.load/2` statement its
+  record fetch needs (source paths + calculations/aggregates, computed
+  against the **context's** resource). The record map is written to
+  `/detail/<context>`.
+  """
+  @type detail :: %{
+          name: atom,
+          component: AshA2ui.Component.t(),
+          context: atom,
+          fields: [atom],
+          loads: list,
+          detail_path: String.t()
         }
 
   @type t :: %__MODULE__{
@@ -145,12 +190,15 @@ defmodule AshA2ui.ResolvedView do
           tables: [table],
           actions: %{atom => AshA2ui.Action.t()},
           refreshes: %{atom => [atom] | nil},
-          nested_forms: %{atom => nested_form}
+          nested_forms: %{atom => nested_form},
+          contexts: %{atom => context},
+          context_order: [atom],
+          details: [detail]
         }
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
 
-  @resolve_opts [:actor, :tenant, :domain, :authorize?, :query_state]
+  @resolve_opts [:actor, :tenant, :domain, :authorize?, :query_state, :context_state]
 
   @doc """
   Resolves the `a2ui` DSL of `resource_or_ui_module` (an `Ash.Resource` using
@@ -187,6 +235,7 @@ defmodule AshA2ui.ResolvedView do
 
     create_action = component_action(form, :create_action, resource, :create)
     update_action = component_action(form, :update_action, resource, :update)
+    contexts = resolve_contexts(resource_or_ui_module)
 
     %__MODULE__{
       resource: resource,
@@ -203,9 +252,100 @@ defmodule AshA2ui.ResolvedView do
       tables: tables,
       actions: actions,
       refreshes: Map.new(actions, fn {name, action} -> {name, action.refreshes} end),
-      nested_forms: resolve_nested_forms(resource, form, create_action || update_action)
+      nested_forms: resolve_nested_forms(resource, form, create_action || update_action),
+      contexts: Map.new(contexts, &{&1.name, &1}),
+      context_order: Enum.map(contexts, & &1.name),
+      details: resolve_details(components, contexts, fields)
     }
   end
+
+  @doc """
+  Whether the surface declares any contexts (switching on the reserved
+  `/context/<name>` state, the context picker sections, and the
+  `"contexts"` binding write/query action contexts carry).
+  """
+  @spec contexts?(t()) :: boolean
+  def contexts?(%__MODULE__{contexts: contexts}), do: contexts != %{}
+
+  @doc """
+  The initial `/context` state: one `%{"search" => "", "value" => "",
+  "label" => ""}` entry per declared context. Empty on context-less surfaces
+  (which carry no `"context"` key at all — the frozen pre-context data-model
+  shape is unchanged).
+  """
+  @spec context_state(t()) :: %{String.t() => map}
+  def context_state(%__MODULE__{} = view) do
+    Map.new(view.contexts, fn {name, _context} ->
+      {to_string(name), %{"search" => "", "value" => "", "label" => ""}}
+    end)
+  end
+
+  @doc """
+  The initial `/detail` state: one empty map per `:detail` component, keyed
+  by the rendered context's name. Empty on surfaces without details.
+  """
+  @spec detail_state(t()) :: %{String.t() => map}
+  def detail_state(%__MODULE__{details: details}) do
+    Map.new(details, fn detail -> {to_string(detail.context), %{}} end)
+  end
+
+  @doc """
+  Serializes `fields` of an Ash `record` to the wire map shape (string keys,
+  JSON-safe values — dates/datetimes to ISO 8601, decimals to strings, atoms
+  to strings — with `"id"` always included). Declared `source` fields walk
+  the loaded relationship path (nil-safe: an unloaded or nil relationship
+  serializes to `""`).
+
+  Used for `/detail/<context>` record values; matches the row serialization
+  of `/records`.
+  """
+  @spec record_values(t(), Ash.Resource.record(), [atom]) :: %{String.t() => term}
+  def record_values(%__MODULE__{} = view, record, fields) do
+    fields
+    |> Map.new(fn name -> {to_string(name), serialized_field(view, record, name)} end)
+    |> Map.put("id", json_safe(Map.get(record, :id)))
+  end
+
+  defp serialized_field(view, record, name) do
+    case view.fields[name] do
+      %{source: [_ | _] = source} ->
+        case walk_source(record, source) do
+          nil -> ""
+          value -> json_safe(value)
+        end
+
+      _plain ->
+        json_safe(Map.get(record, name))
+    end
+  end
+
+  defp walk_source(record, [attribute]), do: Map.get(record, attribute)
+
+  defp walk_source(record, [relationship | rest]) do
+    case Map.get(record, relationship) do
+      %Ash.NotLoaded{} -> nil
+      nil -> nil
+      related -> walk_source(related, rest)
+    end
+  end
+
+  defp json_safe(%Ash.NotLoaded{}), do: nil
+  defp json_safe(%Decimal{} = decimal), do: Decimal.to_string(decimal)
+  defp json_safe(%Date{} = date), do: Date.to_iso8601(date)
+  defp json_safe(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
+  defp json_safe(%NaiveDateTime{} = naive), do: NaiveDateTime.to_iso8601(naive)
+  defp json_safe(%Time{} = time), do: Time.to_iso8601(time)
+  defp json_safe(value) when is_struct(value), do: inspect(value)
+
+  defp json_safe(value) when is_map(value),
+    do: Map.new(value, fn {k, v} -> {to_string(k), json_safe(v)} end)
+
+  defp json_safe(value) when is_list(value), do: Enum.map(value, &json_safe/1)
+
+  defp json_safe(value) when is_atom(value) and not is_boolean(value) and not is_nil(value),
+    do: Atom.to_string(value)
+
+  defp json_safe(value), do: value
 
   @doc """
   Whether the view is a multi-table surface (two or more `:table`
@@ -389,7 +529,81 @@ defmodule AshA2ui.ResolvedView do
           ),
         row_actions: component.row_actions,
         records_path: (multi? && "/records/#{name}") || "/records",
-        query_path: query && ((multi? && "/query/#{name}") || "/query")
+        query_path: query && ((multi? && "/query/#{name}") || "/query"),
+        context_filter: component.context_filter,
+        require_context: component.require_context,
+        select_context: component.select_context
+      }
+    end)
+  end
+
+  # --- contexts and details -----------------------------------------------------
+
+  defp resolve_contexts(resource_or_ui_module) do
+    resource_or_ui_module
+    |> AshA2ui.Info.contexts()
+    |> Enum.map(&resolve_context/1)
+  end
+
+  defp resolve_context(context) do
+    option_value = context.option_value || context_single_primary_key!(context)
+    option_label = context.option_label || default_option_label(context.resource, option_value)
+
+    %{
+      name: context.name,
+      resource: context.resource,
+      label: context.label || humanize(context.name),
+      option_label: option_label,
+      option_value: option_value,
+      option_sort: context.option_sort || option_label,
+      option_limit: context.option_limit,
+      search_fields: context.option_search,
+      depends_on: context.depends_on,
+      depends_on_path: context.depends_on_path,
+      auto_select_single: context.auto_select_single,
+      picker: context.picker
+    }
+  end
+
+  defp context_single_primary_key!(context) do
+    case ResourceInfo.primary_key(context.resource) do
+      [key] ->
+        key
+
+      composite ->
+        raise ArgumentError,
+              "cannot infer option_value for context #{inspect(context.name)}: " <>
+                "#{inspect(context.resource)} has a composite primary key " <>
+                "#{inspect(composite)} — set option_value explicitly"
+    end
+  end
+
+  # Detail loads are computed against the CONTEXT's resource (details may
+  # render a different resource than the surface's), reusing the table
+  # loads logic for source paths and calculations/aggregates.
+  defp resolve_details(components, contexts, fields) do
+    by_name = Map.new(contexts, &{&1.name, &1})
+
+    components
+    |> Enum.filter(&(&1.name == :detail))
+    |> Enum.map(fn component ->
+      context =
+        Map.get(by_name, component.context) ||
+          raise(
+            ArgumentError,
+            "detail component #{inspect(AshA2ui.Component.key(component))} references " <>
+              "undeclared context #{inspect(component.context)}"
+          )
+
+      detail_fields = component.fields || []
+
+      %{
+        name: AshA2ui.Component.key(component),
+        component: component,
+        context: context.name,
+        fields: detail_fields,
+        loads: field_loads(context.resource, detail_fields, fields),
+        detail_path: "/detail/#{context.name}"
       }
     end)
   end
@@ -485,9 +699,11 @@ defmodule AshA2ui.ResolvedView do
   # entry per relationship prefix of a `source` column ([:user, :email] ->
   # :user; [:a, :b, :attr] -> {:a, [:b]}) plus the name of every field that
   # is a public calculation or aggregate of the resource.
-  defp loads(resource, table, fields) do
+  defp loads(resource, table, fields), do: field_loads(resource, table.fields, fields)
+
+  defp field_loads(resource, field_names, fields) do
     source_loads =
-      table.fields
+      field_names
       |> Enum.map(&(fields[&1] && fields[&1].source))
       |> Enum.reject(&is_nil/1)
       |> Enum.map(&Enum.drop(&1, -1))
@@ -495,7 +711,7 @@ defmodule AshA2ui.ResolvedView do
       |> Enum.uniq()
       |> Enum.map(&path_to_load/1)
 
-    calc_loads = Enum.filter(table.fields, &calculation_or_aggregate?(resource, &1))
+    calc_loads = Enum.filter(field_names, &calculation_or_aggregate?(resource, &1))
 
     source_loads ++ calc_loads
   end

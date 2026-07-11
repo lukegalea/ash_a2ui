@@ -10,6 +10,36 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Surface contexts: the new `context` DSL entity declares a named,
+  server-validated record selection over any Ash resource that scopes the
+  rest of the surface. Picker contexts emit a searchable surface-level
+  picker (state at `/context/<name>`, options at `/options/<name>`) driven
+  by the new `"context_search"` / `"context_select"` / `"context_clear"`
+  client actions — every selection round-trips through an **authorized
+  read**. `depends_on` + `depends_on_path` make dependent option sources
+  (a parent's selection filters the child's options; changes cascade —
+  dependents clear, re-derive, and `auto_select_single` re-selects sole
+  options). Tables scope to selections with `context_filter` (equality
+  ANDed onto every read) and `require_context` (no selection → no read,
+  empty table); `select_context` adds a per-row button selecting a
+  (typically pickerless) context — the master half of master/detail. All
+  compile-verified by the new `AshA2ui.Verifiers.VerifyContexts`;
+  context-less surfaces are byte-for-byte unchanged.
+- `:detail` components: render a context's selected record as a
+  field-by-field card bound to `/detail/<context>` (fields default to the
+  context resource's public attributes; calculations/aggregates load like
+  table fields) — the detail half of master/detail.
+- Client-driven range filters: the `query` entity gains `range_filters`
+  (public attributes only). The `/query` state gains a per-field
+  `"ranges"` map (`{"from": "", "to": ""}`, inclusive bounds cast to the
+  attribute's type before any read; plain `YYYY-MM-DD` bounds on datetime
+  fields expand to day start/end), and the encoder emits from/to
+  TextFields at `/query/ranges/<field>/from|to`.
+- The LiveView transport tracks the last pushed `/context` state and
+  passes it to PubSub refreshes as `:context_state` (like `:query_state`),
+  so live refreshes preserve the user's selections;
+  `AshA2ui.Info.build_surface/2` / `build_data_model/2` accept
+  `:context_state` for custom transports.
 - Form field groups: the new `group` DSL entity inside `:form` components
   (`group :scheduling do label "Scheduling"; columns 2; fields [...] end`)
   renders a labeled section — a Card wrapping a heading Text (h3) over the

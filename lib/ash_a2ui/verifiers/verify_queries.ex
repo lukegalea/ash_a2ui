@@ -110,6 +110,7 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
     [
       sortable: query.sortable,
       filters: query.filters,
+      range_filters: query.range_filters,
       default_sort: Keyword.keys(query.default_sort)
     ]
     |> Enum.reduce_while(:ok, fn {option, names}, :ok ->

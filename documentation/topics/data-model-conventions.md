@@ -24,6 +24,9 @@ custom hooks, and tests can rely on them.
 | `/query` | The current search/filter/preset/sort/pagination state of a query-enabled table (multi-table surfaces: an object keyed by table component name) | Initial render; after every `query` action; alongside query-aware success refreshes |
 | `/query/<component_name>` | One table's query state on a **multi-table** surface | Same as `/query`, per table |
 | `/prompt/values/<action>` | The input values of a prompt-enabled row action's Modal (only on surfaces with `prompt_fields` actions) | Initial render (empty); pre-filled on `prompt`; cleared after a successful prompt `invoke` |
+| `/context/<name>` | One surface context's selection state (`{"search", "value", "label"}`) — only on surfaces with `context` entities | Initial render; every `context_select`/`context_clear` (the whole `/context` map is rewritten) |
+| `/options/<context>` | A picker context's option list (same `{"label","value"}` shape; shares the `/options` namespace) | Initial render; `context_search`; cascades that re-derive a dependent context's options |
+| `/detail/<context>` | The selected record of a context rendered by `:detail` components (`{}` while unselected) | Initial render; every selection change of that context |
 
 Everything under these paths uses camelCase string keys, matching the rest of
 the wire format.
@@ -322,6 +325,7 @@ contract):
 {
   "search": "",
   "filters": { "status": "", "category": "" },
+  "ranges": { "inserted_at": { "from": "", "to": "" } },
   "preset": "pending",
   "sort": { "field": "inserted_at", "dir": "desc" },
   "page": 1,
@@ -335,6 +339,11 @@ Conventions:
 
 - `filters` always contains **every declared filter name**; an empty string
   means "inactive", so client bindings at `/query/filters/<name>` are stable.
+- `ranges` is present **only when the query declares `range_filters`**: one
+  `{"from": "", "to": ""}` entry per declared field (both `""` = inactive;
+  bounds are inclusive and validated server-side — see
+  [Queries and Pagination](queries-and-pagination.md)). Client bindings at
+  `/query/ranges/<field>/from|to` are stable.
 - `preset` is present **only when the query declares presets** (see
   [Queries and Pagination](queries-and-pagination.md)): the selected
   preset's name, or `""` when none is active. The client only ever sends a
@@ -370,6 +379,27 @@ shared across rows (only one Modal is open at a time). Conventions:
   `"values": {"path": "/prompt/values/<action>"}`; a success clears the
   action's values map back to `{}`, a validation failure writes
   `/errors/<field>` (rendered inside the Modal).
+
+## `/context/<name>` and `/detail/<context>` — surface contexts
+
+Present **only** on surfaces declaring `context` entities (see
+[Contexts and Details](contexts-and-details.md)). `/context` carries one
+`{"search": "", "value": "", "label": ""}` entry per declared context —
+`search` is the picker's search-input binding, `value`/`label` the current
+selection (`""` = unselected). The server rewrites the **whole `/context`
+map** on every selection change (`context_select` / `context_clear`),
+including cascade effects on dependent contexts.
+
+`/detail/<context>` carries the serialized selected record for contexts
+rendered by `:detail` components — the same JSON-safe map shape as a
+`/records` row, `{}` while the context is unselected.
+
+Every action context on a context-enabled surface additively carries
+`"contexts": {"path": "/context"}`, so server reads (refreshes, `query`,
+cascades) run under the client's current selections. Carried context values
+are **scoping input, not authority**: the changed context's value always
+round-trips through an authorized read, and scoped table reads run with the
+surface's actor/tenant/authorize? as usual.
 
 ## Per-row visibility: `"_actions"` and `"_visible_<action>"`
 

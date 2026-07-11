@@ -82,7 +82,8 @@ DSL:
 
 AshA2ui ships LLM usage rules (`usage-rules.md` plus `usage-rules/actions.md`,
 `usage-rules/liveview.md`, `usage-rules/queries.md`,
-`usage-rules/relationships.md`, and `usage-rules/layout.md` sub-rules)
+`usage-rules/relationships.md`, `usage-rules/layout.md`, and
+`usage-rules/contexts.md` sub-rules)
 compatible with
 [`usage_rules`](https://hexdocs.pm/usage_rules). To sync them into your
 project's AGENTS.md, add `{:usage_rules, "~> 1.1", only: [:dev]}` and
@@ -531,7 +532,8 @@ Shipped beyond the v0 core:
   [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
 - ✅ **`usage_rules` support** — the package ships `usage-rules.md` plus
   `usage-rules/actions.md`, `usage-rules/liveview.md`, `usage-rules/queries.md`,
-  and `usage-rules/relationships.md` sub-rules, syncable into a consumer's
+  `usage-rules/relationships.md`, and `usage-rules/contexts.md` sub-rules,
+  syncable into a consumer's
   AGENTS.md via [`mix usage_rules.sync`](https://hexdocs.pm/usage_rules) (see
   [Agent usage rules](#agent-usage-rules)).
 - ✅ **Relationship rendering** — `belongs_to` form selects inferred from
@@ -606,15 +608,30 @@ Shipped beyond the v0 core:
   `"nested_add"`/`"nested_remove"` actions; nested validation errors map to
   `/errors/<argument>/<index>/<field>` (see
   [Relationship Rendering](documentation/topics/relationships.md)).
+- ✅ **Surface contexts + master/detail (`context` entities, `:detail`
+  components)** — named, server-validated record selections that scope the
+  rest of the surface: searchable pickers over any resource, **dependent
+  option sources** (`depends_on` + `depends_on_path`, with cascade clearing
+  and `auto_select_single`), context-scoped tables (`context_filter`,
+  `require_context`), row-driven selection (`select_context`) feeding
+  `:detail` components at `/detail/<context>`; driven by the
+  `"context_search"`/`"context_select"`/`"context_clear"` client actions
+  with every selection validated through an authorized read (see
+  [Contexts and Details](documentation/topics/contexts-and-details.md)).
+- ✅ **Client-driven range filters (`range_filters`)** — inclusive from/to
+  bounds on public attributes (`range_filters [:inserted_at]`), cast
+  server-side with a date→day-bounds convenience on datetime fields, bound
+  at `/query/ranges/<field>/from|to` (see
+  [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
 
 Documented as roadmap (not built):
 
 - **A2UI v1.0 spec support** once it leaves RC — the payload builder is
   isolated behind a versioned encoder (`AshA2ui.Encoder.V0_9_1`) so a new spec
   version is a new encoder module.
-- **Richer client-driven `query` filters** — ranged/custom filter shapes
-  beyond the shipped equality filters and named presets, and multiple
-  queries per table.
+- **Richer client-driven `query` filters** — custom filter shapes beyond
+  the shipped equality filters, range filters, and named presets, and
+  multiple queries per table.
 - **Nested-form extensions** — `many_to_many` join-resource fields (editing
   join-row attributes like a membership's role), recursive nesting, and
   in-picker pagination; the shipped v1 covers pick-and-attach and inline
@@ -645,6 +662,7 @@ Documented as roadmap (not built):
 - [Multi-Section Surfaces](documentation/topics/multi-section-surfaces.md)
 - [Layout](documentation/topics/layout.md) — form field groups and
   card-style table rows
+- [Contexts and Details](documentation/topics/contexts-and-details.md)
 - [Data Model Conventions](documentation/topics/data-model-conventions.md)
 - [DSL reference](documentation/dsls/DSL-AshA2ui.md)
 

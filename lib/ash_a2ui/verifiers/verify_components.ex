@@ -3,9 +3,10 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
   Verifies at compile time that the surface's component set is sound:
 
     * component keys (`as` name, or the kind for unnamed components) are
-      unique — in particular, at most one `:table` may omit its name,
+      unique — in particular, at most one `:table` and one `:detail` may
+      omit their names,
     * at most one `:form` component is declared,
-    * only `:table` components may carry an `as` name,
+    * only `:table` and `:detail` components may carry an `as` name,
 
   and that `action` entities (per-action refresh metadata) are sound:
 
@@ -42,7 +43,7 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
   end
 
   defp verify_named_tables_only(components, module) do
-    case Enum.find(components, &(&1.name != :table and not is_nil(&1.as))) do
+    case Enum.find(components, &(&1.name not in [:table, :detail] and not is_nil(&1.as))) do
       nil ->
         :ok
 
@@ -53,7 +54,7 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
            path: [:a2ui, :component, component.name],
            message:
              "component #{inspect(component.name)} cannot be named #{inspect(component.as)}: " <>
-               "only :table components may carry a distinguishing name"
+               "only :table and :detail components may carry a distinguishing name"
          )}
     end
   end

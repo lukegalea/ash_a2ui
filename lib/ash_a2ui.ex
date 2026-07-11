@@ -105,6 +105,134 @@ defmodule AshA2ui do
     ]
   }
 
+  @context %Spark.Dsl.Entity{
+    name: :context,
+    describe: """
+    A named, surface-level record selection ("pick a user") whose selected
+    record scopes other sections: tables reference it via `context_filter`,
+    dependent contexts via `depends_on`, and `:detail` components render the
+    selected record. Selection state lives at the reserved `/context/<name>`
+    data-model path, option lists at `/options/<name>`, and the client
+    interacts through the `"context_search"` / `"context_select"` /
+    `"context_clear"` actions — the client only ever sends a record id, and
+    every selection round-trips through an authorized read (dependency
+    filters included).
+    """,
+    examples: [
+      """
+      context :user do
+        resource MyApp.Accounts.User
+        option_label :email
+        option_search [:email, :name]
+      end
+      """,
+      """
+      context :practice do
+        resource MyApp.Practices.Practice
+        option_label :name
+        depends_on :user
+        depends_on_path [:memberships, :user_id]
+        auto_select_single true
+      end
+      """
+    ],
+    target: AshA2ui.Context,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: """
+        The name of the context: the `<name>` segment of the reserved
+        `/context/<name>` and `/options/<name>` data-model paths, and how
+        `context_filter` / `depends_on` / `:detail` components reference it.
+        Must be unique across the surface's contexts, relationship-select
+        fields and nested-form arguments (they share the `/options`
+        namespace).
+        """
+      ],
+      resource: [
+        type: {:behaviour, Ash.Resource},
+        required: true,
+        doc: "The Ash resource whose records this context selects."
+      ],
+      label: [
+        type: :string,
+        doc: "Heading shown above the picker. Defaults to the humanized context name."
+      ],
+      option_label: [
+        type: :atom,
+        doc: """
+        The attribute shown as the option/selection label. Defaults like a
+        relationship select's `option_label` (first existing public attribute
+        of `[:name, :title, :label, :username, :email]`, else the primary
+        key).
+        """
+      ],
+      option_value: [
+        type: :atom,
+        doc: """
+        The attribute submitted as the selected value. Defaults to the
+        resource's primary key (required explicitly when composite).
+        """
+      ],
+      option_sort: [
+        type: :atom,
+        doc: "The attribute options are sorted by (ascending). Defaults to `option_label`."
+      ],
+      option_limit: [
+        type: :pos_integer,
+        default: 100,
+        doc: "Maximum number of options loaded (and returned per `context_search`)."
+      ],
+      option_search: [
+        type: {:list, :atom},
+        default: [],
+        doc: """
+        Public string attributes of the resource searched (case-insensitive
+        contains, OR'd) by the `"context_search"` client action. Non-empty
+        adds a search input to the emitted picker.
+        """
+      ],
+      depends_on: [
+        type: :atom,
+        doc: """
+        The context this one depends on: its options are filtered by the
+        parent's selected value (through `depends_on_path`), its options are
+        empty while the parent is unselected, and its selection is cleared
+        whenever the parent changes.
+        """
+      ],
+      depends_on_path: [
+        type: {:list, :atom},
+        doc: """
+        The relationship path on this context's resource whose terminal
+        attribute must equal the parent context's selected value, e.g.
+        `[:memberships, :user_id]` — every step but the last a public
+        relationship, the last a public attribute of the final destination
+        (to-many paths get `exists` semantics). Required with `depends_on`.
+        """
+      ],
+      auto_select_single: [
+        type: :boolean,
+        default: false,
+        doc: """
+        Automatically select this context when a parent selection leaves it
+        exactly one option (dependent contexts only).
+        """
+      ],
+      picker: [
+        type: :boolean,
+        default: true,
+        doc: """
+        Whether to emit a picker section for this context. Set `false` for
+        contexts selected only through a table's `select_context` row button
+        (master/detail) — no options are loaded or rendered.
+        """
+      ]
+    ]
+  }
+
   @preset %Spark.Dsl.Entity{
     name: :preset,
     describe: """
@@ -202,6 +330,16 @@ defmodule AshA2ui do
         type: {:list, :atom},
         default: [],
         doc: "Public attributes the client may sort by. Anything else is rejected."
+      ],
+      range_filters: [
+        type: {:list, :atom},
+        default: [],
+        doc: """
+        Public attributes (or expression-backed public calculations) of
+        orderable types (date/datetime/numeric) the client may range-filter
+        on through `/query/ranges/<field>` (`{"from", "to"}`, each optional).
+        Anything else is rejected.
+        """
       ],
       filters: [
         type: {:list, :atom},
@@ -446,9 +584,11 @@ defmodule AshA2ui do
     name: :component,
     describe: """
     A UI component of the surface. `:table` renders records from a read action;
-    `:form` renders create/update forms. A surface may declare several `:table`
-    components (sections) by giving each one a distinguishing name via the
-    optional second argument, e.g. `component :table, :new_items do ... end`.
+    `:form` renders create/update forms; `:detail` renders the record selected
+    into a `context` as a read-only field grid. A surface may declare several
+    `:table` (or `:detail`) components (sections) by giving each one a
+    distinguishing name via the optional second argument, e.g.
+    `component :table, :new_items do ... end`.
     """,
     examples: [
       """
@@ -472,17 +612,18 @@ defmodule AshA2ui do
     singleton_entity_keys: [:row_layout],
     schema: [
       name: [
-        type: {:one_of, [:table, :form]},
+        type: {:one_of, [:table, :form, :detail]},
         required: true,
-        doc: "The kind of component. One of `:table` or `:form`."
+        doc: "The kind of component. One of `:table`, `:form` or `:detail`."
       ],
       as: [
         type: :atom,
         doc: """
         The distinguishing name of this component on surfaces with several
-        `:table` components (e.g. `component :table, :new_items`). Optional —
-        a table without one is named `:table`. Names must be unique across
-        the surface's components; `:form` components cannot be named.
+        `:table` (or `:detail`) components (e.g.
+        `component :table, :new_items`). Optional — an unnamed component is
+        named by its kind. Names must be unique across the surface's
+        components; `:form` components cannot be named.
         """
       ],
       fields: [
@@ -511,6 +652,43 @@ defmodule AshA2ui do
         type: :atom,
         doc:
           "Name of a `query` entity providing server-enforced search/sort/filter/pagination (tables)."
+      ],
+      context_filter: [
+        type: :keyword_list,
+        default: [],
+        doc: """
+        Context scoping for a `:table`: keys are public attributes of the
+        table's resource, values are declared context names
+        (`context_filter user_id: :user`). Each context with a selected value
+        ANDs `attribute == selected value` onto the table's reads; unselected
+        contexts contribute nothing.
+        """
+      ],
+      require_context: [
+        type: {:list, :atom},
+        default: [],
+        doc: """
+        Context names (a subset of this table's `context_filter` contexts) of
+        which **at least one** must be selected before the table reads —
+        otherwise it renders no records (and no read is executed).
+        """
+      ],
+      select_context: [
+        type: :atom,
+        doc: """
+        A declared context (over the same resource as this table) the table's
+        per-row Select button selects into — the master/detail pattern: the
+        button sends `"context_select"` with the row's record id instead of
+        `"select_row"`.
+        """
+      ],
+      context: [
+        type: :atom,
+        doc: """
+        The declared context a `:detail` component renders: its selected
+        record's fields are written to `/detail/<context>` and displayed as a
+        read-only label/value grid. Required on `:detail` components.
+        """
       ]
     ]
   }
@@ -631,6 +809,7 @@ defmodule AshA2ui do
       ]
     ],
     entities: [
+      @context,
       @query,
       @component,
       @field,
@@ -648,6 +827,7 @@ defmodule AshA2ui do
   @verifiers [
     AshA2ui.Verifiers.VerifyComponents,
     AshA2ui.Verifiers.VerifyLayouts,
+    AshA2ui.Verifiers.VerifyContexts,
     AshA2ui.Verifiers.VerifyFields,
     AshA2ui.Verifiers.VerifyActions,
     AshA2ui.Verifiers.VerifyQueries,

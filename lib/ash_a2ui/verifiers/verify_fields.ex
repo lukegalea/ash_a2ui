@@ -64,6 +64,11 @@ defmodule AshA2ui.Verifiers.VerifyFields do
     end)
   end
 
+  # :detail components render their CONTEXT's resource, not the surface's —
+  # AshA2ui.Verifiers.VerifyContexts validates their fields instead.
+  defp verify_component(%AshA2ui.Component{name: :detail}, _target, _module, _known, _exempt),
+    do: :ok
+
   defp verify_component(component, target, module, known, exempt) do
     with :ok <- verify_known_fields(component, module, known, exempt) do
       verify_form_fields(component, target, module, exempt)

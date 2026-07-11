@@ -110,6 +110,38 @@ first. Unknown preset names are rejected before Ash is called, like every
 other allowlist violation. Presets are UX scoping, not a security boundary —
 authorization stays in Ash policies.
 
+## Client-driven range filters
+
+Presets cover *fixed* composite predicates; **`range_filters`** covers the
+one client-driven predicate shape that equality filters can't: bounding a
+field between two client-supplied values ("visits since July 1st").
+
+```elixir
+query :default do
+  range_filters [:scheduled_for]   # public attributes only
+end
+```
+
+- The `/query` state gains a `"ranges"` key (only on queries declaring
+  `range_filters`): one `{"from": "", "to": ""}` entry per declared field.
+  Both `""` means inactive; a non-empty bound is ANDed onto the read as an
+  **inclusive** `>=` / `<=` condition.
+- Bounds travel as strings and are cast to the attribute's type before any
+  read — a value that doesn't cast is rejected via `/ui/status`, exactly
+  like an uncastable filter value. Fields not in `range_filters` are
+  rejected too.
+- **Date convenience on datetime fields:** a plain `YYYY-MM-DD` bound on a
+  datetime-typed attribute expands to the day's edge — `from` becomes
+  `00:00:00Z`, `to` becomes `23:59:59.999999Z` — so "from 2026-07-01 to
+  2026-07-01" covers the whole day. The state echoes the client's raw
+  strings back, not the expanded values.
+- The encoder emits two `TextField`s per declared field
+  (`query_range_<field>_from` / `query_range_<field>_to`, bound to
+  `/query/ranges/<field>/from|to`), applied by the same **Apply** button.
+- Only plain public attributes may appear in `range_filters` (compile-time
+  verified); calculations/aggregates and relationship-sourced columns are
+  rejected.
+
 ## What gets emitted
 
 When the table declares a query, the encoder adds to the component tree:
@@ -122,6 +154,8 @@ When the table declares a query, the encoder adds to the component tree:
   `"All"` (empty value) option first — options come from the attribute's (or
   calculation's) `one_of` constraints or the attribute's `Ash.Type.Enum`
   module's `values/0` (or True/False for booleans),
+- a from/to `TextField` pair per `range_filters` field bound to
+  `/query/ranges/<field>/from|to` (see above),
 - an **Apply** button and **Previous/Next** pagination buttons.
 
 All of them dispatch the `"query"` client action. The wire contract:
@@ -171,6 +205,8 @@ surfaces keep the plain `/query` paths and need no `"component"`.
 - a filter name not in `filters` → rejected,
 - a filter value that doesn't cast to the field's type/constraints →
   rejected,
+- a range on a field not in `range_filters`, or a bound that doesn't cast →
+  rejected,
 - a preset name not declared as a `preset` → rejected,
 - a search on a query with no `search_fields` → rejected,
 - requested `pageSize` is clamped to `1..max_page_size`, `page` to ≥ 1.
@@ -218,8 +254,9 @@ they pass `:query_state` themselves.
 ## Limitations (v0)
 
 - Filters are equality-only (`filters [:status]` = "status equals the
-  submitted value"). Ranged/custom client-driven filters are deliberately
-  not supported — declare a named preset (or a preset `read_action`) for
+  submitted value"); client-driven bounds go through `range_filters`
+  (above). Other custom client-driven predicates are deliberately not
+  supported — declare a named preset (or a preset `read_action`) for
   composite server-side predicates instead.
 - One query per table (multi-table surfaces may attach one query to each
   table); queries are per-surface, not shared.

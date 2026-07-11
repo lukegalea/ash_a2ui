@@ -64,7 +64,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     it pushed (from the mount payload and every action follow-up) and passes
     it to the refresh as `:query_state`, so a PubSub refresh re-runs the
     user's current search/filters/sort/page instead of resetting the surface
-    to the query defaults.
+    to the query defaults. Surfaces with `context` entities get the same
+    treatment for `/context` (passed as `:context_state`), so refreshes keep
+    the user's selections, dependent option lists, details, and table
+    scoping.
 
     Override `handle_info/2` if your LiveView receives unrelated messages.
 
@@ -158,7 +161,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           ash_a2ui_actor: actor,
           ash_a2ui_tenant: tenant,
           ash_a2ui_refresh_scheduled?: false,
-          ash_a2ui_query_state: nil
+          ash_a2ui_query_state: nil,
+          ash_a2ui_context_state: nil
         )
 
       socket =
@@ -168,6 +172,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
           socket
           |> track_query_state(messages)
+          |> track_context_state(messages)
           |> push_messages(messages)
         else
           socket
@@ -194,6 +199,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       socket =
         socket
         |> track_query_state(messages)
+        |> track_context_state(messages)
         |> push_messages(messages)
 
       {:noreply, socket}
@@ -205,7 +211,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     def handle_notification(config, @refresh_message, socket) do
       socket = assign(socket, :ash_a2ui_refresh_scheduled?, false)
       data_model = config.data_model_fn.(config.ui, refresh_opts(socket))
-      socket = track_query_state(socket, [data_model])
+
+      socket =
+        socket
+        |> track_query_state([data_model])
+        |> track_context_state([data_model])
+
       {:noreply, push_messages(socket, [data_model])}
     end
 
@@ -268,14 +279,41 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       assign(socket, :ash_a2ui_query_state, state)
     end
 
+    # Same for the last /context state (surface contexts): a context change
+    # rewrites /context wholesale; the full data model carries it under
+    # "context".
+    defp track_context_state(socket, messages) do
+      state =
+        Enum.reduce(messages, socket.assigns.ash_a2ui_context_state, fn
+          %{"updateDataModel" => %{"path" => "/context", "value" => value}}, _acc
+          when is_map(value) ->
+            value
+
+          %{"updateDataModel" => %{"path" => "/", "value" => %{"context" => value}}}, _acc
+          when is_map(value) ->
+            value
+
+          _message, acc ->
+            acc
+        end)
+
+      assign(socket, :ash_a2ui_context_state, state)
+    end
+
     defp call_opts(socket) do
       [actor: socket.assigns.ash_a2ui_actor, tenant: socket.assigns.ash_a2ui_tenant]
     end
 
     defp refresh_opts(socket) do
-      case socket.assigns.ash_a2ui_query_state do
-        nil -> call_opts(socket)
-        state -> Keyword.put(call_opts(socket), :query_state, state)
+      opts =
+        case socket.assigns.ash_a2ui_query_state do
+          nil -> call_opts(socket)
+          state -> Keyword.put(call_opts(socket), :query_state, state)
+        end
+
+      case socket.assigns.ash_a2ui_context_state do
+        nil -> opts
+        state -> Keyword.put(opts, :context_state, state)
       end
     end
 

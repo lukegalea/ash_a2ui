@@ -23,5 +23,9 @@ defmodule AshA2ui.Test.Domain do
     resource AshA2ui.Test.TicketNote
     resource AshA2ui.Test.Tag
     resource AshA2ui.Test.Promotion
+    resource AshA2ui.Test.Owner
+    resource AshA2ui.Test.Clinic
+    resource AshA2ui.Test.ClinicMembership
+    resource AshA2ui.Test.Appointment
   end
 end

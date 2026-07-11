@@ -141,6 +141,24 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           {:ok, Fixtures.action_ok_messages()}
       end
     end
+
+    # A context_select follow-up: rewrites /context wholesale (the shape the
+    # real ActionHandler emits), so the LiveRenderer can track it.
+    def context_action(ui, envelope, opts) do
+      Fixtures.notify({:action_fn, ui, envelope, opts})
+
+      {:ok,
+       [
+         %{
+           "version" => "v0.9.1",
+           "updateDataModel" => %{
+             "surfaceId" => Fixtures.surface_id(),
+             "path" => "/context",
+             "value" => %{"owner" => %{"search" => "", "value" => "o-1", "label" => "Ada"}}
+           }
+         }
+       ]}
+    end
   end
 
   defmodule AshA2ui.Test.StubbedLive do
@@ -206,5 +224,22 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     use AshA2ui.LiveRenderer,
       ui: AshA2ui.Test.ReviewItem,
       pubsub: [module: AshA2ui.Test.PubSub, topics: ["ash_a2ui_test:review"]]
+  end
+
+  defmodule AshA2ui.Test.ContextPubsubLive do
+    @moduledoc false
+
+    # Stubbed transport proving PubSub refreshes re-run the client's last
+    # /context selections (passed as :context_state) instead of resetting
+    # the surface to the unselected state. Stubs because the private ETS
+    # fixtures aren't shared across the test and LiveView processes.
+    alias AshA2ui.Test.LiveRendererStubs, as: Stubs
+
+    use AshA2ui.LiveRenderer,
+      ui: AshA2ui.Test.MinimalUI,
+      pubsub: [module: AshA2ui.Test.PubSub, topics: ["ash_a2ui_test:appointments"]],
+      surface_fn: &Stubs.surface/2,
+      data_model_fn: &Stubs.data_model/2,
+      action_fn: &Stubs.context_action/3
   end
 end

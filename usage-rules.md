@@ -20,6 +20,9 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
   `option_*` defaults, `/options/<field>`) and `source` table columns.
 - `ash_a2ui:layout` — `group` form sections (labeled N-column grids) and
   `row_layout` card-style table rows (title + badge header, metadata grid).
+- `ash_a2ui:contexts` — surface `context` entities (server-validated
+  selections, dependent options, `context_filter`/`require_context`/
+  `select_context`) and `:detail` components.
 
 ## When to reach for AshA2ui (preferred ladder)
 
@@ -75,13 +78,19 @@ end
   generic `render_a2ui` action returning the surface's messages — set it to
   `false` if you don't want that action on the resource; it is ignored in
   standalone modules).
-- Component names are exactly `:table` and `:form` — there are no other
-  component kinds in v0. Multiple `:table` components are allowed when each
-  extra one carries a distinguishing name
-  (`component :table, :new_items do ... end`); that turns the surface
-  multi-table with a scoped data model (`/records/<name>`,
-  `/query/<name>`) — see the multi-section-surfaces topic before designing
-  one. At most one `:form` per surface.
+- Component names are exactly `:table`, `:form`, and `:detail`. Multiple
+  `:table` components are allowed when each extra one carries a
+  distinguishing name (`component :table, :new_items do ... end`); that
+  turns the surface multi-table with a scoped data model
+  (`/records/<name>`, `/query/<name>`) — see the multi-section-surfaces
+  topic before designing one. At most one `:form` per surface. `:detail`
+  components render a `context`'s selected record — see
+  `ash_a2ui:contexts`.
+- Selection-driven screens (pick a record → scope everything else) use
+  `context` entities: server-validated pickers, dependent option lists
+  (`depends_on`), context-scoped tables (`context_filter` /
+  `require_context`), and master/detail (`select_context` + `:detail`).
+  Rules in `ash_a2ui:contexts`.
 - Table fields may name public **calculations and aggregates** — they load
   (`Ash.Query.load`) and serialize like attributes. They are display-only:
   form fields reject them at compile time (not writable), and only
@@ -145,8 +154,10 @@ end
   mapping. Full contract in `ash_a2ui:actions`.
 - Action names are exactly `"submit_form"`, `"select_row"`, `"invoke"`,
   `"prompt"`, `"query"`, `"option_search"`, `"option_select"`,
-  `"nested_add"`, and `"nested_remove"` (the last four only on surfaces with
-  searchable selects / nested forms — see `ash_a2ui:relationships`). Don't
+  `"nested_add"`, `"nested_remove"` (those four only on surfaces with
+  searchable selects / nested forms — see `ash_a2ui:relationships`), and
+  `"context_search"`, `"context_select"`, `"context_clear"` (only on
+  surfaces with `context` entities — see `ash_a2ui:contexts`). Don't
   invent new `action.name` values; add a proper Ash action and expose it
   via `row_actions` instead.
 - Row actions that need user input declare `prompt_fields` on their
@@ -168,7 +179,9 @@ end
   actions (raw map + display text, cleared on every subsequent action),
   `/query` for query state (multi-table surfaces scope records and query
   state per table: `/records/<component_name>`, `/query/<component_name>`),
-  `/prompt/values/<action>` for prompt Modal state
+  `/prompt/values/<action>` for prompt Modal state,
+  `/context/<name>` + `/detail/<context>` for surface-context selections
+  and their detail records
   — never through ad-hoc paths or custom message types. Renderers depend on
   these paths.
 

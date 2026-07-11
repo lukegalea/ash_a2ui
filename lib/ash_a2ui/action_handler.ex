@@ -89,6 +89,24 @@ defmodule AshA2ui.ActionHandler do
       Ash is called. On success returns `updateDataModel` messages for
       `/records` and `/query`.
 
+    * `"context_search"` / `"context_select"` / `"context_clear"` — the
+      surface-context actions (see `AshA2ui.ContextRunner` and the
+      `context` DSL entity). Context
+      `%{"context" => name, "search" => str | "value" => id, "contexts" => <the /context map>}`.
+      `context_search` re-derives `/options/<name>` for a searchable
+      context (dependency-filtered by the carried parent selections);
+      `context_select` validates the picked value through an authorized
+      read, cascades (dependents clear / re-derive / auto-select), and
+      re-emits `/context`, the changed `/options/<name>` lists, the changed
+      `/detail/<context>` records, and every table scoped to a changed
+      context; `context_clear` cascades the same way from an unselection.
+
+  On context-enabled surfaces *every* action's context may carry the
+  current `/context` map under `"contexts"` — success refreshes and
+  `"query"` reads then run under that scope: tables with an unmet
+  `require_context` render no records (no read executes), and
+  `context_filter` entries become equality filters ANDed onto the read.
+
   Unknown action names and malformed messages return
   `{:error, [updateDataModel]}` with an explanation at `/ui/status`.
 
@@ -121,6 +139,7 @@ defmodule AshA2ui.ActionHandler do
 
   alias Ash.Resource.Info, as: ResourceInfo
   alias AshA2ui.Conditions
+  alias AshA2ui.ContextRunner
   alias AshA2ui.QueryRunner
   alias AshA2ui.ResolvedView
 
@@ -151,7 +170,13 @@ defmodule AshA2ui.ActionHandler do
 
     case parse(action_message) do
       {:ok, name, context} ->
-        env = %{view: view, ash_opts: ash_opts, refresh: refresh_params(view, context)}
+        env = %{
+          view: view,
+          ash_opts: ash_opts,
+          refresh: refresh_params(view, context),
+          selected: AshA2ui.ContextRunner.selected(view, Map.get(context, "contexts"))
+        }
+
         dispatch(name, context, env)
 
       :error ->
@@ -283,20 +308,52 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  defp dispatch("query", context, %{view: view, ash_opts: ash_opts}) do
+  defp dispatch("query", context, %{view: view, ash_opts: ash_opts, selected: selected}) do
     with {:table, {:ok, table}} <- {:table, query_table(view, context)},
-         {:parse, {:ok, params}} <- {:parse, QueryRunner.parse(table, context)},
-         {:run, {:ok, records, query_state}} <-
-           {:run, QueryRunner.run(table, params, ash_opts)} do
-      {:ok,
-       [
-         update_data_model(view, table.records_path, rows(view, table, records)),
-         update_data_model(view, table.query_path, query_state)
-       ]}
+         {:parse, {:ok, params}} <- {:parse, QueryRunner.parse(table, context)} do
+      case ContextRunner.table_scope(view, table, selected) do
+        :require_unmet -> {:ok, require_unmet_messages(view, table, params)}
+        {:ok, scope} -> run_scoped_query(view, table, params, scope, ash_opts)
+      end
     else
       {:table, {:error, reason}} -> {:error, [status(view, reason)]}
       {:parse, {:error, reason}} -> {:error, [status(view, reason)]}
-      {:run, {:error, error}} -> {:error, error_messages(view, error)}
+    end
+  end
+
+  defp dispatch("context_search", context, %{view: view, ash_opts: ash_opts, selected: selected}) do
+    search = Map.get(context, "search") || ""
+
+    with {:ok, ctx} <- resolve_context(view, "context_search", context),
+         :ok <- validate_context_search(view, ctx, search) do
+      case ContextRunner.load_options(view, ctx, selected, search, ash_opts) do
+        {:ok, options} ->
+          {:ok, [update_data_model(view, "/options/#{ctx.name}", options)]}
+
+        {:error, error} ->
+          {:error, error_messages(view, error)}
+      end
+    end
+  end
+
+  defp dispatch("context_select", context, %{view: view} = env) do
+    value = unwrap_picked(Map.get(context, "value"))
+
+    with {:ok, ctx} <- resolve_context(view, "context_select", context) do
+      if is_binary(value) and value != "" do
+        select_context(ctx, value, env)
+      else
+        {:error, [status(view, ~s(Malformed context_select action: context is missing "value".))]}
+      end
+    end
+  end
+
+  defp dispatch("context_clear", context, %{view: view} = env) do
+    with {:ok, ctx} <- resolve_context(view, "context_clear", context) do
+      case ContextRunner.clear(view, ctx, env.selected, env.ash_opts) do
+        {:ok, change} -> context_change_messages(change, env)
+        {:error, error} -> {:error, error_messages(view, error)}
+      end
     end
   end
 
@@ -605,6 +662,154 @@ defmodule AshA2ui.ActionHandler do
         {:error,
          ~s(Malformed query action: multi-table surfaces require "component" in the context.)}
     end
+  end
+
+  # --- context follow-ups ------------------------------------------------------
+
+  defp surface_context(view, name) do
+    Enum.find_value(view.contexts, fn {context_name, context} ->
+      to_string(context_name) == name && context
+    end)
+  end
+
+  # Shared entry validation of the three context actions: a string "context"
+  # key naming a declared context.
+  defp resolve_context(view, action, context) do
+    case Map.get(context, "context") do
+      name when is_binary(name) ->
+        case surface_context(view, name) do
+          nil ->
+            {:error, [status(view, "Context #{inspect(name)} is not declared on this surface.")]}
+
+          ctx ->
+            {:ok, ctx}
+        end
+
+      _missing ->
+        {:error, [status(view, ~s(Malformed #{action} action: context is missing "context".))]}
+    end
+  end
+
+  defp validate_context_search(view, ctx, search) do
+    cond do
+      ctx.search_fields == [] ->
+        {:error,
+         [
+           status(
+             view,
+             "Context #{inspect(to_string(ctx.name))} is not searchable: it declares no " <>
+               "option_search."
+           )
+         ]}
+
+      not is_binary(search) ->
+        {:error, [status(view, ~s(Malformed context_search action: "search" must be a string.))]}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp select_context(ctx, value, %{view: view} = env) do
+    case ContextRunner.select(view, ctx, value, env.selected, env.ash_opts) do
+      {:ok, change} -> context_change_messages(change, env)
+      :not_found -> {:error, [status(view, "Option #{inspect(value)} was not found.")]}
+      {:error, error} -> {:error, error_messages(view, error)}
+    end
+  end
+
+  # require_context unmet: an honest empty result without touching Ash.
+  defp require_unmet_messages(view, table, params) do
+    [
+      update_data_model(view, table.records_path, []),
+      update_data_model(view, table.query_path, QueryRunner.state(table.query, params, 0, false))
+    ]
+  end
+
+  defp run_scoped_query(view, table, params, scope, ash_opts) do
+    case QueryRunner.run(table, params, ash_opts, scope) do
+      {:ok, records, query_state} ->
+        {:ok,
+         [
+           update_data_model(view, table.records_path, rows(view, table, records)),
+           update_data_model(view, table.query_path, query_state)
+         ]}
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  # A selection change rewrites /context wholesale, re-emits /options/<name>
+  # for every dependent picker context the cascade re-derived,
+  # re-fetches /detail/<context> for changed contexts that detail components
+  # render (%{} when the context ended up unselected), and refreshes every
+  # table whose context_filter references a changed context (through the
+  # carried-or-default query params, like any other refresh).
+  defp context_change_messages(change, %{view: view} = env) do
+    with {:ok, detail_messages} <- context_detail_messages(view, change, env.ash_opts),
+         {:ok, table_messages} <- context_table_messages(view, change, env) do
+      option_messages =
+        for {name, options} <- change.options do
+          update_data_model(view, "/options/#{name}", options)
+        end
+
+      {:ok,
+       [update_data_model(view, "/context", ContextRunner.state(view, change.selected))] ++
+         option_messages ++ detail_messages ++ table_messages}
+    else
+      {:error, error} -> {:error, error_messages(view, error)}
+    end
+  end
+
+  # One /detail/<context> write per changed context that has detail
+  # components (details of the same context share the path — loads and
+  # fields are unioned).
+  defp context_detail_messages(view, change, ash_opts) do
+    view.details
+    |> Enum.filter(&(&1.context in change.changed))
+    |> Enum.group_by(& &1.context)
+    |> Enum.reduce_while({:ok, []}, fn {context_name, details}, {:ok, acc} ->
+      case context_detail_value(view, context_name, details, change.selected, ash_opts) do
+        {:ok, value} ->
+          {:cont, {:ok, acc ++ [update_data_model(view, "/detail/#{context_name}", value)]}}
+
+        {:error, error} ->
+          {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp context_detail_value(view, context_name, details, selected, ash_opts) do
+    case Map.get(selected, context_name) do
+      nil ->
+        {:ok, %{}}
+
+      %{value: value} ->
+        context = view.contexts[context_name]
+        loads = details |> Enum.flat_map(& &1.loads) |> Enum.uniq()
+        fields = details |> Enum.flat_map(& &1.fields) |> Enum.uniq()
+
+        case ContextRunner.fetch_selected(view, context, value, selected, ash_opts, loads) do
+          {:ok, record} -> {:ok, record_values(view, record, fields)}
+          # The selection was just validated; a raced-away record renders empty.
+          :not_found -> {:ok, %{}}
+          {:error, error} -> {:error, error}
+        end
+    end
+  end
+
+  defp context_table_messages(view, change, env) do
+    view.tables
+    |> Enum.filter(fn table ->
+      Enum.any?(table.context_filter, fn {_attribute, name} -> name in change.changed end)
+    end)
+    |> Enum.reduce_while({:ok, []}, fn table, {:ok, acc} ->
+      case table_refresh(view, table, env.refresh[table.name], env.ash_opts, change.selected) do
+        {:ok, messages} -> {:cont, {:ok, acc ++ messages}}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
   end
 
   # --- submit_form -----------------------------------------------------------
@@ -1015,7 +1220,7 @@ defmodule AshA2ui.ActionHandler do
     view
     |> refresh_targets(env[:invoked])
     |> Enum.reduce_while({:ok, []}, fn table, {:ok, acc} ->
-      case table_refresh(view, table, refresh[table.name], ash_opts) do
+      case table_refresh(view, table, refresh[table.name], ash_opts, env.selected) do
         {:ok, messages} -> {:cont, {:ok, acc ++ messages}}
         {:error, error} -> {:halt, {:error, error}}
       end
@@ -1029,8 +1234,32 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  defp table_refresh(view, %{query: nil} = table, _params, ash_opts) do
-    case read_table(table, ash_opts) do
+  # Every table refresh runs under the current context scope: tables whose
+  # require_context is unmet render no records (no read executes), scoped
+  # tables get their context filters ANDed onto the read.
+  defp table_refresh(view, table, params, ash_opts, selected) do
+    case ContextRunner.table_scope(view, table, selected) do
+      :require_unmet -> {:ok, empty_table_messages(view, table, params)}
+      {:ok, scope} -> scoped_table_refresh(view, table, params, ash_opts, scope)
+    end
+  end
+
+  defp empty_table_messages(view, %{query: nil} = table, _params) do
+    [update_data_model(view, table.records_path, [])]
+  end
+
+  defp empty_table_messages(view, table, params) do
+    state =
+      QueryRunner.state(table.query, params || QueryRunner.default_params(table.query), 0, false)
+
+    [
+      update_data_model(view, table.records_path, []),
+      update_data_model(view, table.query_path, state)
+    ]
+  end
+
+  defp scoped_table_refresh(view, %{query: nil} = table, _params, ash_opts, scope) do
+    case read_table(table, ash_opts, scope) do
       {:ok, records} ->
         {:ok, [update_data_model(view, table.records_path, rows(view, table, records))]}
 
@@ -1039,8 +1268,10 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  defp table_refresh(view, table, params, ash_opts) do
-    case QueryRunner.run(table, params || QueryRunner.default_params(table.query), ash_opts) do
+  defp scoped_table_refresh(view, table, params, ash_opts, scope) do
+    params = params || QueryRunner.default_params(table.query)
+
+    case QueryRunner.run(table, params, ash_opts, scope) do
       {:ok, records, query_state} ->
         {:ok,
          [
@@ -1089,13 +1320,14 @@ defmodule AshA2ui.ActionHandler do
 
   # --- Ash invocation helpers ------------------------------------------------
 
-  defp read_table(table, ash_opts) do
+  defp read_table(table, ash_opts, scope) do
     table.resource
     |> Ash.Query.for_read(
       table.read_action || primary_action(table.resource, :read),
       %{},
       ash_opts
     )
+    |> ContextRunner.apply_scope(scope)
     |> Ash.Query.load(table.loads)
     |> Ash.read()
   end

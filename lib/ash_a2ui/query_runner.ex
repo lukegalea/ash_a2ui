@@ -18,6 +18,8 @@ defmodule AshA2ui.QueryRunner do
       %{
         "search" => "",
         "filters" => %{"status" => "", "category" => ""},   # every declared filter, "" = inactive
+        "ranges" => %{"inserted_at" => %{"from" => "", "to" => ""}},
+                                                            # only when the query declares range_filters
         "preset" => "pending",                              # only when the query declares presets
         "sort" => %{"field" => "name", "dir" => "asc"},     # or nil when unsorted
         "page" => 1,
@@ -25,6 +27,14 @@ defmodule AshA2ui.QueryRunner do
         "totalCount" => 42,                                 # or nil when the data layer can't count
         "hasMore" => true
       }
+
+  ## Range filters
+
+  When the query declares `range_filters`, the client may bound those fields
+  via `"ranges"`: `%{"<field>" => %{"from" => _, "to" => _}}` — inclusive
+  bounds cast to the attribute's type, `""` = unbounded. Datetime-typed
+  fields also accept plain date strings (the native date input format),
+  expanding to the day's start (from) / end (to) in UTC.
 
   ## Search fields
 
@@ -62,10 +72,16 @@ defmodule AshA2ui.QueryRunner do
   alias Ash.Resource.Info, as: ResourceInfo
   alias AshA2ui.ResolvedView
 
-  @typedoc "Validated query parameters, safe to execute."
+  @typedoc """
+  Validated query parameters, safe to execute. Each `ranges` entry is a
+  fully-cast, allowlisted range filter: `from`/`to` are the cast bound
+  values (`nil` = unbounded), `from_raw`/`to_raw` the client strings echoed
+  back into the `/query` state.
+  """
   @type params :: %{
           search: String.t(),
           filters: [{atom, term}],
+          ranges: [%{field: atom, from: term, to: term, from_raw: String.t(), to_raw: String.t()}],
           preset: atom | nil,
           sort: {atom, :asc | :desc} | nil,
           page: pos_integer,
@@ -101,6 +117,7 @@ defmodule AshA2ui.QueryRunner do
     with {:ok, state} <- query_state(context),
          {:ok, search} <- parse_search(query, state),
          {:ok, filters} <- parse_filters(view.resource, query, state),
+         {:ok, ranges} <- parse_ranges(view.resource, query, state),
          {:ok, preset} <- parse_preset(query, state),
          {:ok, sort} <- parse_sort(query, state),
          {:ok, page} <- parse_page(state, context),
@@ -109,6 +126,7 @@ defmodule AshA2ui.QueryRunner do
        %{
          search: search,
          filters: filters,
+         ranges: ranges,
          preset: preset,
          sort: sort,
          page: page,
@@ -128,6 +146,7 @@ defmodule AshA2ui.QueryRunner do
     %{
       search: "",
       filters: [],
+      ranges: [],
       preset: query.default_preset,
       sort: nil,
       page: 1,
@@ -153,6 +172,27 @@ defmodule AshA2ui.QueryRunner do
       "hasMore" => has_more
     }
     |> put_preset_state(query, params)
+    |> put_ranges_state(query, params)
+  end
+
+  # The "ranges" key only exists on queries that declare range_filters — the
+  # state shape of range-less queries is unchanged. Every declared range is
+  # present ({"from" => "", "to" => ""} = inactive) so client bindings under
+  # /query/ranges/<field>/from|to are stable.
+  defp put_ranges_state(state, %{range_filters: []}, _params), do: state
+
+  defp put_ranges_state(state, query, params) do
+    active = Map.new(params.ranges, &{&1.field, &1})
+
+    ranges =
+      Map.new(query.range_filters, fn field ->
+        case Map.get(active, field) do
+          nil -> {to_string(field), %{"from" => "", "to" => ""}}
+          range -> {to_string(field), %{"from" => range.from_raw, "to" => range.to_raw}}
+        end
+      end)
+
+    Map.put(state, "ranges", ranges)
   end
 
   # The "preset" key only exists on queries that declare presets — the state
@@ -171,10 +211,14 @@ defmodule AshA2ui.QueryRunner do
 
   `ash_opts` are the usual `:domain` / `:actor` / `:tenant` / `:authorize?`
   read options.
+
+  `scope` (from `AshA2ui.ContextRunner.table_scope/3`) is a list of
+  `{attribute, value}` context filters ANDed onto the read *before*
+  search/filters/pagination — total counts and `hasMore` respect it.
   """
-  @spec run(ResolvedView.t(), params, keyword) ::
+  @spec run(ResolvedView.t(), params, keyword, [{atom, term}]) ::
           {:ok, [Ash.Resource.record()], map} | {:error, term}
-  def run(view, params, ash_opts) do
+  def run(view, params, ash_opts, scope \\ []) do
     query = view.query
     effective_sort = effective_sort(query, params)
     preset = params.preset && Enum.find(query.presets, &(&1.name == params.preset))
@@ -182,8 +226,10 @@ defmodule AshA2ui.QueryRunner do
     filtered =
       view.resource
       |> Ash.Query.for_read(read_action(view, preset), %{}, ash_opts)
+      |> AshA2ui.ContextRunner.apply_scope(scope)
       |> apply_preset(preset)
       |> apply_filters(params.filters)
+      |> apply_ranges(params.ranges)
       |> apply_search(query, params.search)
 
     paged =
@@ -275,6 +321,107 @@ defmodule AshA2ui.QueryRunner do
           {:ok, cast} -> {:ok, {field, cast}}
           :error -> {:error, "Filter #{inspect(key)} value #{inspect(value)} is invalid."}
         end
+    end
+  end
+
+  # Range filters arrive as %{"<field>" => %{"from" => _, "to" => _}} under
+  # the state's "ranges" key. Every referenced field must be allowlisted in
+  # the query's range_filters; every non-empty bound must cast to the
+  # attribute's type. A range with both bounds empty is inactive.
+  defp parse_ranges(resource, query, state) do
+    case Map.get(state, "ranges", %{}) do
+      ranges when is_map(ranges) ->
+        reduce_ranges(resource, query, ranges)
+
+      _other ->
+        {:error, ~s(Malformed query action: "ranges" must be a map.)}
+    end
+  end
+
+  defp reduce_ranges(resource, query, ranges) do
+    ranges
+    |> Enum.reduce_while({:ok, []}, fn {key, bounds}, {:ok, acc} ->
+      case parse_range(resource, query, key, bounds) do
+        {:ok, nil} -> {:cont, {:ok, acc}}
+        {:ok, range} -> {:cont, {:ok, [range | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, collected} -> {:ok, Enum.reverse(collected)}
+      error -> error
+    end
+  end
+
+  defp parse_range(resource, query, key, bounds) do
+    field = allowlisted(query.range_filters, key)
+
+    cond do
+      is_nil(field) ->
+        {:error,
+         "Range filter #{inspect(key)} is not allowlisted: it is not declared in the " <>
+           "query's range_filters."}
+
+      not is_map(bounds) ->
+        {:error, ~s(Malformed query action: range "#{key}" must be a {"from", "to"} map.)}
+
+      true ->
+        cast_range(resource, field, key, bounds)
+    end
+  end
+
+  defp cast_range(resource, field, key, bounds) do
+    from_raw = range_bound_string(Map.get(bounds, "from"))
+    to_raw = range_bound_string(Map.get(bounds, "to"))
+
+    with {:ok, from} <- cast_range_bound(resource, field, from_raw, :from),
+         {:ok, to} <- cast_range_bound(resource, field, to_raw, :to) do
+      if is_nil(from) and is_nil(to) do
+        {:ok, nil}
+      else
+        {:ok, %{field: field, from: from, to: to, from_raw: from_raw, to_raw: to_raw}}
+      end
+    else
+      :error -> {:error, "Range filter #{inspect(key)} value is invalid."}
+    end
+  end
+
+  defp range_bound_string(value) when is_binary(value), do: value
+  defp range_bound_string(_nil_or_other), do: ""
+
+  # An empty bound is unbounded. A plain date string ("2026-05-07", the
+  # native date input format) on a datetime-typed field expands to the day's
+  # start (from) or end (to) in UTC — checked first, because Ash's datetime
+  # casts would silently read it as midnight and make a same-day from/to
+  # range empty. Everything else casts to the attribute's type.
+  defp cast_range_bound(_resource, _field, "", _side), do: {:ok, nil}
+
+  defp cast_range_bound(resource, field, value, side) do
+    %{type: type, constraints: constraints} = ResourceInfo.attribute(resource, field)
+
+    case date_expanded_bound(type, value, side) do
+      {:ok, cast} ->
+        {:ok, cast}
+
+      :not_a_date_bound ->
+        with {:ok, cast} <- Ash.Type.cast_input(type, value, constraints),
+             {:ok, cast} <- Ash.Type.apply_constraints(type, cast, constraints) do
+          {:ok, cast}
+        else
+          _error -> :error
+        end
+    end
+  end
+
+  @datetime_types [Ash.Type.UtcDatetime, Ash.Type.UtcDatetimeUsec, Ash.Type.DateTime]
+
+  defp date_expanded_bound(type, value, side) do
+    with true <- Ash.Type.get_type(type) in @datetime_types,
+         {:ok, date} <- Date.from_iso8601(value) do
+      time = if side == :from, do: ~T[00:00:00], else: ~T[23:59:59.999999]
+      {:ok, DateTime.new!(date, time, "Etc/UTC")}
+    else
+      _not_a_date -> :not_a_date_bound
     end
   end
 
@@ -429,6 +576,22 @@ defmodule AshA2ui.QueryRunner do
         Ash.Query.filter(query, ^ref(field) == ^value)
     end)
   end
+
+  defp apply_ranges(query, ranges) do
+    Enum.reduce(ranges, query, fn range, query ->
+      query
+      |> apply_range_bound(range.field, :>=, range.from)
+      |> apply_range_bound(range.field, :<=, range.to)
+    end)
+  end
+
+  defp apply_range_bound(query, _field, _op, nil), do: query
+
+  defp apply_range_bound(query, field, :>=, value),
+    do: Ash.Query.filter(query, ^ref(field) >= ^value)
+
+  defp apply_range_bound(query, field, :<=, value),
+    do: Ash.Query.filter(query, ^ref(field) <= ^value)
 
   defp apply_search(query, _ui_query, ""), do: query
 

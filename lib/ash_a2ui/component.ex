@@ -15,6 +15,10 @@ defmodule AshA2ui.Component do
     :update_action,
     :query,
     :row_layout,
+    :select_context,
+    :context,
+    context_filter: [],
+    require_context: [],
     row_actions: [],
     nested_forms: [],
     groups: [],
@@ -22,7 +26,7 @@ defmodule AshA2ui.Component do
   ]
 
   @type t :: %__MODULE__{
-          name: :table | :form,
+          name: :table | :form | :detail,
           as: atom | nil,
           fields: [atom] | nil,
           read_action: atom | nil,
@@ -30,6 +34,10 @@ defmodule AshA2ui.Component do
           update_action: atom | nil,
           query: atom | nil,
           row_layout: AshA2ui.RowLayout.t() | nil,
+          select_context: atom | nil,
+          context: atom | nil,
+          context_filter: [{atom, atom}],
+          require_context: [atom],
           row_actions: [atom],
           nested_forms: [AshA2ui.NestedForm.t()],
           groups: [AshA2ui.Group.t()]
@@ -37,7 +45,8 @@ defmodule AshA2ui.Component do
 
   @doc """
   The distinguishing key of the component: its `as` name when given
-  (`component :table, :new_items`), otherwise its kind (`:table` / `:form`).
+  (`component :table, :new_items`), otherwise its kind
+  (`:table` / `:form` / `:detail`).
 
   Component keys are unique per surface (verified at compile time) and are
   the `<component_name>` segment of multi-table data-model paths

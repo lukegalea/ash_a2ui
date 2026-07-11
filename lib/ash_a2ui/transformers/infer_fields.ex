@@ -9,6 +9,9 @@ defmodule AshA2ui.Transformers.InferFields do
       component's `create_action` if set, otherwise the primary create),
       falling back to the update action's accepts when no create action
       matches.
+    * `:detail` components get the **context's** resource's public
+      attributes (details render the record selected into their `context`,
+      which may be a different resource than the surface's).
 
   In standalone UI modules the target resource is the section's
   `for_resource`. When inference is impossible (no resolvable resource, no
@@ -35,7 +38,7 @@ defmodule AshA2ui.Transformers.InferFields do
     |> Transformer.get_entities([:a2ui])
     |> Enum.filter(&(is_struct(&1, AshA2ui.Component) and is_nil(&1.fields)))
     |> Enum.reduce({:ok, dsl_state}, fn component, {:ok, dsl_state} ->
-      case infer_fields(target, component) do
+      case infer_fields(infer_target(target, component, dsl_state), component) do
         nil ->
           {:ok, dsl_state}
 
@@ -46,11 +49,31 @@ defmodule AshA2ui.Transformers.InferFields do
              [:a2ui],
              %{component | fields: fields},
              &(is_struct(&1, AshA2ui.Component) and &1.name == component.name and
-                 is_nil(&1.fields))
+                 &1.as == component.as and is_nil(&1.fields))
            )}
       end
     end)
   end
+
+  # `:detail` components infer against the context's resource — details may
+  # render a different resource than the surface's.
+  defp infer_target(_target, %AshA2ui.Component{name: :detail} = component, dsl_state) do
+    dsl_state
+    |> Transformer.get_entities([:a2ui])
+    |> Enum.find_value(fn
+      %AshA2ui.Context{name: name, resource: resource} when name == component.context ->
+        Code.ensure_loaded?(resource) and Info.resource?(resource) and resource
+
+      _other ->
+        nil
+    end)
+    |> case do
+      resource when is_atom(resource) and resource not in [nil, false] -> resource
+      _missing -> nil
+    end
+  end
+
+  defp infer_target(target, _component, _dsl_state), do: target
 
   # Resolves what we introspect against: the compiled `for_resource` module in
   # standalone mode, or the in-flight DSL state itself in on-resource mode
@@ -70,6 +93,10 @@ defmodule AshA2ui.Transformers.InferFields do
   end
 
   defp infer_fields(nil, _component), do: nil
+
+  defp infer_fields(target, %AshA2ui.Component{name: :detail}) do
+    infer_fields(target, %AshA2ui.Component{name: :table})
+  end
 
   defp infer_fields(target, %AshA2ui.Component{name: :table}) do
     target
