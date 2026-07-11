@@ -85,6 +85,15 @@ defmodule AshA2ui.QueryRunnerTest do
       assert params.filters == []
     end
 
+    test "a list of empty strings (multipleSelection All) is treated as inactive" do
+      # A multipleSelection ChoicePicker reset to "All" binds [""] — this must
+      # mean "no filter", not `field in []` (which would match nothing).
+      context = %{"query" => %{"filters" => %{"category" => [""], "status" => ["", nil]}}}
+
+      assert {:ok, params} = QueryRunner.parse(view(), context)
+      assert params.filters == []
+    end
+
     test "page and pageSize are clamped, pageSize to max_page_size" do
       context = %{"query" => %{"page" => 0, "pageSize" => 500}}
 

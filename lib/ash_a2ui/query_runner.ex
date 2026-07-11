@@ -194,7 +194,7 @@ defmodule AshA2ui.QueryRunner do
 
   defp collect_filters(resource, query, filters) do
     filters
-    |> Enum.reject(fn {_key, value} -> value in [nil, "", []] end)
+    |> Enum.reject(fn {_key, value} -> inactive_filter_value?(value) end)
     |> Enum.reduce_while({:ok, []}, fn {key, value}, {:ok, acc} ->
       case parse_filter(resource, query, key, value) do
         {:ok, filter} -> {:cont, {:ok, [filter | acc]}}
@@ -206,6 +206,15 @@ defmodule AshA2ui.QueryRunner do
       error -> error
     end
   end
+
+  # A ChoicePicker's "All" option binds "" — and under multipleSelection the
+  # bound value is a *list* that may contain only empty strings (e.g. [""]).
+  # All of these mean "no filter"; letting [""] through would strip the empty
+  # entries during casting and produce `field in []`, matching nothing.
+  defp inactive_filter_value?(value) when is_list(value),
+    do: Enum.all?(value, &inactive_filter_value?/1)
+
+  defp inactive_filter_value?(value), do: value in [nil, ""]
 
   defp parse_filter(resource, query, key, value) do
     case allowlisted(query.filters, key) do
