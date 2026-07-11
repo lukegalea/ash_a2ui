@@ -10,6 +10,9 @@ defmodule AshA2ui.Verifiers.VerifyRelationships do
       `source_attribute` match on a form field) in the first place,
     * a relationship select whose destination has a composite primary key
       must set `option_value` explicitly,
+    * `option_search` entries must be public **string-typed** attributes of
+      the relationship's destination (they are matched with a
+      case-insensitive contains by the `"option_search"` client action),
     * a `source` path must contain at least one relationship step and a
       terminal attribute; every non-terminal step must be a public
       relationship and the terminal step a public attribute of the final
@@ -31,6 +34,7 @@ defmodule AshA2ui.Verifiers.VerifyRelationships do
   alias Spark.Error.DslError
 
   @option_keys [:option_label, :option_value, :option_sort]
+  @string_types [Ash.Type.String, Ash.Type.CiString]
 
   @impl true
   def verify(dsl_state) do
@@ -108,7 +112,12 @@ defmodule AshA2ui.Verifiers.VerifyRelationships do
   end
 
   defp verify_no_orphan_options(field, module) do
-    case Enum.find(@option_keys, &Map.get(field, &1)) do
+    orphan_keys =
+      if match?([_ | _], field.option_search),
+        do: [:option_search | @option_keys],
+        else: @option_keys
+
+    case Enum.find(orphan_keys, &Map.get(field, &1)) do
       nil ->
         :ok
 
@@ -128,8 +137,56 @@ defmodule AshA2ui.Verifiers.VerifyRelationships do
   defp verify_select_options(field, relationship, module) do
     destination = relationship.destination
 
-    with :ok <- verify_destination_attributes(field, destination, module) do
-      verify_option_value_pk(field, destination, module)
+    with :ok <- verify_destination_attributes(field, destination, module),
+         :ok <- verify_option_value_pk(field, destination, module) do
+      verify_option_search(
+        field.option_search,
+        destination,
+        module,
+        [:a2ui, :field, field.name, :option_search],
+        "field #{inspect(field.name)}"
+      )
+    end
+  end
+
+  @doc false
+  # Shared with AshA2ui.Verifiers.VerifyNestedForms: every option_search
+  # entry must be a public string-typed attribute of the destination.
+  def verify_option_search(option_search, destination, module, path, owner) do
+    Enum.reduce_while(option_search, :ok, fn name, :ok ->
+      case verify_option_search_entry(name, destination, module, path, owner) do
+        :ok -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp verify_option_search_entry(name, destination, module, path, owner) do
+    case Info.attribute(destination, name) do
+      %{public?: true, type: type} ->
+        if Ash.Type.get_type(type) in @string_types do
+          :ok
+        else
+          {:error,
+           DslError.exception(
+             module: module,
+             path: path,
+             message:
+               "option_search entry #{inspect(name)} on #{owner} must be a string-typed " <>
+                 "attribute of #{inspect(destination)} (search uses a case-insensitive " <>
+                 "contains)"
+           )}
+        end
+
+      _private_or_missing ->
+        {:error,
+         DslError.exception(
+           module: module,
+           path: path,
+           message:
+             "option_search entry #{inspect(name)} on #{owner} must be a public " <>
+               "attribute of #{inspect(destination)}"
+         )}
     end
   end
 

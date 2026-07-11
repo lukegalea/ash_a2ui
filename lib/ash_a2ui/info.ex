@@ -194,30 +194,38 @@ defmodule AshA2ui.Info do
     end
   end
 
-  # Loads the option lists for the view's relationship selects: the
-  # destination's primary read action with the same actor/tenant/authorize?
-  # opts (policies apply to option reads), sorted by `option_sort` and capped
-  # at `option_limit`. Returns `%{field_name => [%{"label" => _, "value" => _}]}`
-  # — the shape written to the reserved `/options/<field>` paths.
+  # Loads the option lists for the view's relationship selects and
+  # pick_existing nested forms: the destination's primary read action with
+  # the same actor/tenant/authorize? opts (policies apply to option reads),
+  # sorted by `option_sort` and capped at `option_limit`. Returns
+  # `%{name => [%{"label" => _, "value" => _}]}` — the shape written to the
+  # reserved `/options/<name>` paths. Searchable sources load the same
+  # initial page; the `"option_search"` action refreshes them.
   defp load_options!(resolved_view, opts) do
-    Map.new(resolved_view.selects, fn {field_name, select} ->
+    resolved_view
+    |> ResolvedView.option_sources()
+    |> Map.new(fn {name, source} ->
       records =
-        select.destination
-        |> Ash.Query.for_read(ResourceInfo.primary_action!(select.destination, :read).name)
-        |> Ash.Query.sort([{select.option_sort, :asc}])
-        |> Ash.Query.limit(select.option_limit)
-        |> Ash.read!(option_read_opts(select.destination, opts))
+        source.destination
+        |> Ash.Query.for_read(ResourceInfo.primary_action!(source.destination, :read).name)
+        |> Ash.Query.sort([{source.option_sort, :asc}])
+        |> Ash.Query.limit(source.option_limit)
+        |> Ash.read!(option_read_opts(source.destination, opts))
 
-      options =
-        Enum.map(records, fn record ->
-          value = option_string(Map.get(record, select.option_value))
-          label = Map.get(record, select.option_label)
-
-          %{"label" => (label && option_string(label)) || value, "value" => value}
-        end)
-
-      {field_name, options}
+      {name, Enum.map(records, &option_entry(&1, source))}
     end)
+  end
+
+  @doc false
+  # One `%{"label" => _, "value" => _}` option entry for a destination record
+  # of the given option source. Shared with `AshA2ui.ActionHandler` (the
+  # `option_search` refresh emits the same shape).
+  @spec option_entry(Ash.Resource.record(), map) :: map
+  def option_entry(record, source) do
+    value = option_string(Map.get(record, source.option_value))
+    label = Map.get(record, source.option_label)
+
+    %{"label" => (label && option_string(label)) || value, "value" => value}
   end
 
   defp option_read_opts(destination, opts) do

@@ -142,8 +142,11 @@ end
   actions directly from transport code skips the allowlist and the error
   mapping. Full contract in `ash_a2ui:actions`.
 - Action names are exactly `"submit_form"`, `"select_row"`, `"invoke"`,
-  `"prompt"`, and `"query"`. Don't invent new `action.name` values; add a
-  proper Ash action and expose it via `row_actions` instead.
+  `"prompt"`, `"query"`, `"option_search"`, `"option_select"`,
+  `"nested_add"`, and `"nested_remove"` (the last four only on surfaces with
+  searchable selects / nested forms — see `ash_a2ui:relationships`). Don't
+  invent new `action.name` values; add a proper Ash action and expose it
+  via `row_actions` instead.
 - Row actions that need user input declare `prompt_fields` on their
   `action` entity (Modal prompt; `invoke` then carries a `"values"` map
   filtered + cast to those fields). Per-row availability is `visible_when`
@@ -154,8 +157,11 @@ end
   accept client sort/filter params not declared in a query, and never feed
   client query input into `Ash.Query` yourself.
 - Surface feedback through the reserved data-model paths — `/records`,
-  `/form`, `/errors/<field>` for validation errors, `/options/<field>` for
-  relationship select options, `/ui/status` for lifecycle feedback,
+  `/form` (nested-form arguments: arrays of row maps), `/errors/<field>`
+  for validation errors (nested rows:
+  `/errors/<argument>/<index>/<field>`), `/options/<name>` for
+  relationship select and picker options, `/select/<name>` for
+  searchable-select/picker state, `/ui/status` for lifecycle feedback,
   `/ui/action_result` + `/ui/action_result_text` for map-returning generic
   actions (raw map + display text, cleared on every subsequent action),
   `/query` for query state (multi-table surfaces scope records and query

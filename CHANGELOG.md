@@ -10,6 +10,40 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Searchable relationship selects: the `field` entity gains `option_search`
+  (a list of public string-typed destination attributes, compile-verified).
+  Non-empty `option_search` swaps the static ChoicePicker for a composite —
+  a selection-label Text (`/select/<field>/label`), a search TextField
+  (`/select/<field>/search`) with a Search button dispatching the new
+  `"option_search"` client action (case-insensitive contains OR'd across
+  the allowlisted fields, actor/tenant-scoped destination read, clamped to
+  `option_limit`, answered with one `updateDataModel` at
+  `/options/<field>`), and an option List templated over `/options/<field>`
+  whose per-option Buttons dispatch the new `"option_select"` action — the
+  server re-fetches the picked record (policies apply), writes the value to
+  `/form/<field>` and the canonical label to `/select/<field>`.
+  Non-searchable selects are unchanged.
+- Nested relationship forms: the new `nested_form` DSL entity inside `:form`
+  components, named by the **action argument** a `manage_relationship`
+  change consumes (compile-verified on every action the form submits by the
+  new `AshA2ui.Verifiers.VerifyNestedForms`). The interaction mode is
+  inferred from the change's options via
+  `Ash.Changeset.ManagedRelationshipHelpers` — lookups (e.g.
+  `type: :append_and_remove`) render as **pick_existing** (a picker adding
+  existing records — searchable via `option_search` — and current rows with
+  remove buttons), creates (e.g. `type: :direct_control`) as
+  **create_inline** (sub-form rows; `fields` defaults to the destination
+  create action's accepts minus the relationship's destination attribute).
+  `/form/<argument>` is an always-present array of row maps mutated through
+  the new server-mediated `"nested_add"`/`"nested_remove"` client actions
+  (rows carry server-stamped `"_row"` identity keys); `select_row`
+  populates the rows from the record's related records, `submit_form`
+  strips underscore keys / reduces pick rows to ids before the argument
+  cast, and nested validation errors map to
+  `/errors/<argument>/<index>/<field>` plus `"_error_<field>"` in-row
+  mirrors. Surfaces using these features carry a new `/select/<name>` state
+  path. Deferred: many_to_many join-resource fields, recursive nesting,
+  in-picker pagination.
 - Row-action prompts: `action` entities gain `prompt_fields` (arguments/
   accepts of the Ash action, compile-verified) and `prompt_title`. Prompt
   actions render as a basic-catalog `Modal` (`row_action_<action>_modal`

@@ -13,9 +13,11 @@ custom hooks, and tests can rely on them.
 |---|---|---|
 | `/records` | The list of records backing the table component (multi-table surfaces: an object keyed by table component name — see below) | Initial render; every refresh (action follow-ups, PubSub) |
 | `/records/<component_name>` | One table's record list on a **multi-table** surface | Initial render; every refresh that targets that table |
-| `/form` | The form component's current field values | Initial render; row selection (edit); after submit |
+| `/form` | The form component's current field values (nested-form arguments: arrays of row maps) | Initial render; row selection (edit); after submit; `nested_add`/`nested_remove` |
 | `/errors/<field>` | Human-readable validation error text for `<field>` | A submitted action fails validation |
-| `/options/<field>` | The option list of a relationship-backed form select | Initial render; full data-model refreshes |
+| `/errors/<argument>/<index>/<field>` | Validation error text for one field of one nested-form row (index into the submitted array) | A submit with nested rows fails validation |
+| `/options/<name>` | The option list of a relationship-backed form select **or** a pick_existing nested form (keyed by field / argument name) | Initial render; full data-model refreshes; every `option_search` |
+| `/select/<name>` | Client-side state of searchable selects (`{"search", "label"}`) and pick_existing pickers (`{"search", "picked"}`) | Initial render (only on surfaces using them); `option_select`; row selection; after submit |
 | `/ui/status` | Operation feedback text (the flash-equivalent) | After every handled action (success/error) |
 | `/ui/action_result` | The raw map returned by a map-returning generic action | An `invoke`d generic action returns a plain map (cleared by every subsequent successful action) |
 | `/ui/action_result_text` | The human-readable rendering of `/ui/action_result` | Same as `/ui/action_result` |
@@ -106,8 +108,35 @@ follow-up semantics are never affected by `refreshes`.
 
 Form inputs bind to `/form/<field>`. Selecting a row (the `select_row`
 action) loads that record's editable values into `/form`; a successful create
-or update clears it back to `{}`. Clients that keep local edit state
-should treat a server write to `/form` as authoritative.
+or update clears it back to its initial shape. Clients that keep local edit
+state should treat a server write to `/form` as authoritative.
+
+On surfaces without nested forms the initial (and post-success) `/form` is
+`{}`, exactly as before. Surfaces with `nested_form` entities additionally
+carry **one array of row maps per argument** — `/form/<argument>` is always
+present (initially `[]`), so the row `List` templates and the add/remove
+buttons' `"rows"` context bindings always have a value:
+
+```json
+{ "form": { "notes": [ { "_row": "…", "body": "…", "rating": 4 } ],
+            "tags":  [ { "_row": "…", "id": "…", "label": "urgent" } ] } }
+```
+
+Row maps use the destination's field names as keys plus reserved
+underscore-prefixed **client-state keys**, which `submit_form` strips before
+the argument cast:
+
+- `"_row"` — the server-stamped row identity (the record id for existing
+  rows, a generated UUID for fresh create_inline rows); the target of
+  `nested_remove` and the template key. Never an array index.
+- `"_error_<field>"` — the row-scoped validation error mirror (below).
+
+`select_row` populates the arrays from the record's currently-related
+records (loaded through the argument's relationship). Rows are mutated only
+by the `"nested_add"` / `"nested_remove"` actions — the server replaces the
+whole array in one `updateDataModel` — and by create_inline row inputs
+binding template-relative field paths. See
+[Relationship Rendering](relationships.md) for the full contract.
 
 ## `/errors/<field>` — validation errors
 
@@ -134,6 +163,13 @@ Conventions:
   reset wholesale to `{}`).
 - Errors that can't be attributed to a field (e.g. a policy denial) go to
   `/ui/status` instead.
+- Errors on **nested-form rows** carry Ash's error path and land at
+  `/errors/<argument>/<index>/<field>` — `<index>` is the row's position in
+  the submitted array. The same text is additionally mirrored into the
+  submitted row itself as an `"_error_<field>"` key (one
+  `/form/<argument>` rewrite), because row templates can only bind
+  template-relative paths. Treat the `/errors/...` paths as the programmatic
+  contract and the mirrors as a rendering aid.
 
 Renderers bind error `Text` components next to each input at
 `/errors/<field>` and get inline validation for free — no error-specific
@@ -211,13 +247,14 @@ action that produced it (a map-returning action clears and then sets them in
 the same batch — apply messages in order). Non-map results (`:ok`, records)
 emit no extra message beyond the clears.
 
-## `/options/<field>` — relationship select options
+## `/options/<name>` — relationship select and picker options
 
 When a form field is backed by a `belongs_to` relationship (inferred from the
 field name matching the relationship's `source_attribute`, or declared with
 the `relationship` field option — see
 [Relationship Rendering](relationships.md)), the surface loads the
-destination's records and exposes them as an option list:
+destination's records and exposes them as an option list. Pick_existing
+nested forms get the same treatment, keyed by the **argument** name:
 
 ```json
 {
@@ -240,8 +277,11 @@ Conventions:
   `label` the stringified `option_label` attribute (falling back to the
   value when the label attribute is nil).
 - The list is written on the initial render and on full data-model refreshes
-  (`build_data_model/2`, PubSub pushes). Action follow-ups do **not**
-  refresh options.
+  (`build_data_model/2`, PubSub pushes). Success follow-ups do **not**
+  refresh options — but the `"option_search"` client action rewrites exactly
+  one `/options/<name>` list on demand (searchable selects and searchable
+  pick_existing pickers only; see
+  [Relationship Rendering](relationships.md)).
 - Because the v0.9.1 basic-catalog `ChoicePicker` only accepts a literal
   inline options array (each option's `value` is a plain string — no data
   binding), the emitted picker carries the same list **inline** in
@@ -250,6 +290,25 @@ Conventions:
   it directly.
 - Selected values travel back through `/form/<field>` as strings (see
   `AshA2ui.ActionHandler` for the cast rules).
+
+## `/select/<name>` — searchable-select and picker state
+
+Present **only** on surfaces with searchable selects (`option_search`) or
+pick_existing nested forms — pre-Wave-5 surfaces carry no `"select"` key.
+One entry per name:
+
+- searchable selects: `{"search": "", "label": ""}` — `search` is the
+  search input's binding, `label` the display text of the current selection
+  (written by `"option_select"` and by `select_row`).
+- pick_existing pickers: `{"search": "", "picked": []}` — `picked` is the
+  (non-searchable) ChoicePicker's value binding, read by the add button's
+  context.
+
+The whole `/select` map is rewritten on row selection (labels filled from
+the loaded record) and reset after a successful submit. Four client actions
+accompany these paths — `"option_search"`, `"option_select"`,
+`"nested_add"`, `"nested_remove"`; their contexts and semantics are frozen
+in [Relationship Rendering](relationships.md).
 
 ## `/query` — search/filter/sort/pagination state
 

@@ -78,8 +78,19 @@ defmodule AshA2ui do
         type: :pos_integer,
         default: 100,
         doc: """
-        Maximum number of options loaded for a relationship select. Option sets larger
-        than this are truncated — large sets need the roadmap's searchable selects.
+        Maximum number of options loaded for a relationship select (and returned per
+        `option_search` request). Non-searchable option sets larger than this are
+        truncated — declare `option_search` for genuinely large sets.
+        """
+      ],
+      option_search: [
+        type: {:list, :atom},
+        default: [],
+        doc: """
+        Public string attributes of the destination searched (case-insensitive
+        contains, OR'd) by the `"option_search"` client action. Non-empty turns the
+        relationship select into a searchable select: a search input plus a result
+        list refreshed through `/options/<field>`, instead of a static ChoicePicker.
         """
       ],
       source: [
@@ -223,6 +234,99 @@ defmodule AshA2ui do
     ]
   }
 
+  @nested_form %Spark.Dsl.Entity{
+    name: :nested_form,
+    describe: """
+    A nested relationship form inside a `:form` component, named by the
+    **action argument** a `manage_relationship` change consumes on the form's
+    create/update action. The interaction mode is inferred from that change's
+    options (via `Ash.Changeset.ManagedRelationshipHelpers`): lookups
+    (`on_lookup`, e.g. `type: :append_and_remove`) render as **pick_existing**
+    (a select adding existing records, current rows with remove buttons);
+    otherwise creates (`on_no_match: :create`, e.g. `type: :direct_control`)
+    render as **create_inline** (sub-form rows appended to the argument's
+    array of maps).
+    """,
+    examples: [
+      """
+      nested_form :notes do
+        fields [:body, :rating]
+      end
+      """,
+      """
+      nested_form :tags do
+        option_search [:name]
+      end
+      """
+    ],
+    target: AshA2ui.NestedForm,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: """
+        The action argument this nested form edits. Must be consumed by a
+        `manage_relationship` change on every create/update action the form
+        submits (verified at compile time).
+        """
+      ],
+      label: [
+        type: :string,
+        doc: "Heading shown above the nested rows. Defaults to the humanized argument name."
+      ],
+      fields: [
+        type: {:list, :atom},
+        doc: """
+        Destination attributes rendered as sub-form inputs (create_inline
+        mode only). Omit to infer from the destination action the
+        `manage_relationship` change creates through, minus the relationship's
+        destination attribute.
+        """
+      ],
+      option_label: [
+        type: :atom,
+        doc: """
+        The destination attribute shown as the label of pick_existing options
+        and rows. Defaults like the `field` entity's `option_label`.
+        """
+      ],
+      option_value: [
+        type: :atom,
+        doc: """
+        The destination attribute submitted as the pick_existing value.
+        Defaults to the destination's primary key (required explicitly when
+        composite).
+        """
+      ],
+      option_sort: [
+        type: :atom,
+        doc: """
+        The destination attribute pick_existing options are sorted by
+        (ascending). Defaults to the resolved `option_label`.
+        """
+      ],
+      option_limit: [
+        type: :pos_integer,
+        default: 100,
+        doc: """
+        Maximum number of pick_existing options loaded (and returned per
+        `option_search` request).
+        """
+      ],
+      option_search: [
+        type: {:list, :atom},
+        default: [],
+        doc: """
+        Public string attributes of the destination searched (case-insensitive
+        contains, OR'd) by the `"option_search"` client action. Non-empty
+        replaces the pick_existing ChoicePicker with a search input plus a
+        result list refreshed through `/options/<argument>`.
+        """
+      ]
+    ]
+  }
+
   @component %Spark.Dsl.Entity{
     name: :component,
     describe: """
@@ -249,6 +353,7 @@ defmodule AshA2ui do
     ],
     target: AshA2ui.Component,
     args: [:name, {:optional, :as}],
+    entities: [nested_forms: [@nested_form]],
     schema: [
       name: [
         type: {:one_of, [:table, :form]},
@@ -429,7 +534,8 @@ defmodule AshA2ui do
     AshA2ui.Verifiers.VerifyFields,
     AshA2ui.Verifiers.VerifyActions,
     AshA2ui.Verifiers.VerifyQueries,
-    AshA2ui.Verifiers.VerifyRelationships
+    AshA2ui.Verifiers.VerifyRelationships,
+    AshA2ui.Verifiers.VerifyNestedForms
   ]
 
   @moduledoc """

@@ -19,6 +19,7 @@ defmodule AshA2ui.Field do
     order: 0,
     hidden: false,
     option_limit: 100,
+    option_search: [],
     __spark_metadata__: nil
   ]
 
@@ -32,6 +33,7 @@ defmodule AshA2ui.Field do
           option_value: atom | nil,
           option_sort: atom | nil,
           option_limit: pos_integer,
+          option_search: [atom],
           source: [atom] | nil,
           order: non_neg_integer,
           hidden: boolean

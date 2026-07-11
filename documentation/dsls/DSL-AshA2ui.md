@@ -23,6 +23,7 @@ for the resource named by `for_resource`).
  * [query](#a2ui-query)
    * preset
  * [component](#a2ui-component)
+   * nested_form
  * [field](#a2ui-field)
  * [action](#a2ui-action)
 
@@ -188,6 +189,8 @@ components (sections) by giving each one a distinguishing name via the
 optional second argument, e.g. `component :table, :new_items do ... end`.
 
 
+### Nested DSLs
+ * [nested_form](#a2ui-component-nested_form)
 
 
 ### Examples
@@ -228,6 +231,67 @@ end
 | [`row_actions`](#a2ui-component-row_actions){: #a2ui-component-row_actions } | `list(atom)` | `[]` | Actions rendered as per-row buttons (tables). |
 | [`query`](#a2ui-component-query){: #a2ui-component-query } | `atom` |  | Name of a `query` entity providing server-enforced search/sort/filter/pagination (tables). |
 
+
+### a2ui.component.nested_form
+```elixir
+nested_form name
+```
+
+
+A nested relationship form inside a `:form` component, named by the
+**action argument** a `manage_relationship` change consumes on the form's
+create/update action. The interaction mode is inferred from that change's
+options (via `Ash.Changeset.ManagedRelationshipHelpers`): lookups
+(`on_lookup`, e.g. `type: :append_and_remove`) render as **pick_existing**
+(a select adding existing records, current rows with remove buttons);
+otherwise creates (`on_no_match: :create`, e.g. `type: :direct_control`)
+render as **create_inline** (sub-form rows appended to the argument's
+array of maps).
+
+
+
+
+### Examples
+```
+nested_form :notes do
+  fields [:body, :rating]
+end
+
+```
+
+```
+nested_form :tags do
+  option_search [:name]
+end
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#a2ui-component-nested_form-name){: #a2ui-component-nested_form-name .spark-required} | `atom` |  | The action argument this nested form edits. Must be consumed by a `manage_relationship` change on every create/update action the form submits (verified at compile time). |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`label`](#a2ui-component-nested_form-label){: #a2ui-component-nested_form-label } | `String.t` |  | Heading shown above the nested rows. Defaults to the humanized argument name. |
+| [`fields`](#a2ui-component-nested_form-fields){: #a2ui-component-nested_form-fields } | `list(atom)` |  | Destination attributes rendered as sub-form inputs (create_inline mode only). Omit to infer from the destination action the `manage_relationship` change creates through, minus the relationship's destination attribute. |
+| [`option_label`](#a2ui-component-nested_form-option_label){: #a2ui-component-nested_form-option_label } | `atom` |  | The destination attribute shown as the label of pick_existing options and rows. Defaults like the `field` entity's `option_label`. |
+| [`option_value`](#a2ui-component-nested_form-option_value){: #a2ui-component-nested_form-option_value } | `atom` |  | The destination attribute submitted as the pick_existing value. Defaults to the destination's primary key (required explicitly when composite). |
+| [`option_sort`](#a2ui-component-nested_form-option_sort){: #a2ui-component-nested_form-option_sort } | `atom` |  | The destination attribute pick_existing options are sorted by (ascending). Defaults to the resolved `option_label`. |
+| [`option_limit`](#a2ui-component-nested_form-option_limit){: #a2ui-component-nested_form-option_limit } | `pos_integer` | `100` | Maximum number of pick_existing options loaded (and returned per `option_search` request). |
+| [`option_search`](#a2ui-component-nested_form-option_search){: #a2ui-component-nested_form-option_search } | `list(atom)` | `[]` | Public string attributes of the destination searched (case-insensitive contains, OR'd) by the `"option_search"` client action. Non-empty replaces the pick_existing ChoicePicker with a search input plus a result list refreshed through `/options/<argument>`. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.NestedForm`
 
 
 
@@ -276,7 +340,8 @@ end
 | [`option_label`](#a2ui-field-option_label){: #a2ui-field-option_label } | `atom` |  | The destination attribute shown as the option label of a relationship select. Defaults to the first existing public attribute of `[:name, :title, :label, :username, :email]` on the destination, else its primary key. |
 | [`option_value`](#a2ui-field-option_value){: #a2ui-field-option_value } | `atom` |  | The destination attribute submitted as the option value of a relationship select. Defaults to the destination's primary key (required explicitly when that primary key is composite). |
 | [`option_sort`](#a2ui-field-option_sort){: #a2ui-field-option_sort } | `atom` |  | The destination attribute the options of a relationship select are sorted by (ascending). Defaults to the resolved `option_label`. |
-| [`option_limit`](#a2ui-field-option_limit){: #a2ui-field-option_limit } | `pos_integer` | `100` | Maximum number of options loaded for a relationship select. Option sets larger than this are truncated — large sets need the roadmap's searchable selects. |
+| [`option_limit`](#a2ui-field-option_limit){: #a2ui-field-option_limit } | `pos_integer` | `100` | Maximum number of options loaded for a relationship select (and returned per `option_search` request). Non-searchable option sets larger than this are truncated — declare `option_search` for genuinely large sets. |
+| [`option_search`](#a2ui-field-option_search){: #a2ui-field-option_search } | `list(atom)` | `[]` | Public string attributes of the destination searched (case-insensitive contains, OR'd) by the `"option_search"` client action. Non-empty turns the relationship select into a searchable select: a search input plus a result list refreshed through `/options/<field>`, instead of a static ChoicePicker. |
 | [`source`](#a2ui-field-source){: #a2ui-field-source } | `list(atom)` |  | A relationship path (e.g. `[:user, :email]`) this table column reads its value through. Every step but the last must be a public relationship; the last must be a public attribute of the final destination. Source columns are table-only and not sortable. |
 
 

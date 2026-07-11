@@ -331,6 +331,34 @@ primary key); `option_label` / `option_value` / `option_sort` /
 action-argument fields. Everything is verified at compile time. See
 [Relationship Rendering](documentation/topics/relationships.md).
 
+For destinations with thousands of records, `option_search` makes the select
+**searchable** (search input + live result list instead of a static picker),
+and `nested_form` edits related records inside the form — pick-and-attach or
+inline sub-form rows, inferred from the action's `manage_relationship`
+options:
+
+```elixir
+a2ui do
+  component :form do
+    fields [:subject, :author_id]
+    create_action :create
+    update_action :update
+
+    nested_form :notes do          # manage_relationship(:notes, type: :direct_control)
+      fields [:body, :rating]      #   -> inline sub-form rows (create/update/destroy)
+    end
+
+    nested_form :tags do           # manage_relationship(:tags, type: :append_and_remove)
+      option_search [:name]        #   -> searchable pick-and-attach with remove buttons
+    end
+  end
+
+  field :author_id do
+    option_search [:name, :email]  # searchable select over the Author destination
+  end
+end
+```
+
 ### Building the surface
 
 ```elixir
@@ -497,6 +525,24 @@ Shipped beyond the v0 core:
   compose expression calculations with attributes
   (`default_sort status_priority: :asc, code: :asc`) with no extra
   machinery.
+- ✅ **Searchable relationship selects (`option_search`)** — for option sets
+  beyond `option_limit`: `field :author_id do option_search [:name, :email]
+  end` swaps the static ChoicePicker for a search input + result list
+  refreshed live through `/options/<field>` (the `"option_search"` /
+  `"option_select"` client actions; server-validated selection with
+  actor/tenant-scoped destination reads) (see
+  [Relationship Rendering](documentation/topics/relationships.md)).
+- ✅ **Nested relationship forms (`nested_form`)** — forms edit related
+  records through `manage_relationship` action arguments, with the
+  interaction mode **inferred** from the change's options via
+  `Ash.Changeset.ManagedRelationshipHelpers`
+  (`type: :append_and_remove` → pick-and-attach with remove buttons,
+  `type: :direct_control` → inline sub-form rows):
+  `nested_form :notes do fields [:body, :rating] end`. Rows live at
+  `/form/<argument>` as an array of maps mutated through server-mediated
+  `"nested_add"`/`"nested_remove"` actions; nested validation errors map to
+  `/errors/<argument>/<index>/<field>` (see
+  [Relationship Rendering](documentation/topics/relationships.md)).
 
 Documented as roadmap (not built):
 
@@ -506,11 +552,10 @@ Documented as roadmap (not built):
 - **Richer client-driven `query` filters** — ranged/custom filter shapes
   beyond the shipped equality filters and named presets, and multiple
   queries per table.
-- **Searchable/paginated relationship selects** — for option sets beyond
-  `option_limit`; today's selects load a capped, sorted option list.
-- **Nested forms** — interaction modes driven by
-  `Ash.Changeset.ManagedRelationshipHelpers` (create/edit related records
-  inline).
+- **Nested-form extensions** — `many_to_many` join-resource fields (editing
+  join-row attributes like a membership's role), recursive nesting, and
+  in-picker pagination; the shipped v1 covers pick-and-attach and inline
+  create/update/destroy.
 - **Sorting on relationship-sourced columns** — `source` table columns are
   render-only; `query` sorting covers attributes, aggregates, and expression
   calculations, but not `source` paths.

@@ -165,13 +165,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           {"/",
            %{
              "records" => serialized,
-             "form" => %{},
+             "form" => ResolvedView.initial_form(resolved_view),
              "errors" => %{},
              "options" => options_data(resolved_view, opts),
              "ui" => %{"status" => "", "action_result" => %{}, "action_result_text" => ""}
            }
            |> put_query_state(resolved_view, opts)
-           |> put_prompt_state(resolved_view)}
+           |> put_prompt_state(resolved_view)
+           |> put_select_state(resolved_view)}
       end
 
     %{
@@ -207,13 +208,27 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   # --- select options ---
 
-  # Options for relationship selects are loaded by the caller
-  # (`AshA2ui.Info`) and passed via `opts[:options]` as
-  # `%{field_name => [%{"label" => _, "value" => _}]}`. Direct encoder calls
-  # without the option fall back to empty option lists per resolved select.
+  # Options for relationship selects and pick_existing nested forms are
+  # loaded by the caller (`AshA2ui.Info`) and passed via `opts[:options]` as
+  # `%{name => [%{"label" => _, "value" => _}]}`. Direct encoder calls
+  # without the option fall back to empty option lists per source.
   defp select_options(view, opts) do
-    defaults = Map.new(view.selects, fn {name, _select} -> {name, []} end)
+    defaults =
+      view
+      |> ResolvedView.option_sources()
+      |> Map.new(fn {name, _source} -> {name, []} end)
+
     Map.merge(defaults, Keyword.get(opts, :options) || %{})
+  end
+
+  # The reserved /select state (searchable-select search text + selected
+  # label, pick_existing search text + picked value). Omitted entirely on
+  # surfaces without wave-5 relationship inputs (frozen shape unchanged).
+  defp put_select_state(value, view) do
+    case ResolvedView.select_state(view) do
+      state when state == %{} -> value
+      state -> Map.put(value, "select", state)
+    end
   end
 
   # The `/options/<field>` data-model mirror of the inline ChoicePicker
@@ -703,18 +718,45 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
   end
 
-  defp form_components(_view, form) do
-    children =
-      Enum.flat_map(form.fields, &["form_input_#{&1}", "form_error_#{&1}"]) ++
-        ["form_submit_button"]
+  defp form_components(view, form) do
+    field_children =
+      Enum.flat_map(form.fields, fn field ->
+        anchor =
+          if searchable_select?(view, field),
+            do: "form_select_#{field}",
+            else: "form_input_#{field}"
+
+        [anchor, "form_error_#{field}"]
+      end)
+
+    nested_children = Enum.map(form.nested_forms, &"nested_#{&1.name}")
+
+    children = field_children ++ nested_children ++ ["form_submit_button"]
 
     [%{"id" => "form", "component" => "Column", "children" => children}]
+  end
+
+  defp searchable_select?(view, field_name) do
+    match?(%{search_fields: [_ | _]}, view.selects[field_name])
   end
 
   defp form_descendants(_view, nil, _options), do: []
 
   defp form_descendants(view, form, options) do
-    inputs = Enum.map(form.fields, &form_input(view, &1, options))
+    inputs =
+      Enum.map(form.fields, fn field ->
+        if searchable_select?(view, field) do
+          searchable_select_components(view, field)
+        else
+          form_input(view, field, options)
+        end
+      end)
+
+    nested =
+      Enum.flat_map(form.nested_forms, fn entity ->
+        nested_form_components(view, view.nested_forms[entity.name], options)
+      end)
+
     errors = Enum.map(form.fields, &form_error/1)
 
     submit = [
@@ -740,7 +782,324 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{"id" => "form_submit_text", "component" => "Text", "text" => "Save"}
     ]
 
-    inputs ++ errors ++ submit
+    List.flatten(inputs) ++ nested ++ errors ++ submit
+  end
+
+  # --- searchable selects ---
+
+  # A relationship select with `option_search` renders as a composite instead
+  # of a static ChoicePicker: the current selection's label (bound to
+  # /select/<field>/label), a search TextField (bound to
+  # /select/<field>/search) with a Button dispatching `option_search`, and a
+  # result List templated over /options/<field> whose per-option Button
+  # dispatches `option_select` with the template-relative option "value".
+  # Selection round-trips through the server, which validates the value
+  # against the destination (authorized read) and writes /form/<field> plus
+  # the resolved label — labels never come from the client.
+  defp searchable_select_components(view, field_name) do
+    base = "form_select_#{field_name}"
+    field = view.fields[field_name]
+
+    [
+      %{
+        "id" => base,
+        "component" => "Column",
+        "children" => [
+          "#{base}_label",
+          "#{base}_selected",
+          "#{base}_controls",
+          "#{base}_options"
+        ]
+      },
+      %{"id" => "#{base}_label", "component" => "Text", "text" => field.label, "variant" => "h4"},
+      %{
+        "id" => "#{base}_selected",
+        "component" => "Text",
+        "text" => %{"path" => "/select/#{field_name}/label"}
+      },
+      %{
+        "id" => "#{base}_controls",
+        "component" => "Row",
+        "children" => ["#{base}_search_input", "#{base}_search_button"]
+      }
+    ] ++
+      search_controls(base, to_string(field_name)) ++
+      option_list(base, "/options/#{field_name}", %{
+        "name" => "option_select",
+        "context" => %{
+          "field" => to_string(field_name),
+          "value" => %{"path" => "value"}
+        }
+      })
+  end
+
+  # The shared search input + button pair: the button's `option_search`
+  # context carries the current search text via a data binding and the
+  # select/picker name as "field".
+  defp search_controls(base, name) do
+    [
+      %{
+        "id" => "#{base}_search_input",
+        "component" => "TextField",
+        "label" => "Search",
+        "value" => %{"path" => "/select/#{name}/search"}
+      },
+      %{
+        "id" => "#{base}_search_button",
+        "component" => "Button",
+        "child" => "#{base}_search_text",
+        "action" => %{
+          "event" => %{
+            "name" => "option_search",
+            "context" => %{
+              "field" => name,
+              "search" => %{"path" => "/select/#{name}/search"}
+            }
+          }
+        }
+      },
+      %{"id" => "#{base}_search_text", "component" => "Text", "text" => "Search"}
+    ]
+  end
+
+  # The option result List: templated over the options path, one Button per
+  # option whose child Text binds the template-relative "label" and whose
+  # event context carries the template-relative "value".
+  defp option_list(base, options_path, event) do
+    [
+      %{
+        "id" => "#{base}_options",
+        "component" => "List",
+        "children" => %{"componentId" => "#{base}_option_button", "path" => options_path}
+      },
+      %{
+        "id" => "#{base}_option_button",
+        "component" => "Button",
+        "variant" => "borderless",
+        "child" => "#{base}_option_text",
+        "action" => %{"event" => event}
+      },
+      %{
+        "id" => "#{base}_option_text",
+        "component" => "Text",
+        "text" => %{"path" => "label"}
+      }
+    ]
+  end
+
+  # --- nested forms ---
+
+  # One nested-form section per `nested_form` entity: a heading, the current
+  # rows (a List templated over /form/<argument> — every row map carries the
+  # server-generated "_row" key the remove button's context binds), and the
+  # mode-specific add mechanism. All row mutations round-trip through the
+  # stateless `nested_add` / `nested_remove` actions, whose contexts carry
+  # the current rows via a {"path": "/form/<argument>"} binding; the server
+  # rewrites the array wholesale.
+  defp nested_form_components(view, nested, options) do
+    base = "nested_#{nested.argument}"
+
+    header = [
+      %{
+        "id" => "#{base}_heading",
+        "component" => "Text",
+        "text" => nested.label,
+        "variant" => "h3"
+      }
+    ]
+
+    case nested.mode do
+      :create_inline ->
+        [nested_section(base, ["#{base}_heading", "#{base}_rows", "#{base}_add_button"])] ++
+          header ++
+          nested_rows(base, nested, create_inline_row(view, nested, base)) ++
+          nested_add_button(base, nested, %{
+            "argument" => to_string(nested.argument),
+            "rows" => %{"path" => "/form/#{nested.argument}"}
+          })
+
+      :pick_existing ->
+        picker = pick_existing_picker(view, nested, base, options)
+
+        [nested_section(base, ["#{base}_heading", "#{base}_rows" | picker.children])] ++
+          header ++ nested_rows(base, nested, pick_existing_row(base)) ++ picker.components
+    end
+  end
+
+  defp nested_section(base, children) do
+    %{"id" => base, "component" => "Column", "children" => children}
+  end
+
+  defp nested_rows(base, nested, {row_children, row_components}) do
+    [
+      %{
+        "id" => "#{base}_rows",
+        "component" => "List",
+        "children" => %{"componentId" => "#{base}_row", "path" => "/form/#{nested.argument}"}
+      },
+      %{"id" => "#{base}_row", "component" => "Row", "children" => row_children}
+    ] ++ row_components ++ nested_remove_button(base, nested)
+  end
+
+  # create_inline rows: one widget-mapped input per nested field bound to the
+  # template-relative field path (conforming renderers resolve it to the
+  # index-addressed /form/<argument>/<index>/<field> for two-way binding),
+  # plus a per-field error Text bound to the row's "_error_<field>" mirror.
+  defp create_inline_row(_view, nested, base) do
+    children =
+      Enum.flat_map(nested.fields, fn field ->
+        ["#{base}_input_#{field}", "#{base}_row_error_#{field}"]
+      end) ++ ["#{base}_remove_button"]
+
+    inputs = Enum.map(nested.fields, &nested_input(nested, base, &1))
+
+    errors =
+      Enum.map(nested.fields, fn field ->
+        %{
+          "id" => "#{base}_row_error_#{field}",
+          "component" => "Text",
+          "text" => %{"path" => "_error_#{field}"},
+          "variant" => "caption"
+        }
+      end)
+
+    {children, inputs ++ errors}
+  end
+
+  defp pick_existing_row(base) do
+    {
+      ["#{base}_row_label", "#{base}_remove_button"],
+      [
+        %{
+          "id" => "#{base}_row_label",
+          "component" => "Text",
+          "text" => %{"path" => "label"}
+        }
+      ]
+    }
+  end
+
+  # The pick_existing add mechanism: with option_search a search input +
+  # result List whose option Buttons dispatch `nested_add` directly with the
+  # template-relative option "value"; without one a ChoicePicker of the
+  # loaded options (inline, limit-capped — the v0.9.1 constraint) bound to
+  # /select/<argument>/picked plus an Add button carrying that binding.
+  defp pick_existing_picker(_view, %{search_fields: [_ | _]} = nested, base, _options) do
+    name = to_string(nested.argument)
+
+    %{
+      children: ["#{base}_controls", "#{base}_options"],
+      components:
+        [
+          %{
+            "id" => "#{base}_controls",
+            "component" => "Row",
+            "children" => ["#{base}_search_input", "#{base}_search_button"]
+          }
+        ] ++
+          search_controls(base, name) ++
+          option_list(base, "/options/#{nested.argument}", %{
+            "name" => "nested_add",
+            "context" => %{
+              "argument" => name,
+              "value" => %{"path" => "value"},
+              "rows" => %{"path" => "/form/#{nested.argument}"}
+            }
+          })
+    }
+  end
+
+  defp pick_existing_picker(_view, nested, base, options) do
+    picker = %{
+      "id" => "#{base}_picker",
+      "component" => "ChoicePicker",
+      "label" => "Add",
+      "variant" => "mutuallyExclusive",
+      "value" => %{"path" => "/select/#{nested.argument}/picked"},
+      "options" => Map.fetch!(options, nested.argument)
+    }
+
+    %{
+      children: ["#{base}_picker", "#{base}_add_button"],
+      components:
+        [picker] ++
+          nested_add_button(base, nested, %{
+            "argument" => to_string(nested.argument),
+            "value" => %{"path" => "/select/#{nested.argument}/picked"},
+            "rows" => %{"path" => "/form/#{nested.argument}"}
+          })
+    }
+  end
+
+  defp nested_add_button(base, _nested, context) do
+    [
+      %{
+        "id" => "#{base}_add_button",
+        "component" => "Button",
+        "child" => "#{base}_add_text",
+        "action" => %{"event" => %{"name" => "nested_add", "context" => context}}
+      },
+      %{"id" => "#{base}_add_text", "component" => "Text", "text" => "Add"}
+    ]
+  end
+
+  defp nested_remove_button(base, nested) do
+    [
+      %{
+        "id" => "#{base}_remove_button",
+        "component" => "Button",
+        "child" => "#{base}_remove_text",
+        "action" => %{
+          "event" => %{
+            "name" => "nested_remove",
+            "context" => %{
+              "argument" => to_string(nested.argument),
+              "row" => %{"path" => "_row"},
+              "rows" => %{"path" => "/form/#{nested.argument}"}
+            }
+          }
+        }
+      },
+      %{"id" => "#{base}_remove_text", "component" => "Text", "text" => "Remove"}
+    ]
+  end
+
+  # Nested inputs widget-map against the *destination* resource's attribute
+  # types (the parent surface's field entities don't apply inside rows).
+  defp nested_input(nested, base, field) do
+    binding = %{"path" => to_string(field)}
+    label = humanize(field)
+    id = "#{base}_input_#{field}"
+    base_props = %{"id" => id, "label" => label, "value" => binding}
+
+    type = attribute_type(nested.destination, field)
+    constraints = attribute_constraints(nested.destination, field)
+
+    case AshA2ui.TypeMapper.widget_for(type || Ash.Type.String, constraints) do
+      :check_box ->
+        Map.put(base_props, "component", "CheckBox")
+
+      :choice_picker ->
+        base_props
+        |> Map.put("component", "ChoicePicker")
+        |> Map.put("variant", "mutuallyExclusive")
+        |> Map.put("options", choice_options(nested.destination, field))
+
+      :date_time_input ->
+        base_props
+        |> Map.put("component", "DateTimeInput")
+        |> Map.put("enableDate", true)
+        |> Map.put("enableTime", not date_only?(nested.destination, field))
+
+      _text_field ->
+        text_field = Map.put(base_props, "component", "TextField")
+
+        if numeric?(nested.destination, field) do
+          Map.put(text_field, "variant", "number")
+        else
+          text_field
+        end
+    end
   end
 
   defp form_input(view, field_name, options) do

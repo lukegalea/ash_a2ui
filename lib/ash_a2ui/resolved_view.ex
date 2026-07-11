@@ -64,11 +64,16 @@ defmodule AshA2ui.ResolvedView do
     loads: [],
     tables: [],
     actions: %{},
-    refreshes: %{}
+    refreshes: %{},
+    nested_forms: %{}
   ]
 
   @typedoc """
   Resolved option-loading config for one relationship-backed form select.
+  A non-empty `search_fields` (from the field's `option_search` option)
+  makes the select searchable: options refresh through the `"option_search"`
+  action and selection round-trips through `"option_select"` instead of a
+  static ChoicePicker.
   """
   @type select :: %{
           relationship: atom,
@@ -76,7 +81,30 @@ defmodule AshA2ui.ResolvedView do
           option_label: atom,
           option_value: atom,
           option_sort: atom,
-          option_limit: pos_integer
+          option_limit: pos_integer,
+          search_fields: [atom]
+        }
+
+  @typedoc """
+  A resolved `nested_form` entity: the form-action argument it edits, the
+  relationship + destination behind it, the inferred interaction mode
+  (see `AshA2ui.ManagedForms.mode/1`), the create_inline sub-form `fields`
+  (`[]` in pick_existing mode), and the pick_existing option-loading config
+  (option keys resolved like a select's; `search_fields` from
+  `option_search`).
+  """
+  @type nested_form :: %{
+          argument: atom,
+          relationship: atom,
+          destination: module,
+          mode: :pick_existing | :create_inline,
+          fields: [atom],
+          label: String.t(),
+          option_label: atom,
+          option_value: atom,
+          option_sort: atom,
+          option_limit: pos_integer,
+          search_fields: [atom]
         }
 
   @typedoc """
@@ -116,7 +144,8 @@ defmodule AshA2ui.ResolvedView do
           loads: list,
           tables: [table],
           actions: %{atom => AshA2ui.Action.t()},
-          refreshes: %{atom => [atom] | nil}
+          refreshes: %{atom => [atom] | nil},
+          nested_forms: %{atom => nested_form}
         }
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
@@ -156,21 +185,25 @@ defmodule AshA2ui.ResolvedView do
     tables = resolve_tables(resource_or_ui_module, resource, components, fields, actions)
     single = if match?([_only], tables), do: hd(tables)
 
+    create_action = component_action(form, :create_action, resource, :create)
+    update_action = component_action(form, :update_action, resource, :update)
+
     %__MODULE__{
       resource: resource,
       surface_id: surface_id(resource_or_ui_module, resource),
       components: components,
       fields: fields,
       read_action: single && single.read_action,
-      create_action: component_action(form, :create_action, resource, :create),
-      update_action: component_action(form, :update_action, resource, :update),
+      create_action: create_action,
+      update_action: update_action,
       query: single && single.query,
       row_actions: tables |> Enum.flat_map(& &1.row_actions) |> Enum.uniq(),
       selects: selects,
       loads: tables |> Enum.flat_map(& &1.loads) |> Enum.uniq(),
       tables: tables,
       actions: actions,
-      refreshes: Map.new(actions, fn {name, action} -> {name, action.refreshes} end)
+      refreshes: Map.new(actions, fn {name, action} -> {name, action.refreshes} end),
+      nested_forms: resolve_nested_forms(resource, form, create_action || update_action)
     }
   end
 
@@ -181,6 +214,158 @@ defmodule AshA2ui.ResolvedView do
   """
   @spec multi_table?(t()) :: boolean
   def multi_table?(%__MODULE__{tables: tables}), do: match?([_, _ | _], tables)
+
+  @doc """
+  Every option list the surface loads (and the `"option_search"` action may
+  refresh), keyed by the `/options/<name>` segment: relationship selects
+  (`kind: :select`) plus pick_existing nested forms (`kind: :nested_form`).
+  Each source carries the resolved `destination` / `option_label` /
+  `option_value` / `option_sort` / `option_limit` / `search_fields` keys.
+  """
+  @spec option_sources(t()) :: %{atom => map}
+  def option_sources(%__MODULE__{} = view) do
+    selects =
+      Map.new(view.selects, fn {name, select} -> {name, Map.put(select, :kind, :select)} end)
+
+    pickers =
+      for {name, %{mode: :pick_existing} = nested} <- view.nested_forms, into: %{} do
+        {name,
+         %{
+           kind: :nested_form,
+           relationship: nested.relationship,
+           destination: nested.destination,
+           option_label: nested.option_label,
+           option_value: nested.option_value,
+           option_sort: nested.option_sort,
+           option_limit: nested.option_limit,
+           search_fields: nested.search_fields
+         }}
+      end
+
+    Map.merge(selects, pickers)
+  end
+
+  @doc """
+  The `/select/<name>` state entries the surface's data model carries: one
+  `%{"search" => "", "label" => ""}` per **searchable** relationship select
+  and one `%{"search" => "", "picked" => []}` per pick_existing nested form
+  (`"search"` meaningful only when searchable). Empty when the surface uses
+  neither — the frozen pre-wave-5 data-model shape is unchanged.
+  """
+  @spec select_state(t()) :: %{String.t() => map}
+  def select_state(%__MODULE__{} = view) do
+    searchable =
+      for {name, %{search_fields: [_ | _]}} <- view.selects, into: %{} do
+        {to_string(name), %{"search" => "", "label" => ""}}
+      end
+
+    pickers =
+      for {name, %{mode: :pick_existing}} <- view.nested_forms, into: %{} do
+        {to_string(name), %{"search" => "", "picked" => []}}
+      end
+
+    Map.merge(searchable, pickers)
+  end
+
+  @doc """
+  The initial (and post-success) `/form` value: empty, except nested-form
+  arguments start as stable empty row arrays so their List templates and
+  `"rows"` context bindings always have a value.
+  """
+  @spec initial_form(t()) :: map
+  def initial_form(%__MODULE__{} = view) do
+    Map.new(view.nested_forms, fn {name, _nested} -> {to_string(name), []} end)
+  end
+
+  @doc """
+  The `Ash.Query.load/2` statement `select_row` record fetches need beyond
+  the table loads: the relationship behind every searchable select (to
+  derive the current selection's label) and behind every nested form (to
+  populate the argument's rows).
+  """
+  @spec form_loads(t()) :: [atom]
+  def form_loads(%__MODULE__{} = view) do
+    select_loads =
+      for {_name, %{search_fields: [_ | _], relationship: relationship}} <- view.selects,
+          do: relationship
+
+    nested_loads =
+      for {_name, %{relationship: relationship}} <- view.nested_forms, do: relationship
+
+    Enum.uniq(select_loads ++ nested_loads)
+  end
+
+  # --- nested forms -------------------------------------------------------------
+
+  # Nested forms resolve against one form action (create when declared, else
+  # update — the verifier guarantees every form action agrees on the change
+  # and mode, so either works). Skipped without a form or resolvable action.
+  defp resolve_nested_forms(resource, form, action_name)
+
+  defp resolve_nested_forms(_resource, nil, _action_name), do: %{}
+  defp resolve_nested_forms(_resource, _form, nil), do: %{}
+
+  defp resolve_nested_forms(resource, form, action_name) do
+    Map.new(form.nested_forms, fn nested ->
+      {nested.name, resolve_nested_form(resource, nested, action_name)}
+    end)
+  end
+
+  defp resolve_nested_form(resource, nested, action_name) do
+    case AshA2ui.ManagedForms.manage(resource, action_name, nested.name) do
+      {:ok, %{relationship: relationship} = manage} ->
+        {:ok, mode} = AshA2ui.ManagedForms.mode(manage.opts)
+        destination = relationship.destination
+
+        option_value =
+          nested.option_value || nested_single_primary_key!(nested, destination)
+
+        option_label = nested.option_label || default_option_label(destination, option_value)
+
+        %{
+          argument: nested.name,
+          relationship: relationship.name,
+          destination: destination,
+          mode: mode,
+          fields: nested_fields(nested, mode, manage),
+          label: nested.label || humanize(nested.name),
+          option_label: option_label,
+          option_value: option_value,
+          option_sort: nested.option_sort || option_label,
+          option_limit: nested.option_limit,
+          search_fields: nested.option_search
+        }
+
+      :error ->
+        raise ArgumentError,
+              "nested_form #{inspect(nested.name)} does not map to a manage_relationship " <>
+                "change consuming argument #{inspect(nested.name)} on action " <>
+                "#{inspect(action_name)} of #{inspect(resource)}"
+    end
+  end
+
+  defp nested_fields(_nested, :pick_existing, _manage), do: []
+
+  defp nested_fields(nested, :create_inline, manage) do
+    nested.fields || AshA2ui.ManagedForms.default_fields(manage) ||
+      raise(
+        ArgumentError,
+        "cannot infer fields for nested_form #{inspect(nested.name)}: declare them explicitly"
+      )
+  end
+
+  defp nested_single_primary_key!(nested, destination) do
+    case ResourceInfo.primary_key(destination) do
+      [key] ->
+        key
+
+      composite ->
+        raise ArgumentError,
+              "cannot infer option_value for nested_form #{inspect(nested.name)}: " <>
+                "#{inspect(destination)} has a composite primary key " <>
+                "#{inspect(composite)} — set option_value explicitly"
+    end
+  end
 
   # --- table scopes -------------------------------------------------------------
 
@@ -268,7 +453,8 @@ defmodule AshA2ui.ResolvedView do
       option_label: option_label,
       option_value: option_value,
       option_sort: field.option_sort || option_label,
-      option_limit: field.option_limit
+      option_limit: field.option_limit,
+      search_fields: field.option_search
     }
   end
 

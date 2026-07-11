@@ -15,6 +15,7 @@ defmodule AshA2ui.Component do
     :update_action,
     :query,
     row_actions: [],
+    nested_forms: [],
     __spark_metadata__: nil
   ]
 
@@ -26,7 +27,8 @@ defmodule AshA2ui.Component do
           create_action: atom | nil,
           update_action: atom | nil,
           query: atom | nil,
-          row_actions: [atom]
+          row_actions: [atom],
+          nested_forms: [AshA2ui.NestedForm.t()]
         }
 
   @doc """

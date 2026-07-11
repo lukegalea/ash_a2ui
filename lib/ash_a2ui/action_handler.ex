@@ -115,6 +115,10 @@ defmodule AshA2ui.ActionHandler do
   strings, atoms to strings).
   """
 
+  import Ash.Expr
+
+  require Ash.Query
+
   alias Ash.Resource.Info, as: ResourceInfo
   alias AshA2ui.Conditions
   alias AshA2ui.QueryRunner
@@ -207,6 +211,7 @@ defmodule AshA2ui.ActionHandler do
 
   defp dispatch("submit_form", context, env) do
     values = Map.get(context, "values") || %{}
+    env = Map.put(env, :submitted, values)
 
     case Map.get(context, "recordId") do
       nil -> create(env, values)
@@ -295,9 +300,290 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  defp dispatch("option_search", context, %{view: view, ash_opts: ash_opts}) do
+    name = Map.get(context, "field")
+    search = Map.get(context, "search") || ""
+    source = is_binary(name) && option_source(view, name)
+
+    cond do
+      not is_binary(name) ->
+        {:error, [status(view, ~s(Malformed option_search action: context is missing "field".))]}
+
+      match?({_name, %{search_fields: [_ | _]}}, source) == false ->
+        {:error,
+         [
+           status(
+             view,
+             "Field #{inspect(name)} is not a searchable select: it declares no option_search."
+           )
+         ]}
+
+      not is_binary(search) ->
+        {:error, [status(view, ~s(Malformed option_search action: "search" must be a string.))]}
+
+      true ->
+        {source_name, source_config} = source
+
+        case search_options(source_config, search, ash_opts) do
+          {:ok, options} ->
+            {:ok, [update_data_model(view, "/options/#{source_name}", options)]}
+
+          {:error, error} ->
+            {:error, error_messages(view, error)}
+        end
+    end
+  end
+
+  defp dispatch("option_select", context, %{view: view, ash_opts: ash_opts}) do
+    name = Map.get(context, "field")
+    value = unwrap_picked(Map.get(context, "value"))
+
+    select =
+      is_binary(name) &&
+        Enum.find_value(view.selects, fn {field, select} ->
+          to_string(field) == name && {field, select}
+        end)
+
+    cond do
+      not is_binary(name) ->
+        {:error, [status(view, ~s(Malformed option_select action: context is missing "field".))]}
+
+      select in [nil, false] or match?({_f, %{search_fields: []}}, select) ->
+        {:error,
+         [
+           status(
+             view,
+             "Field #{inspect(name)} is not a searchable select: it declares no option_search."
+           )
+         ]}
+
+      not is_binary(value) or value == "" ->
+        {:error, [status(view, ~s(Malformed option_select action: context is missing "value".))]}
+
+      true ->
+        {field, select_config} = select
+        selected_option_messages(view, field, select_config, value, ash_opts)
+    end
+  end
+
+  defp dispatch("nested_add", context, %{view: view, ash_opts: ash_opts}) do
+    with {:ok, argument, nested} <- nested_target(view, context) do
+      rows = sanitize_rows(Map.get(context, "rows"))
+
+      case nested.mode do
+        :create_inline ->
+          {:ok, [update_data_model(view, "/form/#{argument}", rows ++ [blank_row(nested)])]}
+
+        :pick_existing ->
+          nested_pick(view, argument, nested, rows, context, ash_opts)
+      end
+    end
+  end
+
+  defp dispatch("nested_remove", context, %{view: view}) do
+    with {:ok, argument, _nested} <- nested_target(view, context) do
+      row = Map.get(context, "row")
+
+      if is_binary(row) do
+        rows =
+          context
+          |> Map.get("rows")
+          |> sanitize_rows()
+          |> Enum.reject(&(Map.get(&1, "_row") == row))
+
+        {:ok, [update_data_model(view, "/form/#{argument}", rows)]}
+      else
+        {:error, [status(view, ~s(Malformed nested_remove action: context is missing "row".))]}
+      end
+    end
+  end
+
   defp dispatch(name, _context, %{view: view}) do
     {:error, [status(view, "Unknown action #{inspect(name)}.")]}
   end
+
+  # --- option search / nested rows ---------------------------------------------
+
+  # The option_select success path: re-fetch the picked record (policies
+  # apply — spoofed / unauthorized ids never reach /form), then write the
+  # value and its canonical label.
+  defp selected_option_messages(view, field, select_config, value, ash_opts) do
+    case fetch_option(select_config, value, ash_opts) do
+      {:ok, record} ->
+        entry = AshA2ui.Info.option_entry(record, select_config)
+
+        {:ok,
+         [
+           update_data_model(view, "/form/#{field}", entry["value"]),
+           update_data_model(view, "/select/#{field}", %{
+             "search" => "",
+             "label" => entry["label"]
+           })
+         ]}
+
+      :not_found ->
+        {:error, [status(view, "Option #{inspect(value)} was not found.")]}
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  defp option_source(view, name) do
+    view
+    |> ResolvedView.option_sources()
+    |> Enum.find(fn {source_name, _source} -> to_string(source_name) == name end)
+  end
+
+  # Runs the allowlisted option search: a case-insensitive contains over the
+  # declared option_search fields (OR'd), through the destination's primary
+  # read with the surface's actor/tenant/authorize? opts, sorted by
+  # option_sort and capped at option_limit. An empty search returns the
+  # default first page (same as the initial load).
+  defp search_options(source, search, ash_opts) do
+    query =
+      source.destination
+      |> Ash.Query.for_read(
+        ResourceInfo.primary_action!(source.destination, :read).name,
+        %{},
+        destination_opts(source.destination, ash_opts)
+      )
+      |> apply_option_search(source.search_fields, search)
+      |> Ash.Query.sort([{source.option_sort, :asc}])
+      |> Ash.Query.limit(source.option_limit)
+
+    case Ash.read(query) do
+      {:ok, records} -> {:ok, Enum.map(records, &AshA2ui.Info.option_entry(&1, source))}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp apply_option_search(query, _fields, ""), do: query
+
+  defp apply_option_search(query, fields, search) do
+    ci_search = Ash.CiString.new(search)
+
+    condition =
+      fields
+      |> Enum.map(&expr(contains(^ref(&1), ^ci_search)))
+      |> Enum.reduce(&expr(^&2 or ^&1))
+
+    Ash.Query.filter(query, ^condition)
+  end
+
+  # Reads the destination record behind a picked option value (authorized —
+  # a value the actor cannot read cannot be selected).
+  defp fetch_option(source, value, ash_opts) do
+    query =
+      source.destination
+      |> Ash.Query.for_read(
+        ResourceInfo.primary_action!(source.destination, :read).name,
+        %{},
+        destination_opts(source.destination, ash_opts)
+      )
+      |> Ash.Query.filter(^ref(source.option_value) == ^value)
+      |> Ash.Query.limit(1)
+
+    case Ash.read(query) do
+      {:ok, [record]} -> {:ok, record}
+      {:ok, []} -> :not_found
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp destination_opts(destination, ash_opts) do
+    Keyword.put(
+      ash_opts,
+      :domain,
+      ResourceInfo.domain(destination) || ash_opts[:domain]
+    )
+  end
+
+  defp nested_target(view, context) do
+    name = Map.get(context, "argument")
+
+    nested =
+      is_binary(name) &&
+        Enum.find_value(view.nested_forms, fn {argument, nested} ->
+          to_string(argument) == name && {argument, nested}
+        end)
+
+    cond do
+      not is_binary(name) ->
+        {:error, [status(view, ~s(Malformed nested action: context is missing "argument".))]}
+
+      nested in [nil, false] ->
+        {:error,
+         [
+           status(
+             view,
+             "Argument #{inspect(name)} is not a nested form on this surface."
+           )
+         ]}
+
+      true ->
+        {argument, config} = nested
+        {:ok, argument, config}
+    end
+  end
+
+  # Client-carried rows are display/form state only (the Ash action is the
+  # authority at submit) — but they must at least be maps.
+  defp sanitize_rows(rows) when is_list(rows), do: Enum.filter(rows, &is_map/1)
+  defp sanitize_rows(_rows), do: []
+
+  # A fresh create_inline row: the server-generated "_row" key (the remove
+  # button's identity) plus one default per sub-form field (false for
+  # booleans, "" otherwise).
+  defp blank_row(nested) do
+    nested.fields
+    |> Map.new(&{Atom.to_string(&1), blank_value(nested.destination, &1)})
+    |> Map.put("_row", Ash.UUID.generate())
+  end
+
+  defp blank_value(destination, field) do
+    case ResourceInfo.attribute(destination, field) do
+      %{type: type} -> if Ash.Type.get_type(type) == Ash.Type.Boolean, do: false, else: ""
+      nil -> ""
+    end
+  end
+
+  # pick_existing add: validates the picked value against the destination
+  # (authorized read), dedupes by "id", and appends the
+  # %{"_row", "id", "label"} row.
+  defp nested_pick(view, argument, nested, rows, context, ash_opts) do
+    value = unwrap_picked(Map.get(context, "value"))
+
+    cond do
+      not is_binary(value) or value == "" ->
+        {:error, [status(view, ~s(Malformed nested_add action: context is missing "value".))]}
+
+      Enum.any?(rows, &(Map.get(&1, "id") == value)) ->
+        {:ok, [update_data_model(view, "/form/#{argument}", rows)]}
+
+      true ->
+        case fetch_option(nested, value, ash_opts) do
+          {:ok, record} ->
+            entry = AshA2ui.Info.option_entry(record, nested)
+
+            row = %{"_row" => entry["value"], "id" => entry["value"], "label" => entry["label"]}
+
+            {:ok, [update_data_model(view, "/form/#{argument}", rows ++ [row])]}
+
+          :not_found ->
+            {:error, [status(view, "Option #{inspect(value)} was not found.")]}
+
+          {:error, error} ->
+            {:error, error_messages(view, error)}
+        end
+    end
+  end
+
+  # ChoicePickers bind string lists; picked values may arrive as
+  # one-element lists.
+  defp unwrap_picked([value]), do: value
+  defp unwrap_picked([]), do: nil
+  defp unwrap_picked(value), do: value
 
   # The table a "query" action targets: the only table on single-table
   # surfaces; on multi-table surfaces the context must carry the source
@@ -326,6 +612,7 @@ defmodule AshA2ui.ActionHandler do
   defp create(%{view: view, ash_opts: ash_opts} = env, values) do
     action = view.create_action || primary_action(view.resource, :create)
     env = Map.put(env, :invoked, action)
+    values = prepare_nested_values(view, values)
 
     view.resource
     |> Ash.Changeset.for_create(action, cast_values(view.resource, action, values), ash_opts)
@@ -336,6 +623,7 @@ defmodule AshA2ui.ActionHandler do
   defp update(%{view: view, ash_opts: ash_opts} = env, record_id, values) do
     action = view.update_action || primary_action(view.resource, :update)
     env = Map.put(env, :invoked, action)
+    values = prepare_nested_values(view, values)
 
     result =
       with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
@@ -345,6 +633,44 @@ defmodule AshA2ui.ActionHandler do
       end
 
     after_write(result, env, "Updated successfully.")
+  end
+
+  # Nested-form argument values are prepared before the Ash cast:
+  # create_inline rows drop their client-state underscore keys ("_row",
+  # "_error_*" — real record "id"s stay, so on_match updates work);
+  # pick_existing rows reduce to their picked "id" values (the
+  # manage_relationship lookup input).
+  defp prepare_nested_values(view, values) when is_map(values) do
+    Enum.reduce(view.nested_forms, values, fn {name, nested}, acc ->
+      key = Atom.to_string(name)
+
+      case Map.fetch(acc, key) do
+        {:ok, rows} when is_list(rows) -> Map.put(acc, key, prepare_rows(nested, rows))
+        _absent_or_not_a_list -> acc
+      end
+    end)
+  end
+
+  defp prepare_nested_values(_view, values), do: values
+
+  defp prepare_rows(%{mode: :pick_existing}, rows) do
+    rows
+    |> Enum.map(fn
+      %{} = row -> Map.get(row, "id")
+      value when is_binary(value) -> value
+      _other -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp prepare_rows(%{mode: :create_inline}, rows) do
+    Enum.map(rows, fn
+      %{} = row ->
+        Map.reject(row, fn {key, _value} -> String.starts_with?(to_string(key), "_") end)
+
+      other ->
+        other
+    end)
   end
 
   # --- invoke ----------------------------------------------------------------
@@ -544,13 +870,89 @@ defmodule AshA2ui.ActionHandler do
 
   # --- select_row ------------------------------------------------------------
 
+  # Populates /form with the record's field values plus one row array per
+  # nested-form argument (loaded through the argument's relationship), and
+  # rewrites /select with the searchable selects' current labels (surfaces
+  # without wave-5 relationship inputs emit the single frozen /form message).
   defp select_row(view, record_id, ash_opts) do
-    case fetch_record(view, record_id, ash_opts) do
+    case fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)) do
       {:ok, record} ->
-        {:ok, [update_data_model(view, "/form", record_values(view, record, form_fields(view)))]}
+        form =
+          view
+          |> record_values(record, form_fields(view))
+          |> Map.merge(nested_row_values(view, record))
+
+        {:ok, [update_data_model(view, "/form", form) | select_state_messages(view, record)]}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
+    end
+  end
+
+  # The /form/<argument> rows of the record's currently-related records:
+  # pick_existing rows are %{"_row", "id", "label"}; create_inline rows carry
+  # the destination's primary key fields plus the sub-form field values, with
+  # "_row" derived from the primary key (keeping "id" lets the
+  # manage_relationship on_match path update instead of recreate).
+  defp nested_row_values(view, record) do
+    Map.new(view.nested_forms, fn {name, nested} ->
+      related = related_list(record, nested.relationship)
+      {Atom.to_string(name), Enum.map(related, &nested_row(nested, &1))}
+    end)
+  end
+
+  defp related_list(record, relationship) do
+    case Map.get(record, relationship) do
+      %Ash.NotLoaded{} -> []
+      nil -> []
+      related when is_list(related) -> related
+      related -> [related]
+    end
+  end
+
+  defp nested_row(%{mode: :pick_existing} = nested, related) do
+    entry = AshA2ui.Info.option_entry(related, nested)
+    %{"_row" => entry["value"], "id" => entry["value"], "label" => entry["label"]}
+  end
+
+  defp nested_row(%{mode: :create_inline} = nested, related) do
+    pk_fields = Ash.Resource.Info.primary_key(nested.destination)
+
+    row =
+      Map.new(pk_fields ++ nested.fields, fn field ->
+        {Atom.to_string(field), json_value(Map.get(related, field))}
+      end)
+
+    Map.put(row, "_row", Enum.map_join(pk_fields, "-", &to_string(Map.get(related, &1))))
+  end
+
+  # One wholesale /select rewrite: searchable selects get their current
+  # selection's label (through the loaded belongs_to), pickers reset.
+  defp select_state_messages(view, record) do
+    case ResolvedView.select_state(view) do
+      state when state == %{} ->
+        []
+
+      state ->
+        filled =
+          Enum.reduce(view.selects, state, fn
+            {name, %{search_fields: [_ | _]} = select}, acc ->
+              label = related_label(record, select)
+              Map.put(acc, to_string(name), %{"search" => "", "label" => label})
+
+            _plain_select, acc ->
+              acc
+          end)
+
+        [update_data_model(view, "/select", filled)]
+    end
+  end
+
+  defp related_label(record, select) do
+    case Map.get(record, select.relationship) do
+      %Ash.NotLoaded{} -> ""
+      nil -> ""
+      related -> AshA2ui.Info.option_entry(related, select)["label"]
     end
   end
 
@@ -559,8 +961,8 @@ defmodule AshA2ui.ActionHandler do
   defp after_write(:ok, env, status_text), do: success(env, status_text)
   defp after_write({:ok, _record}, env, status_text), do: success(env, status_text)
 
-  defp after_write({:error, error}, %{view: view}, _status_text),
-    do: {:error, error_messages(view, error)}
+  defp after_write({:error, error}, %{view: view} = env, _status_text),
+    do: {:error, error_messages(view, error) ++ nested_error_mirrors(env, error)}
 
   # A success re-reads and re-emits every refresh-target table (each table's
   # records path, plus its query state when a query is attached — run
@@ -581,15 +983,24 @@ defmodule AshA2ui.ActionHandler do
         {:ok,
          refresh ++
            [
-             update_data_model(view, "/form", %{}),
+             update_data_model(view, "/form", ResolvedView.initial_form(view)),
              update_data_model(view, "/errors", %{}),
              update_data_model(view, "/ui/status", status_text),
              update_data_model(view, "/ui/action_result", %{}),
              update_data_model(view, "/ui/action_result_text", "")
-           ] ++ prompt_clear(env) ++ extra}
+           ] ++ select_clear(view) ++ prompt_clear(env) ++ extra}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
+    end
+  end
+
+  # Surfaces with searchable selects / pick_existing pickers reset their
+  # /select state alongside the /form clear.
+  defp select_clear(view) do
+    case ResolvedView.select_state(view) do
+      state when state == %{} -> []
+      state -> [update_data_model(view, "/select", state)]
     end
   end
 
@@ -775,11 +1186,58 @@ defmodule AshA2ui.ActionHandler do
 
   defp error_messages(view, error) do
     field_messages =
-      for {field, text} <- field_errors(error) do
-        update_data_model(view, "/errors/#{field}", text)
+      for {segments, text} <- field_errors(error) do
+        update_data_model(view, "/errors/" <> Enum.map_join(segments, "/", &to_string/1), text)
       end
 
     field_messages ++ [status(view, error_status(field_messages, error))]
+  end
+
+  # Validation errors on create_inline rows are additionally mirrored INTO
+  # the submitted rows as "_error_<field>" keys (one /form/<argument>
+  # rewrite), so the emitted row template's error Texts — which can only
+  # bind template-relative paths — display them. The frozen
+  # /errors/<argument>/<index>/<field> messages stay the programmatic
+  # contract.
+  defp nested_error_mirrors(%{view: view, submitted: submitted}, error)
+       when is_map(submitted) do
+    indexed =
+      error
+      |> field_errors()
+      |> Enum.filter(&match?({[_argument, index, _field], _text} when is_integer(index), &1))
+      |> Enum.group_by(fn {[argument, _index, _field], _text} -> to_string(argument) end)
+
+    view.nested_forms
+    |> Enum.filter(fn {_name, nested} -> nested.mode == :create_inline end)
+    |> Enum.flat_map(fn {name, _nested} ->
+      key = Atom.to_string(name)
+      rows = submitted |> Map.get(key) |> sanitize_rows()
+      row_errors = Map.get(indexed, key, [])
+
+      if rows == [] or row_errors == [] do
+        []
+      else
+        [update_data_model(view, "/form/#{name}", mirror_rows(rows, row_errors))]
+      end
+    end)
+  end
+
+  defp nested_error_mirrors(_env, _error), do: []
+
+  defp mirror_rows(rows, row_errors) do
+    cleared =
+      Enum.map(
+        rows,
+        &Map.reject(&1, fn {k, _v} -> String.starts_with?(to_string(k), "_error_") end)
+      )
+
+    Enum.reduce(row_errors, cleared, fn {[_argument, index, field], text}, acc ->
+      if index < length(acc) do
+        List.update_at(acc, index, &Map.put(&1, "_error_#{field}", text))
+      else
+        acc
+      end
+    end)
   end
 
   defp error_status([], error) when is_exception(error),
@@ -792,12 +1250,16 @@ defmodule AshA2ui.ActionHandler do
 
   # Walks the error-class `errors` list (as AshPhoenix.Form does) collecting
   # `%{field: f}` / `%{fields: [..]}` sub-errors, interpolating their `vars`
-  # into the message text.
+  # into the message text. Each entry is `{segments, text}` where `segments`
+  # is the error's `path` (set by Ash for managed-relationship sub-errors,
+  # e.g. `[:notes, 0]`) with the field appended — so a top-level error maps
+  # to `/errors/<field>` exactly as before, and a nested-row error to
+  # `/errors/<argument>/<index>/<field>`.
   defp field_errors(error) do
     error
     |> collect_field_errors()
-    |> Enum.group_by(fn {field, _text} -> field end, fn {_field, text} -> text end)
-    |> Enum.map(fn {field, texts} -> {field, Enum.join(Enum.uniq(texts), "; ")} end)
+    |> Enum.group_by(fn {segments, _text} -> segments end, fn {_segments, text} -> text end)
+    |> Enum.map(fn {segments, texts} -> {segments, Enum.join(Enum.uniq(texts), "; ")} end)
   end
 
   defp collect_field_errors(%{errors: errors}) when is_list(errors) do
@@ -805,14 +1267,21 @@ defmodule AshA2ui.ActionHandler do
   end
 
   defp collect_field_errors(%{field: field} = error) when not is_nil(field) do
-    [{field, error_text(error)}]
+    [{error_path(error) ++ [field], error_text(error)}]
   end
 
   defp collect_field_errors(%{fields: fields} = error) when is_list(fields) and fields != [] do
-    Enum.map(fields, &{&1, error_text(error)})
+    Enum.map(fields, &{error_path(error) ++ [&1], error_text(error)})
   end
 
   defp collect_field_errors(_error), do: []
+
+  defp error_path(error) do
+    case Map.get(error, :path) do
+      path when is_list(path) -> path
+      _no_path -> []
+    end
+  end
 
   defp error_text(%{message: message} = error) when is_binary(message) do
     interpolate(message, Map.get(error, :vars))
