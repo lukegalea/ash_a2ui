@@ -120,7 +120,8 @@ When the table declares a query, the encoder adds to the component tree:
   declares presets — see above),
 - one `ChoicePicker` per filter bound to `/query/filters/<name>` with an
   `"All"` (empty value) option first — options come from the attribute's (or
-  calculation's) `one_of` constraints (or True/False for booleans),
+  calculation's) `one_of` constraints or the attribute's `Ash.Type.Enum`
+  module's `values/0` (or True/False for booleans),
 - an **Apply** button and **Previous/Next** pagination buttons.
 
 All of them dispatch the `"query"` client action. The wire contract:

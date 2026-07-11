@@ -57,6 +57,14 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   compose expression calculations with attributes
   (`default_sort status_priority: :asc, code: :asc`); no new machinery,
   pinned by test.
+
+- `Ash.Type.Enum` attributes render as ChoicePickers: the TypeMapper now
+  detects `Ash.Type.Enum` implementations (previously they fell back to
+  TextField because their values live in the module, not in a `one_of`
+  constraint), and form inputs and query filter pickers source their options
+  from the enum's `values/0`, labeled via `label/1` when declared and
+  humanized otherwise.
+
 - Calculation & aggregate columns: table (and display) fields may name
   public calculations and aggregates. They are `Ash.Query.load`ed on every
   read path (initial render, post-action refreshes, `query` reads) and

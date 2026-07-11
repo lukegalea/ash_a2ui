@@ -124,9 +124,10 @@ nonexistent action is a compile error, not a runtime surprise.
 
 Widgets default from attribute types via `AshA2ui.TypeMapper.widget_for/2`
 (which takes the Ash type and its constraints) — `:string` → `TextField`,
-`:boolean` → `CheckBox`, an `:atom` with `one_of` constraints →
-`ChoicePicker`, datetimes → `DateTimeInput` — and can be overridden per field
-with `widget`.
+`:boolean` → `CheckBox`, an `:atom` with `one_of` constraints or an
+`Ash.Type.Enum` implementation → `ChoicePicker` (enum options come from the
+module's `values/0`, labeled via `label/1` when declared), datetimes →
+`DateTimeInput` — and can be overridden per field with `widget`.
 
 Prefer to keep UI metadata out of the domain resource? Put the same block in a
 standalone module instead:

@@ -1,10 +1,10 @@
 defmodule AshA2ui.TypeMapper do
   @moduledoc """
   Maps Ash types to default widget atoms: string -> `:text_field`, boolean ->
-  `:check_box`, atom with `one_of` constraints -> `:choice_picker`,
-  date/datetime -> `:date_time_input`. Numeric types map to `:text_field`
-  (the numeric keyboard hint is applied by the encoder). Unknown types fall
-  back to `:text_field`.
+  `:check_box`, atom with `one_of` constraints and `Ash.Type.Enum`
+  implementations -> `:choice_picker`, date/datetime -> `:date_time_input`.
+  Numeric types map to `:text_field` (the numeric keyboard hint is applied by
+  the encoder). Unknown types fall back to `:text_field`.
 
   The widget atom -> catalog component name mapping (`:text_field` ->
   `"TextField"`, ...) lives in the encoder (`AshA2ui.Encoder.V0_9_1`).
@@ -43,5 +43,19 @@ defmodule AshA2ui.TypeMapper do
     end
   end
 
-  defp do_widget_for(_type, _constraints), do: :text_field
+  defp do_widget_for(type, _constraints) do
+    if enum_type?(type), do: :choice_picker, else: :text_field
+  end
+
+  @doc """
+  Whether the given type module implements `Ash.Type.Enum` (its values come
+  from the module's `values/0` rather than a `one_of` constraint).
+  """
+  @spec enum_type?(term) :: boolean
+  def enum_type?(type) when is_atom(type) and not is_nil(type) do
+    Code.ensure_loaded?(type) and function_exported?(type, :values, 0) and
+      Spark.implements_behaviour?(type, Ash.Type.Enum)
+  end
+
+  def enum_type?(_type), do: false
 end

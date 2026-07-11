@@ -799,10 +799,24 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   defp choice_options(resource, field_name) do
-    resource
-    |> attribute_constraints(field_name)
-    |> Keyword.get(:one_of, [])
-    |> Enum.map(&%{"label" => humanize(&1), "value" => to_string(&1)})
+    type = attribute_type(resource, field_name)
+
+    if AshA2ui.TypeMapper.enum_type?(type) do
+      Enum.map(type.values(), &%{"label" => enum_label(type, &1), "value" => to_string(&1)})
+    else
+      resource
+      |> attribute_constraints(field_name)
+      |> Keyword.get(:one_of, [])
+      |> Enum.map(&%{"label" => humanize(&1), "value" => to_string(&1)})
+    end
+  end
+
+  # `Ash.Type.Enum.label/1` is nil unless the enum declared explicit labels.
+  defp enum_label(type, value) do
+    case type.label(value) do
+      nil -> humanize(value)
+      label -> to_string(label)
+    end
   end
 
   defp numeric?(resource, field_name),
