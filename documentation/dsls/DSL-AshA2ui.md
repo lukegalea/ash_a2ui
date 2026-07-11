@@ -20,6 +20,7 @@ for the resource named by `for_resource`).
 
 
 ### Nested DSLs
+ * [context](#a2ui-context)
  * [query](#a2ui-query)
    * preset
  * [component](#a2ui-component)
@@ -65,6 +66,77 @@ end
 | [`add_render_action?`](#a2ui-add_render_action?){: #a2ui-add_render_action? } | `boolean` | `true` | Whether to automatically add a generic `render_a2ui` action returning the surface's A2UI messages. Ignored in standalone UI modules. |
 
 
+
+### a2ui.context
+```elixir
+context name
+```
+
+
+A named, surface-level record selection ("pick a user") whose selected
+record scopes other sections: tables reference it via `context_filter`,
+dependent contexts via `depends_on`, and `:detail` components render the
+selected record. Selection state lives at the reserved `/context/<name>`
+data-model path, option lists at `/options/<name>`, and the client
+interacts through the `"context_search"` / `"context_select"` /
+`"context_clear"` actions — the client only ever sends a record id, and
+every selection round-trips through an authorized read (dependency
+filters included).
+
+
+
+
+### Examples
+```
+context :user do
+  resource MyApp.Accounts.User
+  option_label :email
+  option_search [:email, :name]
+end
+
+```
+
+```
+context :practice do
+  resource MyApp.Practices.Practice
+  option_label :name
+  depends_on :user
+  depends_on_path [:memberships, :user_id]
+  auto_select_single true
+end
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#a2ui-context-name){: #a2ui-context-name .spark-required} | `atom` |  | The name of the context: the `<name>` segment of the reserved `/context/<name>` and `/options/<name>` data-model paths, and how `context_filter` / `depends_on` / `:detail` components reference it. Must be unique across the surface's contexts, relationship-select fields and nested-form arguments (they share the `/options` namespace). |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`resource`](#a2ui-context-resource){: #a2ui-context-resource .spark-required} | `module` |  | The Ash resource whose records this context selects. |
+| [`label`](#a2ui-context-label){: #a2ui-context-label } | `String.t` |  | Heading shown above the picker. Defaults to the humanized context name. |
+| [`option_label`](#a2ui-context-option_label){: #a2ui-context-option_label } | `atom` |  | The attribute shown as the option/selection label. Defaults like a relationship select's `option_label` (first existing public attribute of `[:name, :title, :label, :username, :email]`, else the primary key). |
+| [`option_value`](#a2ui-context-option_value){: #a2ui-context-option_value } | `atom` |  | The attribute submitted as the selected value. Defaults to the resource's primary key (required explicitly when composite). |
+| [`option_sort`](#a2ui-context-option_sort){: #a2ui-context-option_sort } | `atom` |  | The attribute options are sorted by (ascending). Defaults to `option_label`. |
+| [`option_limit`](#a2ui-context-option_limit){: #a2ui-context-option_limit } | `pos_integer` | `100` | Maximum number of options loaded (and returned per `context_search`). |
+| [`option_search`](#a2ui-context-option_search){: #a2ui-context-option_search } | `list(atom)` | `[]` | Public string attributes of the resource searched (case-insensitive contains, OR'd) by the `"context_search"` client action. Non-empty adds a search input to the emitted picker. |
+| [`depends_on`](#a2ui-context-depends_on){: #a2ui-context-depends_on } | `atom` |  | The context this one depends on: its options are filtered by the parent's selected value (through `depends_on_path`), its options are empty while the parent is unselected, and its selection is cleared whenever the parent changes. |
+| [`depends_on_path`](#a2ui-context-depends_on_path){: #a2ui-context-depends_on_path } | `list(atom)` |  | The relationship path on this context's resource whose terminal attribute must equal the parent context's selected value, e.g. `[:memberships, :user_id]` — every step but the last a public relationship, the last a public attribute of the final destination (to-many paths get `exists` semantics). Required with `depends_on`. |
+| [`auto_select_single`](#a2ui-context-auto_select_single){: #a2ui-context-auto_select_single } | `boolean` | `false` | Automatically select this context when a parent selection leaves it exactly one option (dependent contexts only). |
+| [`picker`](#a2ui-context-picker){: #a2ui-context-picker } | `boolean` | `true` | Whether to emit a picker section for this context. Set `false` for contexts selected only through a table's `select_context` row button (master/detail) — no options are loaded or rendered. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Context`
 
 ### a2ui.query
 ```elixir
@@ -112,6 +184,7 @@ end
 |------|------|---------|------|
 | [`search_fields`](#a2ui-query-search_fields){: #a2ui-query-search_fields } | `list(atom \| list(atom))` | `[]` | Fields searched with a case-insensitive contains, OR'd together. Each entry is a public string attribute (`:subject`) or a relationship path to one (`[:author, :email]` — every step but the last a public relationship, the last a public string attribute of the destination). Empty means search is rejected. |
 | [`sortable`](#a2ui-query-sortable){: #a2ui-query-sortable } | `list(atom)` | `[]` | Public attributes the client may sort by. Anything else is rejected. |
+| [`range_filters`](#a2ui-query-range_filters){: #a2ui-query-range_filters } | `list(atom)` | `[]` | Public attributes (or expression-backed public calculations) of orderable types (date/datetime/numeric) the client may range-filter on through `/query/ranges/<field>` (`{"from", "to"}`, each optional). Anything else is rejected. |
 | [`filters`](#a2ui-query-filters){: #a2ui-query-filters } | `list(atom)` | `[]` | Public attributes or public expression calculations the client may equality-filter on. Anything else is rejected. |
 | [`default_preset`](#a2ui-query-default_preset){: #a2ui-query-default_preset } | `atom` |  | The preset applied when the client selects none. Must name a declared preset. |
 | [`default_sort`](#a2ui-query-default_sort){: #a2ui-query-default_sort } | `list({atom, :asc \| :desc})` | `[]` | The sort applied when the client requests none, e.g. `default_sort inserted_at: :desc`. |
@@ -186,9 +259,11 @@ component name, as \\ nil
 
 
 A UI component of the surface. `:table` renders records from a read action;
-`:form` renders create/update forms. A surface may declare several `:table`
-components (sections) by giving each one a distinguishing name via the
-optional second argument, e.g. `component :table, :new_items do ... end`.
+`:form` renders create/update forms; `:detail` renders the record selected
+into a `context` as a read-only field grid. A surface may declare several
+`:table` (or `:detail`) components (sections) by giving each one a
+distinguishing name via the optional second argument, e.g.
+`component :table, :new_items do ... end`.
 
 
 ### Nested DSLs
@@ -222,8 +297,8 @@ end
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#a2ui-component-name){: #a2ui-component-name .spark-required} | `:table \| :form` |  | The kind of component. One of `:table` or `:form`. |
-| [`as`](#a2ui-component-as){: #a2ui-component-as } | `atom` |  | The distinguishing name of this component on surfaces with several `:table` components (e.g. `component :table, :new_items`). Optional — a table without one is named `:table`. Names must be unique across the surface's components; `:form` components cannot be named. |
+| [`name`](#a2ui-component-name){: #a2ui-component-name .spark-required} | `:table \| :form \| :detail` |  | The kind of component. One of `:table`, `:form` or `:detail`. |
+| [`as`](#a2ui-component-as){: #a2ui-component-as } | `atom` |  | The distinguishing name of this component on surfaces with several `:table` (or `:detail`) components (e.g. `component :table, :new_items`). Optional — an unnamed component is named by its kind. Names must be unique across the surface's components; `:form` components cannot be named. |
 ### Options
 
 | Name | Type | Default | Docs |
@@ -234,6 +309,10 @@ end
 | [`update_action`](#a2ui-component-update_action){: #a2ui-component-update_action } | `atom` |  | The update action submitted by the form. |
 | [`row_actions`](#a2ui-component-row_actions){: #a2ui-component-row_actions } | `list(atom)` | `[]` | Actions rendered as per-row buttons (tables). |
 | [`query`](#a2ui-component-query){: #a2ui-component-query } | `atom` |  | Name of a `query` entity providing server-enforced search/sort/filter/pagination (tables). |
+| [`context_filter`](#a2ui-component-context_filter){: #a2ui-component-context_filter } | `keyword` | `[]` | Context scoping for a `:table`: keys are public attributes of the table's resource, values are declared context names (`context_filter user_id: :user`). Each context with a selected value ANDs `attribute == selected value` onto the table's reads; unselected contexts contribute nothing. |
+| [`require_context`](#a2ui-component-require_context){: #a2ui-component-require_context } | `list(atom)` | `[]` | Context names (a subset of this table's `context_filter` contexts) of which **at least one** must be selected before the table reads — otherwise it renders no records (and no read is executed). |
+| [`select_context`](#a2ui-component-select_context){: #a2ui-component-select_context } | `atom` |  | A declared context (over the same resource as this table) the table's per-row Select button selects into — the master/detail pattern: the button sends `"context_select"` with the row's record id instead of `"select_row"`. |
+| [`context`](#a2ui-component-context){: #a2ui-component-context } | `atom` |  | The declared context a `:detail` component renders: its selected record's fields are written to `/detail/<context>` and displayed as a read-only label/value grid. Required on `:detail` components. |
 
 
 ### a2ui.component.nested_form
