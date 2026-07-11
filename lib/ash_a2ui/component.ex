@@ -14,8 +14,10 @@ defmodule AshA2ui.Component do
     :create_action,
     :update_action,
     :query,
+    :row_layout,
     row_actions: [],
     nested_forms: [],
+    groups: [],
     __spark_metadata__: nil
   ]
 
@@ -27,8 +29,10 @@ defmodule AshA2ui.Component do
           create_action: atom | nil,
           update_action: atom | nil,
           query: atom | nil,
+          row_layout: AshA2ui.RowLayout.t() | nil,
           row_actions: [atom],
-          nested_forms: [AshA2ui.NestedForm.t()]
+          nested_forms: [AshA2ui.NestedForm.t()],
+          groups: [AshA2ui.Group.t()]
         }
 
   @doc """

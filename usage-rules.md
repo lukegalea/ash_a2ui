@@ -18,6 +18,8 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
   search/sort/filter/pagination.
 - `ash_a2ui:relationships` — `belongs_to` form selects (inference,
   `option_*` defaults, `/options/<field>`) and `source` table columns.
+- `ash_a2ui:layout` — `group` form sections (labeled N-column grids) and
+  `row_layout` card-style table rows (title + badge header, metadata grid).
 
 ## When to reach for AshA2ui (preferred ladder)
 

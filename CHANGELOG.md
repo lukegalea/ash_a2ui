@@ -10,6 +10,30 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Form field groups: the new `group` DSL entity inside `:form` components
+  (`group :scheduling do label "Scheduling"; columns 2; fields [...] end`)
+  renders a labeled section — a Card wrapping a heading Text (h3) over the
+  group's fields laid out in rows of `columns` equal-weight Columns (the
+  last row padded with empty spacers; single-column groups skip the grid
+  wrappers). Inputs, bindings, and submit semantics are unchanged — groups
+  only re-arrange containers. Ordering contract: ungrouped fields render in
+  place and a group renders whole at the position of its first member in
+  the form's field order. Compile-verified (group fields ⊆ form fields,
+  unique group names, no field in two groups) by the new
+  `AshA2ui.Verifiers.VerifyLayouts`; group-less forms emit byte-identical
+  payloads.
+- Card-style table rows: the new singleton `row_layout` entity inside
+  `:table` components (`row_layout do title :name; badge :is_active;
+  badge_text true: "Active"; meta [...]; columns 3 end`) turns the templated
+  record row into a Card — a header Row of the title Text (h4, weight 1)
+  and a right-hand Row of the badge Text plus the row's actions/select
+  button, over an N-column grid of caption-labeled meta values (honoring
+  field `format`). The badge binds the new computed `_badge_<field>` row
+  key (the `badge_text` entry matching the value, else the humanized value)
+  serialized identically on initial render and every handler refresh; the
+  raw field value stays untouched. `title`/`badge`/`meta` references are
+  compile-verified against the table's fields (each at most once);
+  layout-less tables keep the flat labeled-cell rows.
 - Theming toolkit for `@a2ui/lit`-rendered surfaces (see the new
   [Theming](documentation/topics/theming.md) topic):
   - `priv/js/ash_a2ui_theme.css` — a neutral, dependency-free CSS-variable

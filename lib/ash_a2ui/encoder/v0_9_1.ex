@@ -35,7 +35,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       (`row_action_<action>_button`: event `invoke`, context
       `{"action": "<name>", "recordId": {"path": "id"}}`) and a
       `row_select_button` (event `select_row`, context
-      `{"recordId": {"path": "id"}}`)
+      `{"recordId": {"path": "id"}}`). Tables declaring a `row_layout`
+      swap the card's content for a header + metadata-grid structure —
+      see the Layout topic and `card_row_components/4`
 
   ## Row-action prompts (prompt_fields)
 
@@ -477,17 +479,27 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   defp table_descendants(view, table, sfx) do
-    fields = table.component.fields
-    cell_ids = Enum.map(fields, &"table_cell#{sfx}_#{&1}")
-
     {action_ids, action_components} =
       table.row_actions
       |> Enum.map(&row_action_components(view, table, &1, sfx))
       |> Enum.unzip()
 
-    # Each record renders as a Card (chrome themed via --a2ui-card-*)
-    # wrapping the actual Row of cells; the List template still points at
-    # record_row, so this stays invisible to the data model and actions.
+    row_components =
+      case table.component.row_layout do
+        nil -> flat_row_components(view, table, action_ids, sfx)
+        layout -> card_row_components(view, layout, action_ids, sfx)
+      end
+
+    row_components ++ List.flatten(action_components) ++ select_button(table, sfx)
+  end
+
+  # Each record renders as a Card (chrome themed via --a2ui-card-*)
+  # wrapping the actual Row of labeled cells; the List template still points
+  # at record_row, so this stays invisible to the data model and actions.
+  defp flat_row_components(view, table, action_ids, sfx) do
+    fields = table.component.fields
+    cell_ids = Enum.map(fields, &"table_cell#{sfx}_#{&1}")
+
     card = %{
       "id" => "record_row#{sfx}",
       "component" => "Card",
@@ -500,9 +512,134 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "children" => cell_ids ++ action_ids ++ ["row_select#{sfx}_button"]
     }
 
-    cells = Enum.flat_map(fields, &cell(view, &1, sfx))
+    [card, row | Enum.flat_map(fields, &cell(view, &1, sfx))]
+  end
 
-    select_button = [
+  # Card-style rows (row_layout): the templated record_row becomes a Card
+  # whose Column body holds a header Row — the title Text (weight 1) and a
+  # right-hand Row of the badge Text (when declared) plus the row's action
+  # anchors and select button — above the meta grid (see grid_components/4:
+  # Rows of equal-weight Columns, each a caption label over the bound value).
+  defp card_row_components(view, layout, action_ids, sfx) do
+    base = "record_row#{sfx}"
+
+    badge =
+      if layout.badge do
+        [
+          %{
+            "id" => "#{base}_badge",
+            "component" => "Text",
+            "text" => %{"path" => "_badge_#{layout.badge}"},
+            "variant" => "caption"
+          }
+        ]
+      else
+        []
+      end
+
+    {meta_row_ids, meta_components} =
+      grid_components("#{base}_meta", layout.columns, layout.meta, fn field ->
+        {["#{base}_meta_label_#{field}", "#{base}_meta_value_#{field}"],
+         [
+           %{
+             "id" => "#{base}_meta_label_#{field}",
+             "component" => "Text",
+             "text" => view.fields[field].label,
+             "variant" => "caption"
+           },
+           %{
+             "id" => "#{base}_meta_value_#{field}",
+             "component" => "Text",
+             "text" => cell_text(view.fields[field])
+           }
+         ]}
+      end)
+
+    [
+      %{"id" => base, "component" => "Card", "child" => "#{base}_body"},
+      %{
+        "id" => "#{base}_body",
+        "component" => "Column",
+        "children" => ["#{base}_header" | meta_row_ids]
+      },
+      %{
+        "id" => "#{base}_header",
+        "component" => "Row",
+        "justify" => "spaceBetween",
+        "align" => "center",
+        "children" => ["#{base}_title", "#{base}_header_right"]
+      },
+      %{
+        "id" => "#{base}_title",
+        "component" => "Text",
+        "text" => cell_text(view.fields[layout.title]),
+        "variant" => "h4",
+        "weight" => 1
+      },
+      %{
+        "id" => "#{base}_header_right",
+        "component" => "Row",
+        "align" => "center",
+        "children" => Enum.map(badge, & &1["id"]) ++ action_ids ++ ["row_select#{sfx}_button"]
+      }
+    ] ++ badge ++ meta_components
+  end
+
+  # An N-column grid: items chunked into Rows of `columns` equal-weight cell
+  # Columns (each holding the ids `cell_fun` returns for its item), the last
+  # row padded with empty spacer Columns so cells stay aligned.
+  defp grid_components(base, columns, items, cell_fun) do
+    items
+    |> Enum.chunk_every(columns)
+    |> Enum.with_index()
+    |> Enum.map(fn {row_items, index} ->
+      cells =
+        Enum.map(row_items, fn item ->
+          {children, components} = cell_fun.(item)
+
+          {"#{base}_cell_#{item}",
+           [
+             %{
+               "id" => "#{base}_cell_#{item}",
+               "component" => "Column",
+               "weight" => 1,
+               "children" => children
+             }
+             | components
+           ]}
+        end)
+
+      spacers =
+        for spacer <- length(row_items)..(columns - 1)//1 do
+          {"#{base}_spacer_#{index}_#{spacer}",
+           [
+             %{
+               "id" => "#{base}_spacer_#{index}_#{spacer}",
+               "component" => "Column",
+               "weight" => 1,
+               "children" => []
+             }
+           ]}
+        end
+
+      {cell_ids, cell_components} = Enum.unzip(cells ++ spacers)
+
+      {"#{base}_row_#{index}",
+       [
+         %{
+           "id" => "#{base}_row_#{index}",
+           "component" => "Row",
+           "children" => cell_ids
+         }
+         | List.flatten(cell_components)
+       ]}
+    end)
+    |> Enum.unzip()
+    |> then(fn {row_ids, components} -> {row_ids, List.flatten(components)} end)
+  end
+
+  defp select_button(table, sfx) do
+    [
       %{
         "id" => "row_select#{sfx}_button",
         "component" => "Button",
@@ -519,8 +656,6 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       },
       %{"id" => "row_select#{sfx}_text", "component" => "Text", "text" => "Select"}
     ]
-
-    [card, row] ++ cells ++ List.flatten(action_components) ++ select_button
   end
 
   # A cell is a labeled pair: a caption Text with the humanized field name
@@ -748,21 +883,86 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   defp form_components(view, form) do
-    field_children =
-      Enum.flat_map(form.fields, fn field ->
-        anchor =
-          if searchable_select?(view, field),
-            do: "form_select_#{field}",
-            else: "form_input_#{field}"
-
-        [anchor, "form_error_#{field}"]
-      end)
-
+    field_children = form_field_children(view, form)
     nested_children = Enum.map(form.nested_forms, &"nested_#{&1.name}")
-
     children = field_children ++ nested_children ++ ["form_submit_button"]
 
-    [%{"id" => "form", "component" => "Column", "children" => children}]
+    [%{"id" => "form", "component" => "Column", "children" => children}] ++
+      group_components(view, form)
+  end
+
+  defp field_anchor_ids(view, field) do
+    anchor =
+      if searchable_select?(view, field),
+        do: "form_select_#{field}",
+        else: "form_input_#{field}"
+
+    [anchor, "form_error_#{field}"]
+  end
+
+  # The ordering contract with groups: walking the form's effective field
+  # order, an ungrouped field renders its input/error pair in place, and a
+  # group renders (whole, in the group's own field order) at the position of
+  # its first member — later members are already covered by the group.
+  defp form_field_children(view, %{groups: []} = form) do
+    Enum.flat_map(form.fields, &field_anchor_ids(view, &1))
+  end
+
+  defp form_field_children(view, form) do
+    form.fields
+    |> Enum.flat_map_reduce(MapSet.new(), fn field, seen ->
+      case Enum.find(form.groups, &(field in &1.fields)) do
+        nil -> {field_anchor_ids(view, field), seen}
+        %{name: name} -> group_anchor(name, seen)
+      end
+    end)
+    |> elem(0)
+  end
+
+  # The group anchor appears once — at its first member's position.
+  defp group_anchor(name, seen) do
+    if MapSet.member?(seen, name) do
+      {[], seen}
+    else
+      {["form_group_#{name}"], MapSet.put(seen, name)}
+    end
+  end
+
+  # One Card-wrapped section per group: a heading Text (h3) over the fields.
+  # Single-column groups hold the input/error pairs directly; multi-column
+  # groups lay them out in the shared grid shape (see grid_components/4).
+  defp group_components(view, form) do
+    Enum.flat_map(form.groups, &group_section(view, &1))
+  end
+
+  defp group_section(view, group) do
+    base = "form_group_#{group.name}"
+    {grid_children, grid_components} = group_grid(view, group, base)
+
+    [
+      %{"id" => base, "component" => "Card", "child" => "#{base}_body"},
+      %{
+        "id" => "#{base}_body",
+        "component" => "Column",
+        "children" => ["#{base}_heading" | grid_children]
+      },
+      %{
+        "id" => "#{base}_heading",
+        "component" => "Text",
+        "text" => group.label,
+        "variant" => "h3"
+      }
+    ] ++ grid_components
+  end
+
+  defp group_grid(view, %{columns: 1} = group, _base) do
+    {Enum.flat_map(group.fields, &field_anchor_ids(view, &1)), []}
+  end
+
+  defp group_grid(view, group, base) do
+    grid_components(base, group.columns, group.fields, fn field ->
+      {field_anchor_ids(view, field), []}
+    end)
   end
 
   defp searchable_select?(view, field_name) do
@@ -1305,7 +1505,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       |> Enum.uniq()
       |> Map.new(fn name -> {to_string(name), field_value(view, record, name)} end)
 
-    Map.merge(row, (table && AshA2ui.Conditions.row_visibility(view, table, record)) || %{})
+    row
+    |> Map.merge((table && AshA2ui.Conditions.row_visibility(view, table, record)) || %{})
+    |> Map.merge(AshA2ui.RowLayout.badge_data(table && table.component.row_layout, record))
   end
 
   # `source` columns read through the loaded relationship path (nil-safe: a

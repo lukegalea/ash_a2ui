@@ -22,5 +22,6 @@ defmodule AshA2ui.Test.Domain do
     resource AshA2ui.Test.Ticket
     resource AshA2ui.Test.TicketNote
     resource AshA2ui.Test.Tag
+    resource AshA2ui.Test.Promotion
   end
 end

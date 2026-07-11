@@ -327,6 +327,121 @@ defmodule AshA2ui do
     ]
   }
 
+  @group %Spark.Dsl.Entity{
+    name: :group,
+    describe: """
+    A labeled section of form fields laid out in an N-column grid, declared
+    inside a `:form` component. Grouped fields render inside the section (in
+    the group's declaration order, chunked into rows of `columns`); ungrouped
+    fields keep rendering individually. A group renders at the position of
+    its first member in the form's field order.
+    """,
+    examples: [
+      """
+      group :scheduling do
+        label "Scheduling"
+        columns 2
+        fields [:trial_days, :expires_at]
+      end
+      """
+    ],
+    target: AshA2ui.Group,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "The name of the group. Group names must be unique within the form."
+      ],
+      label: [
+        type: :string,
+        doc: "Heading shown above the group. Defaults to the humanized group name."
+      ],
+      columns: [
+        type: :pos_integer,
+        default: 1,
+        doc: """
+        Number of grid columns the group's fields are laid out in. Fields are
+        chunked into rows of this many equal-weight columns, in the group's
+        declaration order; the last row is padded with empty spacer columns.
+        """
+      ],
+      fields: [
+        type: {:list, :atom},
+        required: true,
+        doc: """
+        The form fields this group renders. Every entry must be one of the
+        form component's fields, and no field may belong to more than one
+        group (verified at compile time).
+        """
+      ]
+    ]
+  }
+
+  @row_layout %Spark.Dsl.Entity{
+    name: :row_layout,
+    describe: """
+    Card-style record layout for a `:table` component. Each record renders as
+    a `Card` with a header row — the `title` field (with the row's actions
+    alongside, and the `badge` field's display text when declared) — above an
+    N-column grid of caption-labeled `meta` values. Without a `row_layout`,
+    records keep rendering as flat rows of cells.
+    """,
+    examples: [
+      """
+      row_layout do
+        title :name
+        badge :is_active
+        badge_text true: "Active", false: "Inactive"
+        meta [:slug, :referral_type, :trial_days]
+        columns 3
+      end
+      """
+    ],
+    target: AshA2ui.RowLayout,
+    schema: [
+      title: [
+        type: :atom,
+        required: true,
+        doc: "The field rendered as the card's heading. Must be one of the table's fields."
+      ],
+      badge: [
+        type: :atom,
+        doc: """
+        A field rendered as a status badge in the card header. Its display
+        text is served per row at the reserved `_badge_<field>` row key:
+        the `badge_text` mapping when the value matches, else the humanized
+        value.
+        """
+      ],
+      badge_text: [
+        type: :keyword_list,
+        default: [],
+        doc: """
+        Display text per badge value, matched against atom (including
+        boolean) values — e.g. `badge_text true: "Active", false: "Inactive"`.
+        Unmatched values fall back to the humanized value.
+        """
+      ],
+      meta: [
+        type: {:list, :atom},
+        doc: """
+        The fields rendered in the card's labeled metadata grid, in order.
+        Defaults to the table's fields minus `title` and `badge`.
+        """
+      ],
+      columns: [
+        type: :pos_integer,
+        default: 2,
+        doc: """
+        Number of grid columns the metadata values are laid out in. Values
+        are chunked into rows of this many equal-weight columns; the last
+        row is padded with empty spacer columns.
+        """
+      ]
+    ]
+  }
+
   @component %Spark.Dsl.Entity{
     name: :component,
     describe: """
@@ -353,7 +468,8 @@ defmodule AshA2ui do
     ],
     target: AshA2ui.Component,
     args: [:name, {:optional, :as}],
-    entities: [nested_forms: [@nested_form]],
+    entities: [nested_forms: [@nested_form], groups: [@group], row_layout: [@row_layout]],
+    singleton_entity_keys: [:row_layout],
     schema: [
       name: [
         type: {:one_of, [:table, :form]},
@@ -531,6 +647,7 @@ defmodule AshA2ui do
 
   @verifiers [
     AshA2ui.Verifiers.VerifyComponents,
+    AshA2ui.Verifiers.VerifyLayouts,
     AshA2ui.Verifiers.VerifyFields,
     AshA2ui.Verifiers.VerifyActions,
     AshA2ui.Verifiers.VerifyQueries,

@@ -564,14 +564,44 @@ defmodule AshA2ui.ResolvedView do
   end
 
   # Effective rendering list: hidden fields dropped, ordered by field order
-  # (Enum.sort_by is stable, preserving declaration order on ties).
+  # (Enum.sort_by is stable, preserving declaration order on ties). Group
+  # and row_layout field references are normalized against the effective
+  # list (hidden fields drop out of groups and meta grids too) with their
+  # label/meta defaults applied.
   defp normalize_component(component, fields) do
     effective =
       (component.fields || [])
       |> Enum.reject(&fields[&1].hidden)
       |> Enum.sort_by(&fields[&1].order)
 
-    %{component | fields: effective}
+    %{
+      component
+      | fields: effective,
+        groups: Enum.map(component.groups, &normalize_group(&1, effective)),
+        row_layout: normalize_row_layout(component.row_layout, effective)
+    }
+  end
+
+  defp normalize_group(group, effective) do
+    %{
+      group
+      | label: group.label || humanize(group.name),
+        fields: Enum.filter(group.fields, &(&1 in effective))
+    }
+  end
+
+  # `meta` defaults to the table's effective fields minus title and badge,
+  # in field order; an explicit meta list keeps its declared order.
+  defp normalize_row_layout(nil, _effective), do: nil
+
+  defp normalize_row_layout(layout, effective) do
+    meta =
+      case layout.meta do
+        nil -> effective -- Enum.reject([layout.title, layout.badge], &is_nil/1)
+        meta -> Enum.filter(meta, &(&1 in effective))
+      end
+
+    %{layout | meta: meta}
   end
 
   # Calculations carry a type/constraints just like attributes; aggregates

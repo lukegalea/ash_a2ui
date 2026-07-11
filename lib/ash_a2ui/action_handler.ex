@@ -1055,12 +1055,15 @@ defmodule AshA2ui.ActionHandler do
 
   # Table rows carry the per-row visibility data (`"_actions"` +
   # `"_visible_<action>"`, see AshA2ui.Conditions) when any of the table's
-  # row actions declare visible_when conditions.
+  # row actions declare visible_when conditions, and the `_badge_<field>`
+  # display text when the table declares a row_layout badge — matching the
+  # encoder's initial serialization exactly.
   defp rows(view, table, records) do
     Enum.map(records, fn record ->
       view
       |> record_values(record, table_fields(table))
       |> Map.merge(Conditions.row_visibility(view, table, record))
+      |> Map.merge(AshA2ui.RowLayout.badge_data(table.component.row_layout, record))
     end)
   end
 

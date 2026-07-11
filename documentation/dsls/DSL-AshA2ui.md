@@ -24,6 +24,8 @@ for the resource named by `for_resource`).
    * preset
  * [component](#a2ui-component)
    * nested_form
+   * group
+   * row_layout
  * [field](#a2ui-field)
  * [action](#a2ui-action)
 
@@ -191,6 +193,8 @@ optional second argument, e.g. `component :table, :new_items do ... end`.
 
 ### Nested DSLs
  * [nested_form](#a2ui-component-nested_form)
+ * [group](#a2ui-component-group)
+ * [row_layout](#a2ui-component-row_layout)
 
 
 ### Examples
@@ -292,6 +296,99 @@ end
 ### Introspection
 
 Target: `AshA2ui.NestedForm`
+
+### a2ui.component.group
+```elixir
+group name
+```
+
+
+A labeled section of form fields laid out in an N-column grid, declared
+inside a `:form` component. Grouped fields render inside the section (in
+the group's declaration order, chunked into rows of `columns`); ungrouped
+fields keep rendering individually. A group renders at the position of
+its first member in the form's field order.
+
+
+
+
+### Examples
+```
+group :scheduling do
+  label "Scheduling"
+  columns 2
+  fields [:trial_days, :expires_at]
+end
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#a2ui-component-group-name){: #a2ui-component-group-name .spark-required} | `atom` |  | The name of the group. Group names must be unique within the form. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`fields`](#a2ui-component-group-fields){: #a2ui-component-group-fields .spark-required} | `list(atom)` |  | The form fields this group renders. Every entry must be one of the form component's fields, and no field may belong to more than one group (verified at compile time). |
+| [`label`](#a2ui-component-group-label){: #a2ui-component-group-label } | `String.t` |  | Heading shown above the group. Defaults to the humanized group name. |
+| [`columns`](#a2ui-component-group-columns){: #a2ui-component-group-columns } | `pos_integer` | `1` | Number of grid columns the group's fields are laid out in. Fields are chunked into rows of this many equal-weight columns, in the group's declaration order; the last row is padded with empty spacer columns. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Group`
+
+### a2ui.component.row_layout
+
+
+Card-style record layout for a `:table` component. Each record renders as
+a `Card` with a header row — the `title` field (with the row's actions
+alongside, and the `badge` field's display text when declared) — above an
+N-column grid of caption-labeled `meta` values. Without a `row_layout`,
+records keep rendering as flat rows of cells.
+
+
+
+
+### Examples
+```
+row_layout do
+  title :name
+  badge :is_active
+  badge_text true: "Active", false: "Inactive"
+  meta [:slug, :referral_type, :trial_days]
+  columns 3
+end
+
+```
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`title`](#a2ui-component-row_layout-title){: #a2ui-component-row_layout-title .spark-required} | `atom` |  | The field rendered as the card's heading. Must be one of the table's fields. |
+| [`badge`](#a2ui-component-row_layout-badge){: #a2ui-component-row_layout-badge } | `atom` |  | A field rendered as a status badge in the card header. Its display text is served per row at the reserved `_badge_<field>` row key: the `badge_text` mapping when the value matches, else the humanized value. |
+| [`badge_text`](#a2ui-component-row_layout-badge_text){: #a2ui-component-row_layout-badge_text } | `keyword` | `[]` | Display text per badge value, matched against atom (including boolean) values — e.g. `badge_text true: "Active", false: "Inactive"`. Unmatched values fall back to the humanized value. |
+| [`meta`](#a2ui-component-row_layout-meta){: #a2ui-component-row_layout-meta } | `list(atom)` |  | The fields rendered in the card's labeled metadata grid, in order. Defaults to the table's fields minus `title` and `badge`. |
+| [`columns`](#a2ui-component-row_layout-columns){: #a2ui-component-row_layout-columns } | `pos_integer` | `2` | Number of grid columns the metadata values are laid out in. Values are chunked into rows of this many equal-weight columns; the last row is padded with empty spacer columns. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.RowLayout`
 
 
 

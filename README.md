@@ -81,8 +81,9 @@ DSL:
 ### Agent usage rules
 
 AshA2ui ships LLM usage rules (`usage-rules.md` plus `usage-rules/actions.md`,
-`usage-rules/liveview.md`, and `usage-rules/queries.md` sub-rules) compatible
-with
+`usage-rules/liveview.md`, `usage-rules/queries.md`,
+`usage-rules/relationships.md`, and `usage-rules/layout.md` sub-rules)
+compatible with
 [`usage_rules`](https://hexdocs.pm/usage_rules). To sync them into your
 project's AGENTS.md, add `{:usage_rules, "~> 1.1", only: [:dev]}` and
 configure it in your `mix.exs` project config:
@@ -106,9 +107,9 @@ mix usage_rules.sync
 ```
 
 `:ash_a2ui` inlines the main rules and all sub-rules. Use
-`"ash_a2ui:actions"` / `"ash_a2ui:liveview"` / `"ash_a2ui:queries"` to pull
-in a single sub-rule, or `{:ash_a2ui, sub_rules: []}` for the main rules
-only.
+`"ash_a2ui:actions"` / `"ash_a2ui:liveview"` / `"ash_a2ui:queries"` /
+`"ash_a2ui:relationships"` / `"ash_a2ui:layout"` to pull in a single
+sub-rule, or `{:ash_a2ui, sub_rules: []}` for the main rules only.
 
 ## Quickstart
 
@@ -359,6 +360,51 @@ a2ui do
 end
 ```
 
+### Layout: form groups and card-style rows
+
+Forms group fields into labeled N-column sections, and tables can render
+records as cards — a title/badge header over a labeled metadata grid —
+instead of flat cell rows. Both are structure-only (Rows of equal-weight
+Columns; the renderer owns styling) and byte-identical to the flat output
+when undeclared:
+
+```elixir
+a2ui do
+  component :table do
+    fields [:name, :slug, :trial_days, :is_active]
+
+    row_layout do
+      title :name
+      badge :is_active
+      badge_text true: "Active", false: "Inactive"
+      meta [:slug, :trial_days]      # defaults to fields minus title/badge
+      columns 2
+    end
+  end
+
+  component :form do
+    fields [:name, :slug, :trial_days, :expires_at]
+    create_action :create
+    update_action :update
+
+    group :details do
+      columns 2
+      fields [:name, :slug]
+    end
+
+    group :scheduling do
+      label "Scheduling"
+      columns 2
+      fields [:trial_days, :expires_at]
+    end
+  end
+end
+```
+
+Group membership and `title`/`badge`/`meta` references are verified at
+compile time. See [Layout](documentation/topics/layout.md) for the emitted
+component tree, the ordering contract, and the `_badge_<field>` convention.
+
 ### Building the surface
 
 ```elixir
@@ -467,6 +513,8 @@ in this repo. POC route cells are filled in when the POC lands.
 | LiveView transport (mount, action round trip) | `/admin-tools/promotions-providers` | `test/live_renderer_test.exs` |
 | PubSub live data refresh | `/admin-tools/promotions-providers` (second-session create) | `test/live_renderer_test.exs` |
 | End-to-end: resource → surface → action → updated data model | `/admin-tools/promotions-providers` + `GET /admin-tools/a2ui/promotions-providers` (JSON) | `test/ash_a2ui_test.exs` |
+| Form field groups (`group` N-column sections) | `/admin-tools/promotions-providers` (ScribbleVet backend) | `test/wave6_encoder_test.exs` |
+| Card-style table rows (`row_layout` + `_badge_<field>`) | `/admin-tools/promotions-providers` (ScribbleVet backend) | `test/wave6_encoder_test.exs`, `test/wave6_action_handler_test.exs` |
 
 ## Roadmap
 
@@ -539,6 +587,14 @@ Shipped beyond the v0 core:
   `"option_select"` client actions; server-validated selection with
   actor/tenant-scoped destination reads) (see
   [Relationship Rendering](documentation/topics/relationships.md)).
+- ✅ **Layout: form groups + card-style table rows** — `group` entities
+  render labeled N-column form sections (Card + heading + rows of
+  equal-weight Columns) with a documented ordering contract, and the
+  singleton `row_layout` entity renders records as cards (title + badge
+  header with the row's actions, caption-labeled metadata grid, the
+  computed `_badge_<field>` display-text row key); both compile-verified
+  and byte-identical to the flat output when undeclared (see
+  [Layout](documentation/topics/layout.md)).
 - ✅ **Nested relationship forms (`nested_form`)** — forms edit related
   records through `manage_relationship` action arguments, with the
   interaction mode **inferred** from the change's options via
@@ -587,6 +643,8 @@ Documented as roadmap (not built):
 - [Actions and Authorization](documentation/topics/actions-and-authorization.md)
 - [Queries and Pagination](documentation/topics/queries-and-pagination.md)
 - [Multi-Section Surfaces](documentation/topics/multi-section-surfaces.md)
+- [Layout](documentation/topics/layout.md) — form field groups and
+  card-style table rows
 - [Data Model Conventions](documentation/topics/data-model-conventions.md)
 - [DSL reference](documentation/dsls/DSL-AshA2ui.md)
 
