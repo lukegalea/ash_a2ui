@@ -74,7 +74,7 @@ defmodule AshA2ui.ResolvedView do
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
 
-  @resolve_opts [:actor, :tenant, :domain, :authorize?]
+  @resolve_opts [:actor, :tenant, :domain, :authorize?, :query_state]
 
   @doc """
   Resolves the `a2ui` DSL of `resource_or_ui_module` (an `Ash.Resource` using
@@ -83,9 +83,9 @@ defmodule AshA2ui.ResolvedView do
 
   ## Options
 
-    * `:actor` / `:tenant` / `:authorize?` / `:domain` — reserved for data
-      loading (see `AshA2ui.Info.build_surface/2`); validated and passed
-      through, not consumed by normalization itself.
+    * `:actor` / `:tenant` / `:authorize?` / `:domain` / `:query_state` —
+      reserved for data loading (see `AshA2ui.Info.build_surface/2`);
+      validated and passed through, not consumed by normalization itself.
   """
   @spec resolve(module, keyword) :: t()
   def resolve(resource_or_ui_module, opts \\ []) do

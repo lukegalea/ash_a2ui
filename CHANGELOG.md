@@ -51,3 +51,15 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   `/query` data-model path carries the authoritative query state, and
   `submit_form`/`invoke` success refreshes respect the client's active query.
   Compile-time verification via `AshA2ui.Verifiers.VerifyQueries`.
+- PubSub live refreshes preserve the user's query: `AshA2ui.LiveRenderer`
+  tracks the last `/query` state pushed to the client and passes it to
+  `AshA2ui.Info.build_data_model/2` via the new `:query_state` option
+  (validated against the query allowlist; invalid state falls back to the
+  declared defaults), so a refresh re-runs the current
+  search/filters/sort/page instead of resetting the surface.
+
+### Bug Fixes:
+
+- A `multipleSelection` ChoicePicker reset to its "All" option submits
+  `[""]`, which was cast to `field in []` (matching nothing) — empty-string
+  list filter values are now treated as inactive, like `""` and `nil`.

@@ -78,6 +78,10 @@ defmodule AshA2ui.Info do
     * `:authorize?` — whether to authorize the read. Defaults to `true`.
     * `:domain` — the Ash domain used for the read. Defaults to the
       resource's configured domain.
+    * `:query_state` — a client `/query` state map to run the read with
+      (validated against the query allowlist; invalid or missing state falls
+      back to the query's declared defaults). Lets refreshes preserve the
+      user's current search/filters/sort/page instead of resetting them.
   """
   @spec build_surface(module, keyword) :: [map]
   def build_surface(resource_or_ui_module, opts \\ []) do
@@ -105,9 +109,11 @@ defmodule AshA2ui.Info do
 
   # Loads the surface's records through a normal `Ash.read` (policies apply).
   # Surfaces without a table component render no records. With a `query`
-  # configured, the read runs through `AshA2ui.QueryRunner` with the query's
-  # declared defaults (default sort, page 1) and the resulting `/query` state
-  # is handed to the encoder via the `:query_state` option.
+  # configured, the read runs through `AshA2ui.QueryRunner` — with the
+  # caller-carried `:query_state` when given (validated like any client
+  # input, falling back to the declared defaults), otherwise with the
+  # query's declared defaults (default sort, page 1) — and the resulting
+  # `/query` state is handed to the encoder via the `:query_state` option.
   defp load_records!(resolved_view, opts) do
     cond do
       not Enum.any?(resolved_view.components, &(&1.name == :table)) ->
@@ -119,7 +125,7 @@ defmodule AshA2ui.Info do
                 "no read action (declare one, or set `read_action` on the table component)"
 
       resolved_view.query ->
-        params = AshA2ui.QueryRunner.default_params(resolved_view.query)
+        params = query_params(resolved_view, opts)
 
         case AshA2ui.QueryRunner.run(resolved_view, params, read_opts(resolved_view, opts)) do
           {:ok, records, query_state} ->
@@ -137,6 +143,19 @@ defmodule AshA2ui.Info do
           |> Ash.read!(read_opts(resolved_view, opts))
 
         {records, opts}
+    end
+  end
+
+  defp query_params(resolved_view, opts) do
+    case Keyword.get(opts, :query_state) do
+      state when is_map(state) ->
+        case AshA2ui.QueryRunner.parse(resolved_view, %{"query" => state}) do
+          {:ok, params} -> params
+          {:error, _reason} -> AshA2ui.QueryRunner.default_params(resolved_view.query)
+        end
+
+      _missing ->
+        AshA2ui.QueryRunner.default_params(resolved_view.query)
     end
   end
 

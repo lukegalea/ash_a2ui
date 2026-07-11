@@ -60,6 +60,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     mounted actor/tenant and pushes the resulting `updateDataModel` message
     (wrapped in a one-element list) as `"a2ui:messages"`.
 
+    For surfaces with a `query`, the LiveView tracks the last `/query` state
+    it pushed (from the mount payload and every action follow-up) and passes
+    it to the refresh as `:query_state`, so a PubSub refresh re-runs the
+    user's current search/filters/sort/page instead of resetting the surface
+    to the query defaults.
+
     Override `handle_info/2` if your LiveView receives unrelated messages.
 
     ## Introspection assigns
@@ -151,14 +157,18 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           ash_a2ui_ui: config.ui,
           ash_a2ui_actor: actor,
           ash_a2ui_tenant: tenant,
-          ash_a2ui_refresh_scheduled?: false
+          ash_a2ui_refresh_scheduled?: false,
+          ash_a2ui_query_state: nil
         )
 
       socket =
         if connected?(socket) do
           subscribe(config.pubsub)
           messages = config.surface_fn.(config.ui, actor: actor, tenant: tenant)
-          push_messages(socket, messages)
+
+          socket
+          |> track_query_state(messages)
+          |> push_messages(messages)
         else
           socket
         end
@@ -181,7 +191,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           {:error, messages} -> messages
         end
 
-      {:noreply, push_messages(socket, messages)}
+      socket =
+        socket
+        |> track_query_state(messages)
+        |> push_messages(messages)
+
+      {:noreply, socket}
     end
 
     @doc false
@@ -189,7 +204,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
     def handle_notification(config, @refresh_message, socket) do
       socket = assign(socket, :ash_a2ui_refresh_scheduled?, false)
-      data_model = config.data_model_fn.(config.ui, call_opts(socket))
+      data_model = config.data_model_fn.(config.ui, refresh_opts(socket))
+      socket = track_query_state(socket, [data_model])
       {:noreply, push_messages(socket, [data_model])}
     end
 
@@ -224,8 +240,37 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       push_event(socket, @messages_event, %{messages: messages})
     end
 
+    # Remembers the last /query state pushed to the client (from the full
+    # data model on mount/refresh or a /query update in an action follow-up)
+    # so PubSub refreshes can re-run the user's current query instead of the
+    # declared defaults.
+    defp track_query_state(socket, messages) do
+      state =
+        Enum.reduce(messages, socket.assigns.ash_a2ui_query_state, fn
+          %{"updateDataModel" => %{"path" => "/query", "value" => value}}, _acc
+          when is_map(value) ->
+            value
+
+          %{"updateDataModel" => %{"path" => "/", "value" => %{"query" => value}}}, _acc
+          when is_map(value) ->
+            value
+
+          _message, acc ->
+            acc
+        end)
+
+      assign(socket, :ash_a2ui_query_state, state)
+    end
+
     defp call_opts(socket) do
       [actor: socket.assigns.ash_a2ui_actor, tenant: socket.assigns.ash_a2ui_tenant]
+    end
+
+    defp refresh_opts(socket) do
+      case socket.assigns.ash_a2ui_query_state do
+        nil -> call_opts(socket)
+        state -> Keyword.put(call_opts(socket), :query_state, state)
+      end
     end
 
     defp normalize_pubsub(nil), do: nil

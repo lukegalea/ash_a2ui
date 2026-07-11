@@ -278,4 +278,40 @@ defmodule AshA2ui.QueryEncoderTest do
       assert total >= 7
     end
   end
+
+  describe "Info.build_data_model/2 with a carried :query_state" do
+    test "re-runs the carried query instead of the declared defaults" do
+      Ash.create!(Paginated, %{name: "Zebra Needle"}, authorize?: false)
+      Ash.create!(Paginated, %{name: "Aardvark"}, authorize?: false)
+
+      message =
+        AshA2ui.Info.build_data_model(Paginated,
+          actor: nil,
+          query_state: %{"search" => "needle", "page" => 1}
+        )
+
+      assert_valid_server_message(message)
+      value = message["updateDataModel"]["value"]
+
+      assert [%{"name" => "Zebra Needle"}] = value["records"]
+      assert %{"search" => "needle", "totalCount" => 1} = value["query"]
+    end
+
+    test "an invalid carried state falls back to the query defaults" do
+      Ash.create!(Paginated, %{name: "Zebra Needle"}, authorize?: false)
+      Ash.create!(Paginated, %{name: "Aardvark"}, authorize?: false)
+
+      message =
+        AshA2ui.Info.build_data_model(Paginated,
+          actor: nil,
+          query_state: %{"sort" => %{"field" => "status", "dir" => "asc"}}
+        )
+
+      assert_valid_server_message(message)
+      value = message["updateDataModel"]["value"]
+
+      assert length(value["records"]) == 2
+      assert %{"search" => "", "page" => 1} = value["query"]
+    end
+  end
 end

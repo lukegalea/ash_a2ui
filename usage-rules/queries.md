@@ -50,6 +50,11 @@ end
   state automatically (the encoder adds the binding). Don't strip the
   `"query"` key from contexts in custom transports if you want users to keep
   their page/filters after a write.
+- PubSub refreshes through `AshA2ui.LiveRenderer` also preserve the user's
+  current query: the renderer tracks the last `/query` state it pushed and
+  passes it to `AshA2ui.Info.build_data_model/2` as `:query_state`. Custom
+  transports driving `build_data_model/2` directly should pass their own
+  `:query_state` if they want the same behavior.
 - Pagination is limit/offset with a `page_size + 1` look-ahead for `hasMore`;
   resources do **not** need Ash `pagination` enabled on their read actions.
   `totalCount` may be `null` on data layers that cannot count — handle that

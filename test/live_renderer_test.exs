@@ -206,6 +206,44 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert %{"search" => "nothing matches this", "page" => 1, "hasMore" => false} =
                  query_state
       end
+
+      test "a PubSub refresh re-runs the client's last query state, not the defaults", %{
+        conn: conn
+      } do
+        {:ok, view, _html} = live(conn, "/live-renderer/query-pubsub")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+
+        envelope = %{
+          "version" => "v0.9.1",
+          "action" => %{
+            "name" => "query",
+            "surfaceId" => "paginated",
+            "sourceComponentId" => "query_apply_button",
+            "timestamp" => "2026-07-10T12:00:00Z",
+            "context" => %{"query" => %{"search" => "needle"}, "page" => 1}
+          }
+        }
+
+        render_hook(view, "a2ui:action", envelope)
+        assert_push_event(view, "a2ui:messages", %{messages: [_records, _query]})
+
+        Phoenix.PubSub.broadcast(
+          AshA2ui.Test.PubSub,
+          "ash_a2ui_test:paginated",
+          %Ash.Notifier.Notification{resource: AshA2ui.Test.Paginated}
+        )
+
+        assert_push_event(
+          view,
+          "a2ui:messages",
+          %{messages: [%{"updateDataModel" => %{"path" => "/", "value" => value}}]},
+          1_000
+        )
+
+        # Without query-state tracking the refresh would rebuild with the
+        # declared defaults and push "search" => "".
+        assert %{"search" => "needle", "page" => 1} = value["query"]
+      end
     end
   end
 end

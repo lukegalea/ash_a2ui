@@ -186,4 +186,15 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     # "a2ui:action" event into AshA2ui.ActionHandler.handle/3.
     use AshA2ui.LiveRenderer, ui: AshA2ui.Test.Paginated
   end
+
+  defmodule AshA2ui.Test.QueryPubsubLive do
+    @moduledoc false
+
+    # Real defaults + PubSub against the query-enabled fixture: proves a
+    # PubSub-driven refresh re-runs the client's last query state instead of
+    # resetting the surface to the query defaults.
+    use AshA2ui.LiveRenderer,
+      ui: AshA2ui.Test.Paginated,
+      pubsub: [module: AshA2ui.Test.PubSub, topics: ["ash_a2ui_test:paginated"]]
+  end
 end

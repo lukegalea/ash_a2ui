@@ -114,8 +114,14 @@ includes a fresh `/query` message — the user stays on their page with their
 filters intact. A missing or invalid carried query state falls back to the
 query's declared defaults; the write itself never fails over refresh state.
 
-PubSub-driven refreshes (`AshA2ui.Info.build_data_model/2`) are stateless by
-design and reload with the query defaults, resetting `/query` to match.
+PubSub-driven refreshes preserve the query too: `AshA2ui.LiveRenderer`
+tracks the last `/query` state it pushed to the client and passes it to
+`AshA2ui.Info.build_data_model/2` as `:query_state` (validated against the
+allowlist like any client input; invalid state falls back to the declared
+defaults). A live refresh therefore re-runs the user's current
+search/filters/sort/page instead of resetting the surface. Callers driving
+`build_data_model/2` directly get the default (page 1, default sort) unless
+they pass `:query_state` themselves.
 
 ## Limitations (v0)
 
