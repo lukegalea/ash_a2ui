@@ -211,7 +211,7 @@ defmodule AshA2ui.ResolvedView do
       reserved for data loading (see `AshA2ui.Info.build_surface/2`);
       validated and passed through, not consumed by normalization itself.
   """
-  @spec resolve(module, keyword) :: t()
+  @spec resolve(module | Spark.Dsl.t(), keyword) :: t()
   def resolve(resource_or_ui_module, opts \\ []) do
     Keyword.validate!(opts, @resolve_opts)
 

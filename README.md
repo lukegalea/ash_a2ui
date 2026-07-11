@@ -516,6 +516,7 @@ in this repo. POC route cells are filled in when the POC lands.
 | End-to-end: resource → surface → action → updated data model | `/admin-tools/promotions-providers` + `GET /admin-tools/a2ui/promotions-providers` (JSON) | `test/ash_a2ui_test.exs` |
 | Form field groups (`group` N-column sections) | `/admin-tools/promotions-providers` (ScribbleVet backend) | `test/wave6_encoder_test.exs` |
 | Card-style table rows (`row_layout` + `_badge_<field>`) | `/admin-tools/promotions-providers` (ScribbleVet backend) | `test/wave6_encoder_test.exs`, `test/wave6_action_handler_test.exs` |
+| Agent-composed surfaces (spec → validate → serve, tamper cases, DSL parity) | `/admin-tools/agent` (ScribbleVet backend, `design_admin_surface` tool) | `test/dynamic_test.exs` |
 
 ## Roadmap
 
@@ -623,6 +624,13 @@ Shipped beyond the v0 core:
   server-side with a date→day-bounds convenience on datetime fields, bound
   at `/query/ranges/<field>/from|to` (see
   [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
+- ✅ **Agent-composed surfaces (`AshA2ui.Dynamic`)** — an LLM designs ad-hoc
+  surfaces as a JSON spec (a declarative mirror of the DSL vocabulary, never
+  raw A2UI) validated at runtime by the *same* verifier modules the DSL
+  compiles with, against a host-configured resource allowlist; ships a JSON
+  Schema for LLM tool parameters, resource descriptions for prompts, and
+  structured self-correction errors (see
+  [Agent-Composed Surfaces](documentation/topics/agent-composed-surfaces.md)).
 
 Documented as roadmap (not built):
 
@@ -647,8 +655,9 @@ Documented as roadmap (not built):
   engine.
 - **Non-LiveView streaming transports** (SSE, raw WebSocket).
 - **Custom component catalogs** beyond the basic catalog.
-- **AshAI-generated component trees** — letting an LLM propose the surface
-  layout while AshA2ui keeps the data and action contracts safe.
+- **Dynamic `nested_form` composition** — nested relationship forms remain
+  DSL-only (they depend on `manage_relationship` change knowledge an
+  agent-composed spec shouldn't guess at).
 
 ## Documentation
 
@@ -663,6 +672,8 @@ Documented as roadmap (not built):
 - [Layout](documentation/topics/layout.md) — form field groups and
   card-style table rows
 - [Contexts and Details](documentation/topics/contexts-and-details.md)
+- [Agent-Composed Surfaces](documentation/topics/agent-composed-surfaces.md) —
+  runtime specs, the allowlist, and the server-held surface contract
 - [Data Model Conventions](documentation/topics/data-model-conventions.md)
 - [DSL reference](documentation/dsls/DSL-AshA2ui.md)
 

@@ -23,6 +23,9 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
 - `ash_a2ui:contexts` — surface `context` entities (server-validated
   selections, dependent options, `context_filter`/`require_context`/
   `select_context`) and `:detail` components.
+- `ash_a2ui:dynamic` — agent-composed surfaces (`AshA2ui.Dynamic`): the
+  runtime JSON surface spec, the resource allowlist, the server-held
+  surface contract, and LLM tool integration.
 
 ## When to reach for AshA2ui (preferred ladder)
 
@@ -41,7 +44,7 @@ Work down this ladder and stop at the first rung that fits:
 
 ## Authoring surfaces
 
-- Two equivalent authoring modes; pick deliberately:
+- Three authoring modes; pick deliberately:
   - **On the resource** (`use Ash.Resource, extensions: [AshA2ui]` + `a2ui`
     block) — fine for resources that exist to be rendered.
   - **Standalone UI module** (`use AshA2ui.Standalone` + `for_resource` in
@@ -49,6 +52,10 @@ Work down this ladder and stop at the first rung that fits:
     want to couple to UI concerns, resources you can't edit, or multiple
     surfaces per resource. Standalone modules are accepted anywhere a
     resource is (`Info`, `ActionHandler`, `LiveRenderer`).
+  - **Agent-composed at runtime** (`AshA2ui.Dynamic`) — only for surfaces an
+    *agent* designs on the fly from a JSON spec against a host-configured
+    resource allowlist. Humans should write the DSL and get compile-time
+    diagnostics. Rules in `ash_a2ui:dynamic`.
 
 ```elixir
 defmodule MyApp.UI.TicketUI do

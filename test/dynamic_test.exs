@@ -1,0 +1,666 @@
+defmodule AshA2ui.DynamicTest.TestDomain do
+  @moduledoc false
+  use Ash.Domain, validate_config_inclusion?: false
+
+  resources do
+    allow_unregistered? true
+  end
+end
+
+defmodule AshA2ui.DynamicTest.Guarded do
+  @moduledoc false
+  use Ash.Resource,
+    domain: AshA2ui.DynamicTest.TestDomain,
+    data_layer: Ash.DataLayer.Ets,
+    authorizers: [Ash.Policy.Authorizer]
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :name, :string, public?: true, allow_nil?: false
+    attribute :secret, :string, public?: false
+
+    attribute :status, :atom,
+      public?: true,
+      constraints: [one_of: [:pending, :done]],
+      default: :pending
+  end
+
+  actions do
+    defaults [:read, :destroy, create: :*, update: :*]
+
+    update :finish do
+      change set_attribute(:status, :done)
+    end
+  end
+
+  policies do
+    policy always() do
+      authorize_if actor_present()
+    end
+  end
+end
+
+defmodule AshA2ui.DynamicTest do
+  use ExUnit.Case, async: false
+
+  import AshA2ui.Test.SchemaHelper
+
+  alias AshA2ui.Dynamic
+  alias AshA2ui.Dynamic.Error
+  alias AshA2ui.DynamicTest.Guarded
+  alias AshA2ui.Test.KitchenSink
+  alias AshA2ui.Test.Minimal
+
+  @allowlist Dynamic.allowlist([KitchenSink, Minimal, Guarded])
+
+  defp resolve!(spec, opts \\ []) do
+    {:ok, surface} = Dynamic.resolve(spec, Keyword.put_new(opts, :allowlist, @allowlist))
+    surface
+  end
+
+  defp errors(spec, opts \\ []) do
+    {:error, errors} = Dynamic.resolve(spec, Keyword.put_new(opts, :allowlist, @allowlist))
+    errors
+  end
+
+  defp error_texts(spec, opts \\ []), do: spec |> errors(opts) |> Error.messages()
+
+  defp minimal_spec do
+    %{
+      "resource" => "Minimal",
+      "title" => "Minimal things",
+      "components" => [
+        %{"kind" => "table", "fields" => ["name"], "read_action" => "read"},
+        %{"kind" => "form", "fields" => ["name"], "create_action" => "create"}
+      ]
+    }
+  end
+
+  describe "allowlist/1" do
+    test "names resources by short module name" do
+      assert @allowlist["Minimal"] == Minimal
+      assert @allowlist["KitchenSink"] == KitchenSink
+    end
+
+    test "rejects non-resources" do
+      assert_raise ArgumentError, ~r/not an Ash resource/, fn ->
+        Dynamic.allowlist([Enum])
+      end
+    end
+
+    test "accepts explicit naming maps and validates the names" do
+      assert Dynamic.allowlist(%{"things" => Minimal}) == %{"things" => Minimal}
+
+      assert_raise ArgumentError, ~r/must match/, fn ->
+        Dynamic.allowlist(%{"no spaces" => Minimal})
+      end
+    end
+  end
+
+  describe "resolve/2 — happy path" do
+    test "resolves a minimal spec into a served surface" do
+      surface = resolve!(minimal_spec())
+
+      assert surface.resource == Minimal
+      assert surface.title == "Minimal things"
+      assert surface.surface_id =~ ~r/^dyn_minimal_[0-9a-f]{8}$/
+      assert surface.spec == minimal_spec()
+    end
+
+    test "generated surface ids are unique per resolve" do
+      refute resolve!(minimal_spec()).surface_id == resolve!(minimal_spec()).surface_id
+    end
+
+    test "build_surface emits the schema-valid message triple" do
+      Ash.create!(Minimal, %{name: "one"}, authorize?: false)
+
+      messages = minimal_spec() |> resolve!() |> Dynamic.build_surface(authorize?: false)
+
+      assert [%{"createSurface" => _}, %{"updateComponents" => _}, %{"updateDataModel" => _}] =
+               messages
+
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      assert [%{"name" => "one"}] = data_model["records"]
+    end
+
+    test "build_data_model emits a schema-valid refresh" do
+      message = minimal_spec() |> resolve!() |> Dynamic.build_data_model(authorize?: false)
+
+      assert %{"updateDataModel" => _} = assert_valid_server_message(message)
+    end
+
+    test "omitted table fields are inferred from public attributes" do
+      spec = %{"resource" => "Minimal", "components" => [%{"kind" => "table"}]}
+
+      messages = spec |> resolve!() |> Dynamic.build_surface(authorize?: false)
+      assert [%{"createSurface" => _} | _rest] = messages
+    end
+
+    test "a full spec exercises queries, presets, layouts, and actions" do
+      spec = %{
+        "resource" => "KitchenSink",
+        "components" => [
+          %{
+            "kind" => "table",
+            "fields" => ["name", "status", "count", "inserted_at"],
+            "row_actions" => ["update", "destroy"],
+            "query" => "default",
+            "row_layout" => %{
+              "title" => "name",
+              "badge" => "status",
+              "badge_text" => %{"draft" => "Draft"},
+              "meta" => ["count", "inserted_at"],
+              "columns" => 2
+            }
+          },
+          %{
+            "kind" => "form",
+            "fields" => ["name", "status", "count"],
+            "create_action" => "create",
+            "update_action" => "update",
+            "groups" => [
+              %{
+                "name" => "details",
+                "label" => "Details",
+                "columns" => 2,
+                "fields" => ["status", "count"]
+              }
+            ]
+          }
+        ],
+        "queries" => [
+          %{
+            "name" => "default",
+            "search_fields" => ["name"],
+            "sortable" => ["name", "inserted_at"],
+            "filters" => ["status"],
+            "default_sort" => [%{"field" => "inserted_at", "direction" => "desc"}],
+            "presets" => [%{"name" => "drafts", "filter" => %{"status" => "draft"}}],
+            "page_size" => 10
+          }
+        ],
+        "fields" => [
+          %{"name" => "inserted_at", "label" => "Created", "format" => "date"}
+        ],
+        "actions" => [
+          %{
+            "name" => "destroy",
+            "refreshes" => ["table"],
+            "visible_when" => %{"status" => "draft"}
+          }
+        ]
+      }
+
+      messages = spec |> resolve!() |> Dynamic.build_surface(authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+    end
+
+    test "contexts, context_filter, and detail components resolve and scope" do
+      allowlist = Dynamic.allowlist([AshA2ui.Test.Appointment, AshA2ui.Test.Owner])
+
+      owner = Ash.create!(AshA2ui.Test.Owner, %{name: "Ada", email: "ada@x"}, authorize?: false)
+
+      Ash.create!(
+        AshA2ui.Test.Appointment,
+        %{title: "checkup", owner_id: owner.id},
+        authorize?: false
+      )
+
+      spec = %{
+        "resource" => "Appointment",
+        "components" => [
+          %{
+            "kind" => "table",
+            "fields" => ["title", "status"],
+            "context_filter" => %{"owner_id" => "owner"},
+            "require_context" => ["owner"]
+          },
+          %{"kind" => "detail", "context" => "owner", "fields" => ["name", "email"]}
+        ],
+        "contexts" => [
+          %{"name" => "owner", "resource" => "Owner", "option_label" => "name"}
+        ]
+      }
+
+      {:ok, surface} = Dynamic.resolve(spec, allowlist: allowlist)
+
+      # Unscoped: require_context unmet, the table renders no records.
+      messages = Dynamic.build_surface(surface, authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      assert data_model["records"] == []
+
+      # Scoped to the selected owner, the appointment appears.
+      scoped =
+        Dynamic.build_surface(surface,
+          authorize?: false,
+          context_state: %{"owner" => %{"value" => owner.id}}
+        )
+
+      [_create, _components, %{"updateDataModel" => %{"value" => scoped_model}}] = scoped
+      assert [%{"title" => "checkup"}] = scoped_model["records"]
+      assert scoped_model["detail"]["owner"]["name"] == "Ada"
+    end
+  end
+
+  describe "resolve/2 — encoding parity with an equivalent DSL surface" do
+    test "a spec mirroring the KitchenSink DSL block encodes byte-identically" do
+      Ash.create!(
+        KitchenSink,
+        %{name: "parity", active: true, count: 3, status: :published},
+        authorize?: false
+      )
+
+      spec = %{
+        "resource" => "KitchenSink",
+        "components" => [
+          %{
+            "kind" => "table",
+            "fields" => [
+              "name",
+              "active",
+              "count",
+              "price",
+              "birthday",
+              "scheduled_at",
+              "status",
+              "inserted_at"
+            ],
+            "read_action" => "read",
+            "row_actions" => ["update", "destroy"]
+          },
+          %{
+            "kind" => "form",
+            "fields" => ["name", "active", "count", "price", "birthday", "scheduled_at", "status"],
+            "create_action" => "create",
+            "update_action" => "update"
+          }
+        ],
+        "fields" => [
+          %{"name" => "name", "label" => "Name", "widget" => "text_field", "order" => 1},
+          %{"name" => "inserted_at", "label" => "Created", "format" => "date", "order" => 99},
+          %{"name" => "updated_at", "hidden" => true}
+        ]
+      }
+
+      surface = resolve!(spec, surface_id: "kitchen_sink")
+
+      assert Dynamic.build_surface(surface, authorize?: false) ==
+               AshA2ui.Info.build_surface(KitchenSink, authorize?: false)
+    end
+  end
+
+  describe "resolve/2 — validation matrix" do
+    test "rejects a resource outside the allowlist" do
+      assert [%Error{path: "resource", message: message}] =
+               errors(%{"resource" => "User", "components" => [%{"kind" => "table"}]})
+
+      assert message =~ "not available to dynamic surfaces"
+      assert message =~ "KitchenSink"
+    end
+
+    test "rejects a spec without components" do
+      assert ["components: the spec must declare at least one component"] =
+               error_texts(%{"resource" => "Minimal"})
+    end
+
+    test "rejects non-object specs and unknown top-level keys" do
+      assert {:error, [%Error{message: "the surface spec must be a JSON object"}]} =
+               Dynamic.resolve([], allowlist: @allowlist)
+
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table"}],
+                 "layout" => "wide"
+               })
+
+      assert text =~ ~s(unknown spec key "layout")
+    end
+
+    test "rejects components without a kind, or with an unsupported kind" do
+      assert [text] = error_texts(%{"resource" => "Minimal", "components" => [%{}]})
+      assert text =~ ~s(each component must declare a "kind")
+
+      assert [text] =
+               error_texts(%{"resource" => "Minimal", "components" => [%{"kind" => "chart"}]})
+
+      assert text =~ "components[0].name"
+      assert text =~ "expected one of [:table, :form, :detail]"
+    end
+
+    test "rejects malformed names with the format rule" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table", "fields" => ["name; drop tables"]}]
+               })
+
+      assert text =~ "not a valid name"
+    end
+
+    test "rejects unknown fields with the verifier's field inventory" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table", "fields" => ["nonexistent"]}]
+               })
+
+      assert text =~ "a2ui.component.table.fields"
+      assert text =~ "references unknown field :nonexistent"
+      assert text =~ ":name"
+    end
+
+    test "rejects form fields the action does not accept" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "KitchenSink",
+                 "components" => [
+                   %{"kind" => "form", "fields" => ["inserted_at"], "create_action" => "create"}
+                 ]
+               })
+
+      assert text =~ "not accepted by its create/update action"
+    end
+
+    test "rejects mistyped and missing actions" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table", "read_action" => "create"}]
+               })
+
+      assert text =~ "read_action :create must be of type :read"
+
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table", "row_actions" => ["explode"]}]
+               })
+
+      assert text =~ "row action :explode does not exist"
+    end
+
+    test "rejects query allowlist entries that are not public attributes" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table", "query" => "q"}],
+                 "queries" => [%{"name" => "q", "sortable" => ["shoe_size"]}]
+               })
+
+      assert text =~ "references unknown field :shoe_size in sortable"
+    end
+
+    test "rejects presets declaring both filter and read_action" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "KitchenSink",
+                 "components" => [%{"kind" => "table", "query" => "q"}],
+                 "queries" => [
+                   %{
+                     "name" => "q",
+                     "presets" => [
+                       %{
+                         "name" => "both",
+                         "filter" => %{"status" => "draft"},
+                         "read_action" => "read"
+                       }
+                     ]
+                   }
+                 ]
+               })
+
+      assert text =~ "mutually exclusive"
+    end
+
+    test "rejects visible_when values that do not cast to the field's type" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "KitchenSink",
+                 "components" => [%{"kind" => "table", "row_actions" => ["destroy"]}],
+                 "actions" => [
+                   %{"name" => "destroy", "visible_when" => %{"status" => "not_a_status"}}
+                 ]
+               })
+
+      assert text =~ "does not cast to the field's type"
+    end
+
+    test "rejects layout references outside the component's fields" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [
+                   %{
+                     "kind" => "table",
+                     "fields" => ["name"],
+                     "row_layout" => %{"title" => "id"}
+                   }
+                 ]
+               })
+
+      assert text =~ "row_layout references field :id"
+    end
+
+    test "rejects widgets and formats outside the encoder's vocabulary" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table"}],
+                 "fields" => [%{"name" => "name", "widget" => "hologram"}]
+               })
+
+      assert text =~ ~s(widget "hologram" is not supported)
+      assert text =~ "text_field"
+    end
+
+    test "rejects context resources outside the allowlist" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table"}],
+                 "contexts" => [%{"name" => "user", "resource" => "User"}]
+               })
+
+      assert text =~ ~s(resource "User" is not available)
+    end
+
+    test "collects several errors in one pass" do
+      texts =
+        error_texts(%{
+          "resource" => "Minimal",
+          "components" => [
+            %{"kind" => "table", "fields" => ["bogus"], "read_action" => "create"}
+          ]
+        })
+
+      assert Enum.any?(texts, &(&1 =~ "unknown field :bogus"))
+      assert Enum.any?(texts, &(&1 =~ "read_action :create must be of type :read"))
+    end
+
+    test "errors are structured and JSON-encodable" do
+      [error] = errors(%{"resource" => "Minimal"})
+
+      assert %{"path" => "components", "message" => _} =
+               error |> Jason.encode!() |> Jason.decode!()
+    end
+  end
+
+  describe "handle_action/3 — round trip and tamper cases" do
+    test "submit_form creates through the spec's create action and refreshes" do
+      surface = resolve!(minimal_spec())
+
+      envelope = %{
+        "version" => "v0.9.1",
+        "action" => %{
+          "name" => "submit_form",
+          "surfaceId" => surface.surface_id,
+          "context" => %{"values" => %{"name" => "round-trip"}}
+        }
+      }
+
+      assert {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      assert Enum.any?(messages, fn
+               %{"updateDataModel" => %{"path" => "/records", "value" => records}} ->
+                 Enum.any?(records, &(&1["name"] == "round-trip"))
+
+               _other ->
+                 false
+             end)
+
+      assert [%{name: "round-trip"}] = Ash.read!(Minimal, authorize?: false)
+    end
+
+    test "follow-up messages always carry the server-held surface id" do
+      surface = resolve!(minimal_spec())
+
+      envelope = %{
+        "version" => "v0.9.1",
+        "action" => %{
+          "name" => "submit_form",
+          # A tampering client claims another surface — it is ignored.
+          "surfaceId" => "spoofed_surface",
+          "context" => %{"values" => %{"name" => "own-id"}}
+        }
+      }
+
+      {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
+
+      for %{"updateDataModel" => %{"surfaceId" => id}} <- messages do
+        assert id == surface.surface_id
+      end
+    end
+
+    test "invoking an action outside the spec's row_actions is rejected" do
+      record = Ash.create!(Minimal, %{name: "keep me"}, authorize?: false)
+      surface = resolve!(minimal_spec())
+
+      envelope = %{
+        "name" => "invoke",
+        "context" => %{"action" => "destroy", "recordId" => record.id}
+      }
+
+      assert {:error, [message]} = Dynamic.handle_action(surface, envelope, authorize?: false)
+
+      assert %{"updateDataModel" => %{"path" => "/ui/status", "value" => status}} = message
+      assert status =~ "not listed in the view's row_actions"
+      assert [_still_there] = Ash.read!(Minimal, authorize?: false)
+    end
+
+    test "query values outside the declared allowlist are rejected" do
+      spec = %{
+        "resource" => "KitchenSink",
+        "components" => [%{"kind" => "table", "query" => "q"}],
+        "queries" => [%{"name" => "q", "sortable" => ["name"]}]
+      }
+
+      surface = resolve!(spec)
+
+      envelope = %{
+        "name" => "query",
+        "context" => %{"query" => %{"sort" => "count", "dir" => "asc"}}
+      }
+
+      assert {:error, [message]} = Dynamic.handle_action(surface, envelope, authorize?: false)
+      assert %{"updateDataModel" => %{"path" => "/ui/status", "value" => status}} = message
+      assert status =~ "sort"
+    end
+
+    test "ash policies still gate dynamic surfaces (authorize?: true default)" do
+      spec = %{
+        "resource" => "Guarded",
+        "components" => [
+          %{"kind" => "table", "fields" => ["name", "status"]},
+          %{"kind" => "form", "fields" => ["name"], "create_action" => "create"}
+        ]
+      }
+
+      surface = resolve!(spec)
+
+      envelope = %{
+        "name" => "submit_form",
+        "context" => %{"values" => %{"name" => "sneaky"}}
+      }
+
+      assert {:error, [message]} = Dynamic.handle_action(surface, envelope, [])
+      assert %{"updateDataModel" => %{"path" => "/ui/status", "value" => status}} = message
+      assert status =~ "not authorized"
+      assert [] = Ash.read!(Guarded, authorize?: false)
+
+      assert {:ok, _messages} =
+               Dynamic.handle_action(surface, envelope, actor: %{id: "admin"})
+
+      assert [%{name: "sneaky"}] = Ash.read!(Guarded, authorize?: false)
+    end
+
+    test "validation errors map to /errors/<field> for the composer's form" do
+      spec = %{
+        "resource" => "KitchenSink",
+        "components" => [
+          %{"kind" => "table", "fields" => ["name"]},
+          %{"kind" => "form", "fields" => ["name"], "create_action" => "create"}
+        ]
+      }
+
+      surface = resolve!(spec)
+
+      envelope = %{"name" => "submit_form", "context" => %{"values" => %{}}}
+
+      assert {:error, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      assert Enum.any?(messages, fn
+               %{"updateDataModel" => %{"path" => "/errors/name"}} -> true
+               _other -> false
+             end)
+    end
+  end
+
+  describe "spec_schema/1" do
+    test "is a resolvable JSON Schema that accepts valid and rejects invalid specs" do
+      schema = @allowlist |> Dynamic.spec_schema() |> ExJsonSchema.Schema.resolve()
+
+      assert ExJsonSchema.Validator.valid?(schema, minimal_spec())
+
+      refute ExJsonSchema.Validator.valid?(schema, %{"resource" => "Minimal"})
+
+      refute ExJsonSchema.Validator.valid?(schema, %{
+               "resource" => "Minimal",
+               "components" => [%{"kind" => "chart"}]
+             })
+    end
+
+    test "constrains resource enums to the allowlist" do
+      schema = Dynamic.spec_schema(@allowlist)
+
+      assert schema["properties"]["resource"]["enum"] == ["Guarded", "KitchenSink", "Minimal"]
+    end
+  end
+
+  describe "describe_resources/1" do
+    test "describes fields, enums, actions, and relationships" do
+      [description] = Dynamic.describe_resources(Dynamic.allowlist([KitchenSink]))
+
+      assert description["resource"] == "KitchenSink"
+
+      status = Enum.find(description["attributes"], &(&1["name"] == "status"))
+      assert status["one_of"] == ["draft", "published", "archived"]
+
+      create = Enum.find(description["actions"], &(&1["name"] == "create"))
+      assert create["type"] == "create"
+      assert "name" in create["accepts"]
+
+      assert description |> Jason.encode!() |> is_binary()
+    end
+  end
+end

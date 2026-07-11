@@ -18,7 +18,7 @@ defmodule AshA2ui.Info do
   @doc """
   The `component` entities declared in the `a2ui` section.
   """
-  @spec components(module) :: [AshA2ui.Component.t()]
+  @spec components(module | Spark.Dsl.t()) :: [AshA2ui.Component.t()]
   def components(resource_or_ui_module) do
     resource_or_ui_module
     |> Extension.get_entities([:a2ui])
@@ -28,7 +28,7 @@ defmodule AshA2ui.Info do
   @doc """
   The `field` entities declared in the `a2ui` section.
   """
-  @spec fields(module) :: [AshA2ui.Field.t()]
+  @spec fields(module | Spark.Dsl.t()) :: [AshA2ui.Field.t()]
   def fields(resource_or_ui_module) do
     resource_or_ui_module
     |> Extension.get_entities([:a2ui])
@@ -38,7 +38,7 @@ defmodule AshA2ui.Info do
   @doc """
   The `context` entities declared in the `a2ui` section.
   """
-  @spec contexts(module) :: [AshA2ui.Context.t()]
+  @spec contexts(module | Spark.Dsl.t()) :: [AshA2ui.Context.t()]
   def contexts(resource_or_ui_module) do
     resource_or_ui_module
     |> Extension.get_entities([:a2ui])
@@ -48,7 +48,7 @@ defmodule AshA2ui.Info do
   @doc """
   The `query` entities declared in the `a2ui` section.
   """
-  @spec queries(module) :: [AshA2ui.Query.t()]
+  @spec queries(module | Spark.Dsl.t()) :: [AshA2ui.Query.t()]
   def queries(resource_or_ui_module) do
     resource_or_ui_module
     |> Extension.get_entities([:a2ui])
@@ -59,7 +59,7 @@ defmodule AshA2ui.Info do
   The `action` entities (per-action refresh metadata) declared in the `a2ui`
   section.
   """
-  @spec action_settings(module) :: [AshA2ui.Action.t()]
+  @spec action_settings(module | Spark.Dsl.t()) :: [AshA2ui.Action.t()]
   def action_settings(resource_or_ui_module) do
     resource_or_ui_module
     |> Extension.get_entities([:a2ui])
@@ -71,7 +71,7 @@ defmodule AshA2ui.Info do
   `for_resource` option if set (standalone UI modules), otherwise the module
   itself (which must be an `Ash.Resource`).
   """
-  @spec resource!(module) :: module
+  @spec resource!(module | Spark.Dsl.t()) :: module
   def resource!(resource_or_ui_module) do
     case a2ui_for_resource(resource_or_ui_module) do
       {:ok, resource} ->
@@ -111,7 +111,7 @@ defmodule AshA2ui.Info do
       keep their context filters (tables with an unmet `require_context`
       load no records).
   """
-  @spec build_surface(module, keyword) :: [map]
+  @spec build_surface(module | Spark.Dsl.t(), keyword) :: [map]
   def build_surface(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
     {records, opts} = load_and_put_state!(resolved_view, opts)
@@ -125,7 +125,7 @@ defmodule AshA2ui.Info do
 
   Takes the same options as `build_surface/2`.
   """
-  @spec build_data_model(module, keyword) :: map
+  @spec build_data_model(module | Spark.Dsl.t(), keyword) :: map
   def build_data_model(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
     {records, opts} = load_and_put_state!(resolved_view, opts)

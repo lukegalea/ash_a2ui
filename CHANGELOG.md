@@ -10,6 +10,26 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Agent-composed surfaces: `AshA2ui.Dynamic` resolves a runtime,
+  JSON-serializable surface spec — a declarative mirror of the DSL
+  vocabulary an LLM can emit as structured tool output, never raw A2UI —
+  into a served surface with the same rigor as the compile-time DSL. Specs
+  are gated by a host-configured resource allowlist
+  (`AshA2ui.Dynamic.allowlist/1`, `extension_resources/1`), built through
+  Spark's own entity schemas, field-inferred by the existing transformer,
+  and validated by the *same* verifier modules the DSL compiles with (run
+  at runtime over a synthetic DSL state — same checks, same messages).
+  `spec_schema/1` ships a JSON Schema for LLM tool parameters,
+  `describe_resources/1` a prompt-ready resource vocabulary, and validation
+  failures return structured `AshA2ui.Dynamic.Error`s that reuse the
+  verifier texts so an agent loop can self-correct. Serving is
+  stateless-but-tamper-proof: hosts hold the resolved
+  `AshA2ui.Dynamic.Surface` server-side and route envelopes through
+  `handle_action/3` on the server-held struct — the row-action allowlist,
+  query allowlists, `visible_when` enforcement, and actor-based
+  `authorize?: true` authorization apply exactly as on declared surfaces.
+  See the new `agent-composed-surfaces` topic and the `ash_a2ui:dynamic`
+  usage rules.
 - Section card chrome: context picker sections, `:detail` panels, and query
   controls now emit as a basic-catalog `Card` over a `_body` container
   (`context_<name>` > `context_<name>_body`, `detail_<name>` >

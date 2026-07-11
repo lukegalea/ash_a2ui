@@ -162,7 +162,7 @@ defmodule AshA2ui.ActionHandler do
     * `:tenant` — the tenant for the Ash action invocation.
     * `:authorize?` — whether to authorize the Ash calls. Defaults to `true`.
   """
-  @spec handle(module, action_message :: map, opts :: keyword) ::
+  @spec handle(module | Spark.Dsl.t(), action_message :: map, opts :: keyword) ::
           {:ok, [map]} | {:error, [map]}
   def handle(resource_or_ui_module, action_message, opts \\ []) do
     view = ResolvedView.resolve(resource_or_ui_module, opts)
