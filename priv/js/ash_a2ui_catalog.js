@@ -187,7 +187,13 @@ function defineChoicePickerElement({A2uiLitElement, A2uiController, ChoicePicker
 
     renderSelect(props, options, selected) {
       const {html, nothing} = lit;
-      const current = selected.length > 0 ? selected[0] : undefined;
+      let current = selected.length > 0 ? selected[0] : undefined;
+      // An unset binding on a picker that offers an empty-valued option
+      // (AshA2ui's "All" filter/preset option) means "all" — show that
+      // option rather than a placeholder.
+      if (current === undefined && options.some((opt) => opt.value === "")) {
+        current = "";
+      }
       const hasMatch = options.some((opt) => opt.value === current);
 
       return html`
