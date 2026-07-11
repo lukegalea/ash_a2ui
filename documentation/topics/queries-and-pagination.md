@@ -28,9 +28,15 @@ a2ui do
 end
 ```
 
-All referenced fields must be **plain public attributes** (and
-`search_fields` must be string-typed) — verified at compile time, like every
-other DSL reference. Relationship-sourced `source` columns (see
+All referenced fields must be **public attributes** (and `search_fields`
+must be string-typed) — verified at compile time, like every other DSL
+reference — with one extension: `sortable` (and `default_sort`) may also
+name **public aggregates and expression-based calculations**, because Ash
+can push those into a generic sort. Module-based (non-expression)
+calculations are not generically sortable and are rejected with a tailored
+compile error, as are calculations/aggregates anywhere in `search_fields` or
+`filters` (search needs string attributes; filters need castable attribute
+types). Relationship-sourced `source` columns (see
 [Relationship Rendering](relationships.md)) are render-only and rejected in
 query allowlists. A table without a `query` behaves exactly as before: all
 records, no query controls.
@@ -73,6 +79,18 @@ The server answers with two `updateDataModel` messages: `/records` (the
 page) and `/query` (the authoritative state — see
 [Data Model Conventions](data-model-conventions.md) for the exact shape).
 
+### Per-table queries on multi-table surfaces
+
+Queries stay **per-table**: each named table component may reference its own
+`query` entity. On a multi-table surface (see
+[Multi-Section Surfaces](multi-section-surfaces.md)) the emitted controls
+bind to that table's scoped state at `/query/<component_name>`, the `query`
+action context **requires** `"component": "<component_name>"` (the controls
+always send it; a missing or unknown component is rejected via `/ui/status`,
+as is targeting a table with no query), and the response messages go to
+`/records/<component_name>` + `/query/<component_name>`. Single-table
+surfaces keep the plain `/query` paths and need no `"component"`.
+
 ## Enforcement (the allowlist)
 
 `AshA2ui.QueryRunner` validates the context before anything touches Ash:
@@ -108,7 +126,8 @@ stable under equal sort values.
 ## Writes respect the active query
 
 On query-enabled surfaces the emitted `submit_form` and row-action `invoke`
-contexts also carry `"query": {"path": "/query"}`. After a successful write,
+contexts also carry `"query": {"path": "/query"}` (on multi-table surfaces
+that binds the whole per-table state object). After a successful write,
 the refresh re-runs the *current* query (same search/filters/sort/page) and
 includes a fresh `/query` message — the user stays on their page with their
 filters intact. A missing or invalid carried query state falls back to the
@@ -127,6 +146,7 @@ they pass `:query_state` themselves.
 
 - Filters are equality-only (`filters [:status]` = "status equals the
   submitted value"). Ranged/custom filters are roadmap.
-- One query per table; queries are per-surface, not shared.
+- One query per table (multi-table surfaces may attach one query to each
+  table); queries are per-surface, not shared.
 - No sort UI is emitted (sort arrives via the `"query"` action, e.g. from an
   agent or custom client); the allowlist still applies.

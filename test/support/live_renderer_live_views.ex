@@ -197,4 +197,14 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       ui: AshA2ui.Test.Paginated,
       pubsub: [module: AshA2ui.Test.PubSub, topics: ["ash_a2ui_test:paginated"]]
   end
+
+  defmodule AshA2ui.Test.MultiTableLive do
+    @moduledoc false
+
+    # Real defaults against the multi-table fixture: PubSub refreshes must
+    # rebuild the data model for every table.
+    use AshA2ui.LiveRenderer,
+      ui: AshA2ui.Test.ReviewItem,
+      pubsub: [module: AshA2ui.Test.PubSub, topics: ["ash_a2ui_test:review"]]
+  end
 end

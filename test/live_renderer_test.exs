@@ -244,6 +244,24 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         # declared defaults and push "search" => "".
         assert %{"search" => "needle", "page" => 1} = value["query"]
       end
+
+      test "a PubSub refresh on a multi-table surface rebuilds every table", %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/live-renderer/multi-table")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+
+        Phoenix.PubSub.broadcast(
+          AshA2ui.Test.PubSub,
+          "ash_a2ui_test:review",
+          %Ash.Notifier.Notification{resource: AshA2ui.Test.ReviewItem}
+        )
+
+        assert_push_event(view, "a2ui:messages", %{messages: [message]}, 1_000)
+        SchemaHelper.assert_valid_server_message(message)
+
+        assert %{"updateDataModel" => %{"path" => "/", "value" => value}} = message
+        assert %{"new_items" => _, "done_items" => _} = value["records"]
+        assert %{"new_items" => %{"page" => 1}} = value["query"]
+      end
     end
   end
 end

@@ -10,6 +10,39 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Calculation & aggregate columns: table (and display) fields may name
+  public calculations and aggregates. They are `Ash.Query.load`ed on every
+  read path (initial render, post-action refreshes, `query` reads) and
+  serialized through the JSON-safe serializer like attributes. Query
+  `sortable`/`default_sort` allowlists accept public aggregates and
+  expression-based calculations (anything `Ash.Resource.Info.sortable?/3`
+  approves); module-based calculations and any calculation/aggregate in
+  `search_fields`/`filters` are rejected at compile time with tailored
+  messages, as are calculations/aggregates in form components (not
+  writable).
+- Multiple named table components: `component :table, :new_items do ... end`
+  declares additional, independently configured table sections (own
+  `fields`/`read_action`/`row_actions`/`query` each); the unnamed
+  `component :table` keeps working (implicit name `:table`). Multi-table
+  surfaces scope the data model per table (`/records/<component_name>`,
+  `/query/<component_name>`), infix component ids with the table name, and
+  render humanized section headings; single-table surfaces are entirely
+  unchanged. `invoke`/`select_row` contexts additively carry
+  `"component"`; `query` contexts require it on multi-table surfaces. New
+  `AshA2ui.Verifiers.VerifyComponents` enforces unique component names,
+  table-only naming, and a single `:form`.
+- `refreshes` action metadata: `action :approve do refreshes [:new_items] end`
+  limits which table components a successful action rewrites (default stays
+  refresh-everything); targets and action reachability are compile-time
+  verified. `/form`/`/errors`/`/ui/*` follow-up semantics are unchanged.
+
+### Bug Fixes:
+
+- `invoke` on an update-type action in `row_actions` now calls that action
+  argument-less on the identified record. Previously it silently routed to
+  the form's `update_action` with empty params — a no-op unless the invoked
+  action happened to be the form's update action.
+
 - Relationship rendering, part 1 — `belongs_to` form selects: a form field
   whose name matches a `belongs_to` relationship's `source_attribute` renders
   as a `ChoicePicker` automatically (options loaded from the destination's

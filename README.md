@@ -213,6 +213,46 @@ the `"query"` action validates every request against the allowlist and
 answers with `/records` + `/query` data-model updates. See
 [Queries and Pagination](documentation/topics/queries-and-pagination.md).
 
+### Multiple table sections with scoped refreshes
+
+Name extra `:table` components to build multi-section surfaces (review
+dashboards, split lists). Each table gets its own read action, fields, and
+query; `action ... refreshes` limits which sections a row action's success
+rewrites. Calculation and aggregate fields render like attributes:
+
+```elixir
+a2ui do
+  for_resource MyApp.Review.Item
+  surface_id "review"
+
+  component :table, :new_items do
+    fields [:name, :occurrence_count]    # occurrence_count: an aggregate
+    read_action :new_items
+    row_actions [:approve, :dismiss]
+    query :new_q
+  end
+
+  component :table, :done_items do
+    fields [:name, :state]
+    read_action :done_items
+  end
+
+  query :new_q do
+    search_fields [:name]
+    sortable [:name, :occurrence_count]  # aggregates are sortable
+  end
+
+  action :approve do
+    refreshes [:new_items]               # success rewrites only /records/new_items
+  end
+end
+```
+
+Multi-table surfaces scope the data model per table
+(`/records/<component_name>`, `/query/<component_name>`); single-table
+surfaces are unchanged. See
+[Multi-Section Surfaces](documentation/topics/multi-section-surfaces.md).
+
 ### Relationships
 
 `belongs_to` form fields render as selects automatically — a form field whose
@@ -377,6 +417,16 @@ Shipped beyond the v0 core:
   through loaded relationships (see
   [Relationship Rendering](documentation/topics/relationships.md) and the
   [Relationships](#relationships) example above).
+- ✅ **Calculation & aggregate columns** — table fields may name public
+  calculations and aggregates; they load and serialize like attributes, and
+  aggregates/expression calculations are sortable in `query` allowlists (see
+  the [multi-section example](#multiple-table-sections-with-scoped-refreshes)
+  above).
+- ✅ **Multiple named table components + `refreshes` metadata** — several
+  independent table sections per surface with a scoped data model
+  (`/records/<component_name>`, `/query/<component_name>`), and `action`
+  entities that limit which sections a successful action refreshes (see
+  [Multi-Section Surfaces](documentation/topics/multi-section-surfaces.md)).
 
 Documented as roadmap (not built):
 
@@ -385,16 +435,14 @@ Documented as roadmap (not built):
   version is a new encoder module.
 - **Richer `query` filters** — ranged/custom filter shapes beyond the shipped
   equality filters, and multiple queries per table.
-- **`refreshes` metadata on actions** — after a successful action, push
-  `updateDataModel` only for the named data regions it affects (v0 refreshes
-  the whole surface data model).
 - **Searchable/paginated relationship selects** — for option sets beyond
   `option_limit`; today's selects load a capped, sorted option list.
 - **Nested forms** — interaction modes driven by
   `Ash.Changeset.ManagedRelationshipHelpers` (create/edit related records
   inline).
 - **Sorting on relationship-sourced columns** — `source` table columns are
-  render-only; `ui_query` sorting stays restricted to plain attributes.
+  render-only; `query` sorting covers attributes, aggregates, and expression
+  calculations, but not `source` paths.
 - **`overrides:` option on `build_surface/2`** — per-request title/label/
   empty-state tweaks: the middle rung between the DSL and forking the encoder.
 - **Context struct** (`actor`, `tenant`, `locale`, `audience`, `device`) with
@@ -403,7 +451,6 @@ Documented as roadmap (not built):
   engine.
 - **Non-LiveView streaming transports** (SSE, raw WebSocket).
 - **Custom component catalogs** beyond the basic catalog.
-- **Aggregate/calculation rendering** beyond plain attribute fields.
 - **AshAI-generated component trees** — letting an LLM propose the surface
   layout while AshA2ui keeps the data and action contracts safe.
 
@@ -416,6 +463,7 @@ Documented as roadmap (not built):
   hook contract, `@a2ui/lit` / `@a2ui/react`
 - [Actions and Authorization](documentation/topics/actions-and-authorization.md)
 - [Queries and Pagination](documentation/topics/queries-and-pagination.md)
+- [Multi-Section Surfaces](documentation/topics/multi-section-surfaces.md)
 - [Data Model Conventions](documentation/topics/data-model-conventions.md)
 - [DSL reference](documentation/dsls/DSL-AshA2ui.md)
 

@@ -255,6 +255,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           when is_map(value) ->
             value
 
+          # Multi-table surfaces scope follow-ups per table
+          # (/query/<component_name>); fold them into the tracked keyed map.
+          %{"updateDataModel" => %{"path" => "/query/" <> table, "value" => value}}, acc
+          when is_map(value) ->
+            Map.put((is_map(acc) && acc) || %{}, table, value)
+
           _message, acc ->
             acc
         end)

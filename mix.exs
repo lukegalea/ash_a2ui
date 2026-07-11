@@ -92,6 +92,7 @@ defmodule AshA2ui.MixProject do
         "documentation/topics/rendering-clients.md",
         "documentation/topics/actions-and-authorization.md",
         "documentation/topics/queries-and-pagination.md",
+        "documentation/topics/multi-section-surfaces.md",
         "documentation/topics/relationships.md",
         "documentation/topics/data-model-conventions.md",
         {"documentation/dsls/DSL-AshA2ui.md", search_data: Spark.Docs.search_data_for(AshA2ui)},
@@ -116,7 +117,8 @@ defmodule AshA2ui.MixProject do
           AshA2ui.ResolvedView,
           AshA2ui.Component,
           AshA2ui.Field,
-          AshA2ui.Query
+          AshA2ui.Query,
+          AshA2ui.Action
         ],
         Encoding: [
           AshA2ui.Encoder,

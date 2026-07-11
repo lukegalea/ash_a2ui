@@ -31,8 +31,14 @@ end
   `search_fields` that the surface actually needs — every entry is
   client-reachable. Never mirror all public attributes "because they exist".
 - All query fields must be public attributes; `search_fields` must be
-  string-typed. Both are verified at compile time — fix the declaration, do
-  not work around the verifier.
+  string-typed. `sortable`/`default_sort` may additionally name public
+  aggregates and expression-based calculations (module-based calculations
+  are not generically sortable and are rejected); calculations/aggregates
+  are never allowed in `search_fields` or `filters`. All verified at compile
+  time — fix the declaration, do not work around the verifier.
+- On multi-table surfaces each named table may attach its own query; state
+  lives at `/query/<component_name>` and the `query` action context requires
+  `"component"` (the emitted controls send it automatically).
 - Set `max_page_size` deliberately: it is the hard clamp on client-requested
   page sizes.
 

@@ -134,21 +134,36 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  # Success refreshes respect the client's current query state when the
-  # surface has a `query` configured: any action context may carry the
-  # current `/query` map under `"query"`. A missing or invalid carried state
-  # falls back to the query's declared defaults (the write itself is never
-  # failed over refresh state). Surfaces without a query refresh as before.
-  defp refresh_params(%{query: nil}, _context), do: nil
+  # Success refreshes respect the client's current query state when a table
+  # has a `query` configured: any action context may carry the current
+  # `/query` value under `"query"` — the single table's state map, or (on
+  # multi-table surfaces) the whole per-table state object. Returns
+  # `%{table_name => params | nil}` (nil for tables without a query). A
+  # missing or invalid carried state falls back to the query's declared
+  # defaults (the write itself is never failed over refresh state).
+  defp refresh_params(view, context) do
+    carried = (is_map(context) && Map.get(context, "query")) || nil
 
-  defp refresh_params(view, context) when is_map(context) do
-    case QueryRunner.parse(view, Map.take(context, ["query"])) do
-      {:ok, params} -> params
-      {:error, _reason} -> QueryRunner.default_params(view.query)
-    end
+    Map.new(view.tables, fn table ->
+      {table.name, table_refresh_params(view, table, carried)}
+    end)
   end
 
-  defp refresh_params(view, _context), do: QueryRunner.default_params(view.query)
+  defp table_refresh_params(_view, %{query: nil}, _carried), do: nil
+
+  defp table_refresh_params(view, table, carried) do
+    state =
+      if ResolvedView.multi_table?(view) do
+        is_map(carried) && Map.get(carried, to_string(table.name))
+      else
+        carried
+      end
+
+    case QueryRunner.parse(table, %{"query" => state}) do
+      {:ok, params} -> params
+      {:error, _reason} -> QueryRunner.default_params(table.query)
+    end
+  end
 
   defp parse(%{"action" => %{"name" => name} = action}) when is_binary(name),
     do: {:ok, name, Map.get(action, "context") || %{}}
@@ -212,17 +227,19 @@ defmodule AshA2ui.ActionHandler do
   end
 
   defp dispatch("query", context, %{view: view, ash_opts: ash_opts}) do
-    with {:parse, {:ok, params}} <- {:parse, QueryRunner.parse(view, context)},
+    with {:table, {:ok, table}} <- {:table, query_table(view, context)},
+         {:parse, {:ok, params}} <- {:parse, QueryRunner.parse(table, context)},
          {:run, {:ok, records, query_state}} <-
-           {:run, QueryRunner.run(view, params, ash_opts)} do
-      rows = Enum.map(records, &record_values(view, &1, table_fields(view)))
+           {:run, QueryRunner.run(table, params, ash_opts)} do
+      rows = Enum.map(records, &record_values(view, &1, table_fields(table)))
 
       {:ok,
        [
-         update_data_model(view, "/records", rows),
-         update_data_model(view, "/query", query_state)
+         update_data_model(view, table.records_path, rows),
+         update_data_model(view, table.query_path, query_state)
        ]}
     else
+      {:table, {:error, reason}} -> {:error, [status(view, reason)]}
       {:parse, {:error, reason}} -> {:error, [status(view, reason)]}
       {:run, {:error, error}} -> {:error, error_messages(view, error)}
     end
@@ -232,10 +249,33 @@ defmodule AshA2ui.ActionHandler do
     {:error, [status(view, "Unknown action #{inspect(name)}.")]}
   end
 
+  # The table a "query" action targets: the only table on single-table
+  # surfaces; on multi-table surfaces the context must carry the source
+  # "component" (the emitted controls always do). A surface without tables
+  # resolves to the view itself — its nil query makes QueryRunner.parse
+  # reject with the usual "no query configured" message.
+  defp query_table(%ResolvedView{tables: [table]}, _context), do: {:ok, table}
+  defp query_table(%ResolvedView{tables: []} = view, _context), do: {:ok, view}
+
+  defp query_table(view, context) do
+    case is_map(context) && Map.get(context, "component") do
+      component when is_binary(component) ->
+        case Enum.find(view.tables, &(to_string(&1.name) == component)) do
+          nil -> {:error, "Unknown table component #{inspect(component)}."}
+          table -> {:ok, table}
+        end
+
+      _missing ->
+        {:error,
+         ~s(Malformed query action: multi-table surfaces require "component" in the context.)}
+    end
+  end
+
   # --- submit_form -----------------------------------------------------------
 
   defp create(%{view: view, ash_opts: ash_opts} = env, values) do
     action = view.create_action || primary_action(view.resource, :create)
+    env = Map.put(env, :invoked, action)
 
     view.resource
     |> Ash.Changeset.for_create(action, cast_values(view.resource, action, values), ash_opts)
@@ -245,6 +285,7 @@ defmodule AshA2ui.ActionHandler do
 
   defp update(%{view: view, ash_opts: ash_opts} = env, record_id, values) do
     action = view.update_action || primary_action(view.resource, :update)
+    env = Map.put(env, :invoked, action)
 
     result =
       with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
@@ -259,6 +300,8 @@ defmodule AshA2ui.ActionHandler do
   # --- invoke ----------------------------------------------------------------
 
   defp invoke(action_name, record_id, %{view: view} = env) do
+    env = Map.put(env, :invoked, action_name)
+
     case ResourceInfo.action(view.resource, action_name) do
       %{type: :destroy} ->
         invoke_destroy(action_name, record_id, env)
@@ -355,48 +398,81 @@ defmodule AshA2ui.ActionHandler do
   defp after_write({:error, error}, %{view: view}, _status_text),
     do: {:error, error_messages(view, error)}
 
-  # With a query configured the refresh runs through the QueryRunner (using
-  # the carried-or-default query state, see refresh_params/2) and additionally
-  # writes the resulting /query state; without one it re-reads everything.
+  # A success re-reads and re-emits every refresh-target table (each table's
+  # records path, plus its query state when a query is attached — run
+  # through the carried-or-default query params, see refresh_params/2),
+  # then the standard /form, /errors and /ui writes.
+  #
+  # Targets default to *every* table; an `action` entity
+  # (`action :approve do refreshes [:new_items] end`) limits the refresh to
+  # the named table components. /ui/action_result and /ui/action_result_text
+  # are cleared on every successful action before any `extra` writes, so a
+  # stale result never outlives the action that produced it (a map-returning
+  # generic action clears and then sets them in the same batch).
   defp success(env, status_text, extra \\ [])
 
-  defp success(%{view: view, ash_opts: ash_opts, refresh: nil}, status_text, extra) do
-    case read_records(view, ash_opts) do
+  defp success(%{view: view} = env, status_text, extra) do
+    case refresh_messages(env) do
+      {:ok, refresh} ->
+        {:ok,
+         refresh ++
+           [
+             update_data_model(view, "/form", %{}),
+             update_data_model(view, "/errors", %{}),
+             update_data_model(view, "/ui/status", status_text),
+             update_data_model(view, "/ui/action_result", %{}),
+             update_data_model(view, "/ui/action_result_text", "")
+           ] ++ extra}
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  defp refresh_messages(%{view: view, ash_opts: ash_opts, refresh: refresh} = env) do
+    view
+    |> refresh_targets(env[:invoked])
+    |> Enum.reduce_while({:ok, []}, fn table, {:ok, acc} ->
+      case table_refresh(view, table, refresh[table.name], ash_opts) do
+        {:ok, messages} -> {:cont, {:ok, acc ++ messages}}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp refresh_targets(view, invoked) do
+    case invoked && Map.get(view.refreshes, invoked) do
+      nil -> view.tables
+      names -> Enum.filter(view.tables, &(&1.name in names))
+    end
+  end
+
+  defp table_refresh(view, %{query: nil} = table, _params, ash_opts) do
+    case read_table(table, ash_opts) do
       {:ok, records} ->
-        {:ok, success_messages(view, records, [], status_text, extra)}
+        {:ok, [update_data_model(view, table.records_path, rows(view, table, records))]}
 
       {:error, error} ->
-        {:error, error_messages(view, error)}
+        {:error, error}
     end
   end
 
-  defp success(%{view: view, ash_opts: ash_opts, refresh: params}, status_text, extra) do
-    case QueryRunner.run(view, params, ash_opts) do
+  defp table_refresh(view, table, params, ash_opts) do
+    case QueryRunner.run(table, params || QueryRunner.default_params(table.query), ash_opts) do
       {:ok, records, query_state} ->
-        query_message = [update_data_model(view, "/query", query_state)]
-        {:ok, success_messages(view, records, query_message, status_text, extra)}
+        {:ok,
+         [
+           update_data_model(view, table.records_path, rows(view, table, records)),
+           update_data_model(view, table.query_path, query_state)
+         ]}
 
       {:error, error} ->
-        {:error, error_messages(view, error)}
+        {:error, error}
     end
   end
 
-  # /ui/action_result and /ui/action_result_text are cleared on every
-  # successful action before any `extra` writes, so a stale result never
-  # outlives the action that produced it (a map-returning generic action
-  # clears and then sets them in the same batch).
-  defp success_messages(view, records, query_message, status_text, extra) do
-    rows = Enum.map(records, &record_values(view, &1, table_fields(view)))
-
-    [update_data_model(view, "/records", rows)] ++
-      query_message ++
-      [
-        update_data_model(view, "/form", %{}),
-        update_data_model(view, "/errors", %{}),
-        update_data_model(view, "/ui/status", status_text),
-        update_data_model(view, "/ui/action_result", %{}),
-        update_data_model(view, "/ui/action_result_text", "")
-      ] ++ extra
+  defp rows(view, table, records) do
+    Enum.map(records, &record_values(view, &1, table_fields(table)))
   end
 
   # Human-readable, selectable text for a map-returning generic action:
@@ -421,13 +497,20 @@ defmodule AshA2ui.ActionHandler do
 
   # --- Ash invocation helpers ------------------------------------------------
 
-  defp read_records(view, ash_opts) do
-    view.resource
-    |> Ash.Query.for_read(read_action(view), %{}, ash_opts)
-    |> Ash.Query.load(view.loads)
+  defp read_table(table, ash_opts) do
+    table.resource
+    |> Ash.Query.for_read(
+      table.read_action || primary_action(table.resource, :read),
+      %{},
+      ash_opts
+    )
+    |> Ash.Query.load(table.loads)
     |> Ash.read()
   end
 
+  # Record lookups (updates, destroys, select_row) go through the single
+  # table's read action; on multi-table surfaces — where per-table reads may
+  # be filtered slices — through the resource's primary read.
   defp fetch_record(view, record_id, ash_opts) do
     Ash.get(view.resource, record_id, Keyword.put(ash_opts, :action, read_action(view)))
   end
@@ -479,20 +562,22 @@ defmodule AshA2ui.ActionHandler do
 
   # --- field selection -------------------------------------------------------
 
-  defp table_fields(view) do
-    declared_fields(view, :table) || public_attribute_names(view.resource)
+  defp table_fields(table) do
+    case table.component.fields do
+      fields when is_list(fields) -> fields
+      _no_declared_fields -> public_attribute_names(table.resource)
+    end
   end
 
   defp form_fields(view) do
-    declared_fields(view, :form) || table_fields(view)
-  end
-
-  defp declared_fields(view, component_name) do
-    case Enum.find(view.components, &(&1.name == component_name)) do
+    case Enum.find(view.components, &(&1.name == :form)) do
       %{fields: fields} when is_list(fields) -> fields
-      _no_declared_fields -> nil
+      _no_form -> default_row_fields(view)
     end
   end
+
+  defp default_row_fields(%{tables: [table | _rest]}), do: table_fields(table)
+  defp default_row_fields(view), do: public_attribute_names(view.resource)
 
   defp public_attribute_names(resource) do
     resource |> ResourceInfo.public_attributes() |> Enum.map(& &1.name)

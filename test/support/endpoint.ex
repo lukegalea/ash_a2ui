@@ -33,6 +33,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       live("/live-renderer/defaults", AshA2ui.Test.DefaultsLive)
       live("/live-renderer/query", AshA2ui.Test.QueryDefaultsLive)
       live("/live-renderer/query-pubsub", AshA2ui.Test.QueryPubsubLive)
+      live("/live-renderer/multi-table", AshA2ui.Test.MultiTableLive)
     end
   end
 

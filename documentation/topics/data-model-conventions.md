@@ -11,14 +11,16 @@ custom hooks, and tests can rely on them.
 
 | Path | Contains | Written when |
 |---|---|---|
-| `/records` | The list of records backing the table component | Initial render; every refresh (action follow-ups, PubSub) |
+| `/records` | The list of records backing the table component (multi-table surfaces: an object keyed by table component name — see below) | Initial render; every refresh (action follow-ups, PubSub) |
+| `/records/<component_name>` | One table's record list on a **multi-table** surface | Initial render; every refresh that targets that table |
 | `/form` | The form component's current field values | Initial render; row selection (edit); after submit |
 | `/errors/<field>` | Human-readable validation error text for `<field>` | A submitted action fails validation |
 | `/options/<field>` | The option list of a relationship-backed form select | Initial render; full data-model refreshes |
 | `/ui/status` | Operation feedback text (the flash-equivalent) | After every handled action (success/error) |
 | `/ui/action_result` | The raw map returned by a map-returning generic action | An `invoke`d generic action returns a plain map (cleared by every subsequent successful action) |
 | `/ui/action_result_text` | The human-readable rendering of `/ui/action_result` | Same as `/ui/action_result` |
-| `/query` | The current search/filter/sort/pagination state of a query-enabled table | Initial render; after every `query` action; alongside query-aware success refreshes |
+| `/query` | The current search/filter/sort/pagination state of a query-enabled table (multi-table surfaces: an object keyed by table component name) | Initial render; after every `query` action; alongside query-aware success refreshes |
+| `/query/<component_name>` | One table's query state on a **multi-table** surface | Same as `/query`, per table |
 
 Everything under these paths uses camelCase string keys, matching the rest of
 the wire format.
@@ -44,8 +46,60 @@ LiveView transport's PubSub subscription — is one message:
 ```
 
 Because `updateDataModel` replaces the value at `path`, refreshes are
-whole-region in v0: the list is replaced, not diffed. (Named per-region
-refreshes via `refreshes` action metadata are on the roadmap.)
+whole-region: the list is replaced, not diffed. On multi-table surfaces the
+region is one table (`/records/<component_name>`), and `action` entities with
+`refreshes` metadata narrow which regions a successful action rewrites — see
+below and [Multi-Section Surfaces](multi-section-surfaces.md).
+
+## Multi-table surfaces: `/records/<name>` and `/query/<name>`
+
+A surface is **multi-table** exactly when it declares more than one `:table`
+component (named via `component :table, :some_name` — see
+[Multi-Section Surfaces](multi-section-surfaces.md)). The frozen rules:
+
+- **Single-table surfaces are unchanged.** `/records` is the record list,
+  `/query` is the (single) query-state map, and all component ids keep their
+  unsuffixed names. Nothing about this wave affects existing surfaces.
+- On a **multi-table** surface, `/records` is an **object keyed by table
+  component name**: `/records/<component_name>` holds that table's record
+  list. Every declared table always has a key (missing data renders as `[]`).
+- `/query` is likewise an object with one `/query/<component_name>` entry
+  **per query-attached table**; tables without a `query` have no key. Each
+  entry has the same shape as the single-table `/query` (below).
+- Refresh messages target the scoped paths — `/records/<name>` and
+  `/query/<name>` — never the whole `/records` object (except full
+  data-model refreshes at `/`, which write the complete keyed objects).
+- Row-action `invoke` contexts additively carry
+  `"component": "<component_name>"` identifying the source table (the
+  handler tolerates its absence). `query` action contexts **require** it on
+  multi-table surfaces.
+
+```json
+{
+  "version": "v0.9.1",
+  "updateDataModel": {
+    "surfaceId": "review",
+    "path": "/records/new_items",
+    "value": [ { "id": "…", "name": "Fresh", "count": 3 } ]
+  }
+}
+```
+
+## `refreshes` — per-action refresh regions
+
+By default a successful `submit_form`/`invoke` refreshes **every** table.
+An `action` DSL entity narrows that:
+
+```elixir
+action :approve do
+  refreshes [:new_items]
+end
+```
+
+After a successful `:approve`, only `/records/new_items` (and
+`/query/new_items`, when a query is attached) is rewritten — other tables'
+regions are left untouched on the client. The `/form`, `/errors` and `/ui/*`
+follow-up semantics are never affected by `refreshes`.
 
 ## `/form` — form state
 
@@ -200,7 +254,9 @@ Conventions:
 
 When a table component declares a `query` (see
 [Queries and Pagination](queries-and-pagination.md)), the surface carries the
-current query state at `/query`. The exact shape (frozen contract):
+current query state at `/query` (multi-table surfaces: at
+`/query/<component_name>` per query-attached table). The exact shape (frozen
+contract):
 
 ```json
 {

@@ -77,6 +77,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   @behaviour AshA2ui.Encoder
 
   alias Ash.Resource.Info, as: ResourceInfo
+  alias AshA2ui.ResolvedView
 
   @version "v0.9.1"
   @catalog_id "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
@@ -115,7 +116,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   """
   @impl true
   def encode_data_model(resolved_view, records, opts) do
-    serialized = Enum.map(records, &serialize_record(resolved_view, &1))
+    serialized = records_value(resolved_view, records)
 
     {path, value} =
       case Keyword.get(opts, :scope, :full) do
@@ -144,6 +145,27 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
   end
 
+  # The value at "/records": on single-table surfaces the serialized row
+  # list (records arrive as a list); on multi-table surfaces an object keyed
+  # by table component name (records arrive as %{table_name => [record]},
+  # see AshA2ui.Info) — every declared table gets a key, missing ones [].
+  defp records_value(view, records) do
+    if ResolvedView.multi_table?(view) do
+      unless is_map(records) do
+        raise ArgumentError,
+              "multi-table surfaces expect records as a map keyed by table component " <>
+                "name (%{table_name => [record]}), got: #{inspect(records)}"
+      end
+
+      Map.new(view.tables, fn table ->
+        rows = Map.get(records, table.name, [])
+        {to_string(table.name), Enum.map(rows, &serialize_record(view, table, &1))}
+      end)
+    else
+      Enum.map(records, &serialize_record(view, List.first(view.tables), &1))
+    end
+  end
+
   # --- select options ---
 
   # Options for relationship selects are loaded by the caller
@@ -165,19 +187,29 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   # --- component tree ---
 
+  # Multi-table id scheme: single-table surfaces keep the frozen unsuffixed
+  # ids ("records_list", "table_cell_<field>", "query_apply_button", ...);
+  # multi-table surfaces infix the table component name right after the id's
+  # leading noun ("records_list_<name>", "table_cell_<name>_<field>",
+  # "query_<name>_apply_button", ...) — see the sfx/1-using call sites.
   defp components(view, options) do
-    table = Enum.find(view.components, &(&1.name == :table))
     form = Enum.find(view.components, &(&1.name == :form))
-    query = (table && view.query) || nil
 
-    table_components = (table && table_components(view, table)) || []
-    query_components = (query && query_components(view, query)) || []
+    table_sections =
+      Enum.flat_map(view.tables, fn table ->
+        sfx = table_suffix(view, table)
+
+        table_components(view, table, sfx) ++
+          query_components(view, table, sfx) ++
+          table_descendants(view, table, sfx)
+      end)
+
     form_components = (form && form_components(view, form)) || []
 
     root = %{
       "id" => "root",
       "component" => "Column",
-      "children" => root_children(table, query, form)
+      "children" => root_children(view, form)
     }
 
     status = %{
@@ -186,25 +218,29 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "text" => %{"path" => "/ui/status"}
     }
 
-    [root | table_components ++ query_components ++ form_components] ++
-      table_descendants(view, table) ++
+    [root | table_sections ++ form_components] ++
       form_descendants(view, form, options) ++ [status | action_result_components()]
   end
 
-  # Root order: heading, query controls, the list, pagination, form, status,
-  # action-result panel — each section present only when declared.
-  defp root_children(table, query, form) do
-    sections = [
-      {"table_heading", table},
-      {"query_controls", query},
-      {"records_list", table},
-      {"query_pagination", query},
-      {"form", form},
-      {"status_text", true},
-      {"action_result_panel", true}
-    ]
+  defp table_suffix(view, table) do
+    if ResolvedView.multi_table?(view), do: "_#{table.name}", else: ""
+  end
 
-    for {id, present} <- sections, present, do: id
+  # Root order: per table (in declaration order) heading, query controls,
+  # the list, pagination; then form, status, action-result panel — each
+  # section present only when declared.
+  defp root_children(view, form) do
+    table_children =
+      Enum.flat_map(view.tables, fn table ->
+        sfx = table_suffix(view, table)
+
+        ["table_heading#{sfx}"] ++
+          ((table.query && ["query#{sfx}_controls"]) || []) ++
+          ["records_list#{sfx}"] ++
+          ((table.query && ["query#{sfx}_pagination"]) || [])
+      end)
+
+    table_children ++ ((form && ["form"]) || []) ++ ["status_text", "action_result_panel"]
   end
 
   # The result panel displays map-returning generic action results: a Column
@@ -225,18 +261,25 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     ]
   end
 
-  defp table_components(view, _table) do
+  # Single-table headings show the humanized resource name (frozen); each
+  # multi-table section is headed by its humanized component name.
+  defp table_components(view, table, sfx) do
+    heading =
+      if ResolvedView.multi_table?(view),
+        do: humanize(table.name),
+        else: humanize_resource(view.resource)
+
     [
       %{
-        "id" => "table_heading",
+        "id" => "table_heading#{sfx}",
         "component" => "Text",
-        "text" => humanize_resource(view.resource),
+        "text" => heading,
         "variant" => "h2"
       },
       %{
-        "id" => "records_list",
+        "id" => "records_list#{sfx}",
         "component" => "List",
-        "children" => %{"componentId" => "record_row", "path" => "/records"}
+        "children" => %{"componentId" => "record_row#{sfx}", "path" => table.records_path}
       }
     ]
   end
@@ -244,39 +287,44 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # --- query controls (search / filters / pagination) ---
 
   # The `"query"` action wire contract: every control sends
-  # `{"query": {"path": "/query"}}` — the current query state — plus either a
-  # literal page reset (`"page" => 1`, Apply) or a relative page change
-  # (`"pageDelta" => -1 | 1`, prev/next). The server validates everything
-  # against the declared allowlist (`AshA2ui.QueryRunner`).
-  defp query_components(view, query) do
-    search = (query.search_fields != [] && [search_input()]) || []
-    filters = Enum.map(query.filters, &filter_picker(view.resource, &1))
+  # `{"query": {"path": <the table's query path>}}` — the current query
+  # state — plus the source `"component"` and either a literal page reset
+  # (`"page" => 1`, Apply) or a relative page change (`"pageDelta" => -1 | 1`,
+  # prev/next). The server validates everything against the declared
+  # allowlist (`AshA2ui.QueryRunner`).
+  defp query_components(_view, %{query: nil}, _sfx), do: []
+
+  defp query_components(view, table, sfx) do
+    query = table.query
+    search = (query.search_fields != [] && [search_input(table, sfx)]) || []
+    filters = Enum.map(query.filters, &filter_picker(view.resource, table, &1, sfx))
 
     controls = %{
-      "id" => "query_controls",
+      "id" => "query#{sfx}_controls",
       "component" => "Row",
-      "children" => Enum.map(search ++ filters, & &1["id"]) ++ ["query_apply_button"]
+      "children" => Enum.map(search ++ filters, & &1["id"]) ++ ["query#{sfx}_apply_button"]
     }
 
-    [controls | search ++ filters] ++ apply_button() ++ pagination_components()
+    [controls | search ++ filters] ++
+      apply_button(table, sfx) ++ pagination_components(table, sfx)
   end
 
-  defp search_input do
+  defp search_input(table, sfx) do
     %{
-      "id" => "query_search_input",
+      "id" => "query#{sfx}_search_input",
       "component" => "TextField",
       "label" => "Search",
-      "value" => %{"path" => "/query/search"}
+      "value" => %{"path" => "#{table.query_path}/search"}
     }
   end
 
-  defp filter_picker(resource, field) do
+  defp filter_picker(resource, table, field, sfx) do
     %{
-      "id" => "query_filter_#{field}",
+      "id" => "query#{sfx}_filter_#{field}",
       "component" => "ChoicePicker",
       "label" => humanize(field),
       "variant" => "mutuallyExclusive",
-      "value" => %{"path" => "/query/filters/#{field}"},
+      "value" => %{"path" => "#{table.query_path}/filters/#{field}"},
       "options" => [%{"label" => "All", "value" => ""} | filter_options(resource, field)]
     }
   end
@@ -289,29 +337,42 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     end
   end
 
-  defp apply_button do
+  defp apply_button(table, sfx) do
     [
-      query_button("query_apply", %{"query" => %{"path" => "/query"}, "page" => 1}),
-      %{"id" => "query_apply_text", "component" => "Text", "text" => "Apply"}
+      query_button("query#{sfx}_apply", table, %{"page" => 1}),
+      %{"id" => "query#{sfx}_apply_text", "component" => "Text", "text" => "Apply"}
     ]
   end
 
-  defp pagination_components do
+  defp pagination_components(table, sfx) do
     [
       %{
-        "id" => "query_pagination",
+        "id" => "query#{sfx}_pagination",
         "component" => "Row",
-        "children" => ["query_prev_button", "query_page_text", "query_next_button"]
+        "children" => [
+          "query#{sfx}_prev_button",
+          "query#{sfx}_page_text",
+          "query#{sfx}_next_button"
+        ]
       },
-      query_button("query_prev", %{"query" => %{"path" => "/query"}, "pageDelta" => -1}),
-      %{"id" => "query_prev_text", "component" => "Text", "text" => "Previous"},
-      %{"id" => "query_page_text", "component" => "Text", "text" => %{"path" => "/query/page"}},
-      query_button("query_next", %{"query" => %{"path" => "/query"}, "pageDelta" => 1}),
-      %{"id" => "query_next_text", "component" => "Text", "text" => "Next"}
+      query_button("query#{sfx}_prev", table, %{"pageDelta" => -1}),
+      %{"id" => "query#{sfx}_prev_text", "component" => "Text", "text" => "Previous"},
+      %{
+        "id" => "query#{sfx}_page_text",
+        "component" => "Text",
+        "text" => %{"path" => "#{table.query_path}/page"}
+      },
+      query_button("query#{sfx}_next", table, %{"pageDelta" => 1}),
+      %{"id" => "query#{sfx}_next_text", "component" => "Text", "text" => "Next"}
     ]
   end
 
-  defp query_button(id_prefix, context) do
+  defp query_button(id_prefix, table, context) do
+    context =
+      context
+      |> Map.put("query", %{"path" => table.query_path})
+      |> Map.put("component", to_string(table.name))
+
     %{
       "id" => "#{id_prefix}_button",
       "component" => "Button",
@@ -320,51 +381,57 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
   end
 
-  # Write-action contexts carry the current /query so success refreshes can
-  # re-read with the client's active search/filters/sort/page.
-  defp put_query_binding(context, %{query: nil}), do: context
+  # Write-action contexts carry the current /query (on multi-table surfaces:
+  # the whole per-table state map) so success refreshes can re-read with the
+  # client's active search/filters/sort/page.
+  defp put_query_binding(context, view) do
+    if Enum.any?(view.tables, & &1.query) do
+      Map.put(context, "query", %{"path" => "/query"})
+    else
+      context
+    end
+  end
 
-  defp put_query_binding(context, _view),
-    do: Map.put(context, "query", %{"path" => "/query"})
-
-  defp table_descendants(_view, nil), do: []
-
-  defp table_descendants(view, table) do
-    cell_ids = Enum.map(table.fields, &"table_cell_#{&1}")
-    action_button_ids = Enum.map(table.row_actions, &"row_action_#{&1}_button")
+  defp table_descendants(view, table, sfx) do
+    fields = table.component.fields
+    cell_ids = Enum.map(fields, &"table_cell#{sfx}_#{&1}")
+    action_button_ids = Enum.map(table.row_actions, &"row_action#{sfx}_#{&1}_button")
 
     row = %{
-      "id" => "record_row",
+      "id" => "record_row#{sfx}",
       "component" => "Row",
-      "children" => cell_ids ++ action_button_ids ++ ["row_select_button"]
+      "children" => cell_ids ++ action_button_ids ++ ["row_select#{sfx}_button"]
     }
 
-    cells = Enum.map(table.fields, &cell(view, &1))
-    action_buttons = Enum.flat_map(table.row_actions, &row_action_button(view, &1))
+    cells = Enum.map(fields, &cell(view, &1, sfx))
+    action_buttons = Enum.flat_map(table.row_actions, &row_action_button(view, table, &1, sfx))
 
     select_button = [
       %{
-        "id" => "row_select_button",
+        "id" => "row_select#{sfx}_button",
         "component" => "Button",
-        "child" => "row_select_text",
+        "child" => "row_select#{sfx}_text",
         "action" => %{
           "event" => %{
             "name" => "select_row",
-            "context" => %{"recordId" => %{"path" => "id"}}
+            "context" => %{
+              "recordId" => %{"path" => "id"},
+              "component" => to_string(table.name)
+            }
           }
         }
       },
-      %{"id" => "row_select_text", "component" => "Text", "text" => "Select"}
+      %{"id" => "row_select#{sfx}_text", "component" => "Text", "text" => "Select"}
     ]
 
     [row] ++ cells ++ action_buttons ++ select_button
   end
 
-  defp cell(view, field_name) do
+  defp cell(view, field_name, sfx) do
     field = view.fields[field_name]
 
     %{
-      "id" => "table_cell_#{field_name}",
+      "id" => "table_cell#{sfx}_#{field_name}",
       "component" => "Text",
       "text" => cell_text(field)
     }
@@ -385,12 +452,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   defp cell_text(field), do: %{"path" => to_string(field.name)}
 
-  defp row_action_button(view, action) do
+  defp row_action_button(view, table, action, sfx) do
     [
       %{
-        "id" => "row_action_#{action}_button",
+        "id" => "row_action#{sfx}_#{action}_button",
         "component" => "Button",
-        "child" => "row_action_#{action}_text",
+        "child" => "row_action#{sfx}_#{action}_text",
         "action" => %{
           "event" => %{
             "name" => "invoke",
@@ -398,7 +465,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
               put_query_binding(
                 %{
                   "action" => to_string(action),
-                  "recordId" => %{"path" => "id"}
+                  "recordId" => %{"path" => "id"},
+                  "component" => to_string(table.name)
                 },
                 view
               )
@@ -406,7 +474,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         }
       },
       %{
-        "id" => "row_action_#{action}_text",
+        "id" => "row_action#{sfx}_#{action}_text",
         "component" => "Text",
         "text" => humanize(action)
       }
@@ -537,33 +605,54 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   # --- /query state ---
 
-  # The initial data model carries the query state under "query". Callers that
-  # ran the query (AshA2ui.Info) pass the real state via `:query_state`; direct
-  # encoder calls fall back to the declared defaults with counts derived from
-  # the records at hand.
-  defp put_query_state(value, %{query: nil}, _opts), do: value
-
+  # The initial data model carries the query state under "query": the single
+  # table's state map, or (multi-table) an object keyed by table component
+  # name covering every query-attached table. Callers that ran the queries
+  # (AshA2ui.Info) pass the real state via `:query_state`; direct encoder
+  # calls fall back to the declared defaults with counts derived from the
+  # records at hand. Omitted entirely when no table declares a query.
   defp put_query_state(value, view, opts) do
-    state =
-      Keyword.get(opts, :query_state) ||
-        AshA2ui.QueryRunner.state(
-          view.query,
-          AshA2ui.QueryRunner.default_params(view.query),
-          length(value["records"]),
-          false
+    query_tables = Enum.filter(view.tables, & &1.query)
+
+    cond do
+      query_tables == [] ->
+        value
+
+      ResolvedView.multi_table?(view) ->
+        states = Keyword.get(opts, :query_state) || %{}
+
+        Map.put(
+          value,
+          "query",
+          Map.new(query_tables, fn table ->
+            rows = value["records"][to_string(table.name)] || []
+            {to_string(table.name), Map.get(states, table.name) || default_state(table, rows)}
+          end)
         )
 
-    Map.put(value, "query", state)
+      true ->
+        state =
+          Keyword.get(opts, :query_state) || default_state(hd(query_tables), value["records"])
+
+        Map.put(value, "query", state)
+    end
+  end
+
+  defp default_state(table, records) do
+    AshA2ui.QueryRunner.state(
+      table.query,
+      AshA2ui.QueryRunner.default_params(table.query),
+      length(records),
+      false
+    )
   end
 
   # --- record serialization ---
 
-  defp serialize_record(view, record) do
-    table = Enum.find(view.components, &(&1.name == :table))
-
+  defp serialize_record(view, table, record) do
     field_names =
       case table do
-        %{fields: fields} -> fields
+        %{component: %{fields: fields}} -> fields
         nil -> view.fields |> Map.values() |> Enum.reject(& &1.hidden) |> Enum.map(& &1.name)
       end
 

@@ -23,6 +23,7 @@ for the resource named by `for_resource`).
  * [query](#a2ui-query)
  * [component](#a2ui-component)
  * [field](#a2ui-field)
+ * [action](#a2ui-action)
 
 
 ### Examples
@@ -116,12 +117,14 @@ Target: `AshA2ui.Query`
 
 ### a2ui.component
 ```elixir
-component name
+component name, as \\ nil
 ```
 
 
 A UI component of the surface. `:table` renders records from a read action;
-`:form` renders create/update forms.
+`:form` renders create/update forms. A surface may declare several `:table`
+components (sections) by giving each one a distinguishing name via the
+optional second argument, e.g. `component :table, :new_items do ... end`.
 
 
 
@@ -136,6 +139,15 @@ end
 
 ```
 
+```
+component :table, :new_items do
+  fields [:name]
+  read_action :new_items
+  row_actions [:approve]
+end
+
+```
+
 
 
 ### Arguments
@@ -143,6 +155,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#a2ui-component-name){: #a2ui-component-name .spark-required} | `:table \| :form` |  | The kind of component. One of `:table` or `:form`. |
+| [`as`](#a2ui-component-as){: #a2ui-component-as } | `atom` |  | The distinguishing name of this component on surfaces with several `:table` components (e.g. `component :table, :new_items`). Optional — a table without one is named `:table`. Names must be unique across the surface's components; `:form` components cannot be named. |
 ### Options
 
 | Name | Type | Default | Docs |
@@ -212,6 +225,48 @@ end
 ### Introspection
 
 Target: `AshA2ui.Field`
+
+### a2ui.action
+```elixir
+action name
+```
+
+
+Per-action refresh metadata. When the named Ash action succeeds (invoked
+as a row action or submitted by the form), only the listed table
+components are refreshed — instead of the default "refresh every table".
+
+
+
+
+### Examples
+```
+action :approve do
+  refreshes [:new_items]
+end
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#a2ui-action-name){: #a2ui-action-name .spark-required} | `atom` |  | The Ash action this metadata applies to (a row action, or the form's create/update action). |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`refreshes`](#a2ui-action-refreshes){: #a2ui-action-refreshes .spark-required} | `list(atom)` |  | The table components refreshed after this action succeeds, by component name (`refreshes [:new_items]`; the unnamed table is `:table`). `[]` refreshes no table. Actions without an `action` entity refresh every table (the default). |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Action`
 
 
 

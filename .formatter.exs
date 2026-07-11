@@ -1,8 +1,12 @@
 # Used by "mix format"
 spark_locals_without_parens = [
+  action: 1,
+  action: 2,
   add_render_action?: 1,
+  as: 1,
   component: 1,
   component: 2,
+  component: 3,
   create_action: 1,
   default_sort: 1,
   field: 1,
@@ -23,6 +27,7 @@ spark_locals_without_parens = [
   query: 1,
   query: 2,
   read_action: 1,
+  refreshes: 1,
   relationship: 1,
   row_actions: 1,
   search_fields: 1,

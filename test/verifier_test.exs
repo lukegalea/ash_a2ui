@@ -257,6 +257,239 @@ defmodule AshA2ui.VerifierTest do
     end
   end
 
+  describe "VerifyComponents" do
+    test "two unnamed tables do not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule DuplicateUnnamedTables do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read]
+            end
+
+            a2ui do
+              component :table do
+                fields [:name]
+              end
+
+              component :table do
+                fields [:name]
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/duplicate component name :table/
+      assert result =~ ~r/component :table, :my_name/
+    end
+
+    test "two tables with the same name do not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule DuplicateNamedTables do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read]
+            end
+
+            a2ui do
+              component :table, :items do
+                fields [:name]
+              end
+
+              component :table, :items do
+                fields [:name]
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/duplicate component name :items/
+    end
+
+    test "two form components do not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule DuplicateForms do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read, create: :*]
+            end
+
+            a2ui do
+              component :form do
+                fields [:name]
+                create_action :create
+              end
+
+              component :form, :second do
+                fields [:name]
+                create_action :create
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/only :table components may carry a distinguishing name/
+    end
+
+    test "action entity refreshing an unknown table does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule RefreshesUnknownTable do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read, :destroy]
+            end
+
+            a2ui do
+              component :table do
+                fields [:name]
+                row_actions [:destroy]
+              end
+
+              action :destroy do
+                refreshes [:ghost_table]
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/action :destroy refreshes unknown table component :ghost_table/
+    end
+
+    test "action entity for an unreachable action does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule UnreachableActionEntity do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read, :destroy]
+            end
+
+            a2ui do
+              component :table do
+                fields [:name]
+                row_actions [:destroy]
+              end
+
+              action :unrelated do
+                refreshes [:table]
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/action :unrelated is not reachable from any component/
+    end
+
+    test "action entities for the form's defaulted actions compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule DefaultedFormActionEntity do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read, create: :*]
+            end
+
+            a2ui do
+              component :table do
+                fields [:name]
+              end
+
+              component :form do
+                fields [:name]
+              end
+
+              action :create do
+                refreshes [:table]
+              end
+            end
+          end
+        end)
+
+      refute result =~ ~r/not reachable/
+    end
+
+    test "duplicate action entities do not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule DuplicateActionEntities do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read, :destroy]
+            end
+
+            a2ui do
+              component :table do
+                fields [:name]
+                row_actions [:destroy]
+              end
+
+              action :destroy do
+                refreshes [:table]
+              end
+
+              action :destroy do
+                refreshes []
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/duplicate action entity :destroy/
+    end
+  end
+
   describe "VerifyActions" do
     test "missing read_action does not compile cleanly" do
       result =

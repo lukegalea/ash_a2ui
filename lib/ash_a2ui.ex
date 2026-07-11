@@ -161,7 +161,9 @@ defmodule AshA2ui do
     name: :component,
     describe: """
     A UI component of the surface. `:table` renders records from a read action;
-    `:form` renders create/update forms.
+    `:form` renders create/update forms. A surface may declare several `:table`
+    components (sections) by giving each one a distinguishing name via the
+    optional second argument, e.g. `component :table, :new_items do ... end`.
     """,
     examples: [
       """
@@ -170,15 +172,31 @@ defmodule AshA2ui do
         read_action :read
         row_actions [:edit]
       end
+      """,
+      """
+      component :table, :new_items do
+        fields [:name]
+        read_action :new_items
+        row_actions [:approve]
+      end
       """
     ],
     target: AshA2ui.Component,
-    args: [:name],
+    args: [:name, {:optional, :as}],
     schema: [
       name: [
         type: {:one_of, [:table, :form]},
         required: true,
         doc: "The kind of component. One of `:table` or `:form`."
+      ],
+      as: [
+        type: :atom,
+        doc: """
+        The distinguishing name of this component on surfaces with several
+        `:table` components (e.g. `component :table, :new_items`). Optional —
+        a table without one is named `:table`. Names must be unique across
+        the surface's components; `:form` components cannot be named.
+        """
       ],
       fields: [
         type: {:list, :atom},
@@ -206,6 +224,42 @@ defmodule AshA2ui do
         type: :atom,
         doc:
           "Name of a `query` entity providing server-enforced search/sort/filter/pagination (tables)."
+      ]
+    ]
+  }
+
+  @action %Spark.Dsl.Entity{
+    name: :action,
+    describe: """
+    Per-action refresh metadata. When the named Ash action succeeds (invoked
+    as a row action or submitted by the form), only the listed table
+    components are refreshed — instead of the default "refresh every table".
+    """,
+    examples: [
+      """
+      action :approve do
+        refreshes [:new_items]
+      end
+      """
+    ],
+    target: AshA2ui.Action,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc:
+          "The Ash action this metadata applies to (a row action, or the form's create/update action)."
+      ],
+      refreshes: [
+        type: {:list, :atom},
+        required: true,
+        doc: """
+        The table components refreshed after this action succeeds, by
+        component name (`refreshes [:new_items]`; the unnamed table is
+        `:table`). `[]` refreshes no table. Actions without an `action`
+        entity refresh every table (the default).
+        """
       ]
     ]
   }
@@ -259,7 +313,8 @@ defmodule AshA2ui do
     entities: [
       @query,
       @component,
-      @field
+      @field,
+      @action
     ]
   }
 
@@ -271,6 +326,7 @@ defmodule AshA2ui do
   ]
 
   @verifiers [
+    AshA2ui.Verifiers.VerifyComponents,
     AshA2ui.Verifiers.VerifyFields,
     AshA2ui.Verifiers.VerifyActions,
     AshA2ui.Verifiers.VerifyQueries,

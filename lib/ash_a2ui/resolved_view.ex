@@ -24,7 +24,18 @@ defmodule AshA2ui.ResolvedView do
       fields default to the `:choice_picker` widget
     * `loads` is the `Ash.Query.load/2` statement covering every relationship
       path needed by `source` table columns plus every calculation/aggregate
-      field rendered by the table
+      field rendered by the tables
+    * `tables` is one resolved read scope per `:table` component (in
+      declaration order): its component key, effective read action, resolved
+      query, per-table loads/row_actions, and the frozen data-model paths
+      its records/query state live at (see `t:table/0`)
+    * `refreshes` maps Ash action names to the table components their
+      success refreshes (from `action` entities); actions without an entry
+      refresh every table
+    * on single-table surfaces the legacy top-level `read_action` / `query` /
+      `row_actions` / `loads` fields mirror the single table exactly as
+      before; on multi-table surfaces `read_action`/`query` are `nil` and
+      `row_actions`/`loads` are the union across tables
 
   FROZEN CONTRACT — the struct fields and `resolve/2` signature are the
   interface every parallel track codes against; do not change outside an
@@ -44,7 +55,9 @@ defmodule AshA2ui.ResolvedView do
     fields: %{},
     row_actions: [],
     selects: %{},
-    loads: []
+    loads: [],
+    tables: [],
+    refreshes: %{}
   ]
 
   @typedoc """
@@ -59,6 +72,29 @@ defmodule AshA2ui.ResolvedView do
           option_limit: pos_integer
         }
 
+  @typedoc """
+  A fully resolved table scope — one per `:table` component, in declaration
+  order. `name` is the component key (`:table` for the unnamed table);
+  `records_path`/`query_path` are the frozen data-model paths this table's
+  records and query state live at (`/records` + `/query` on single-table
+  surfaces, `/records/<name>` + `/query/<name>` on multi-table surfaces;
+  `query_path` is `nil` when the table declares no `query`).
+
+  The `resource`/`read_action`/`query`/`loads` keys make a table scope a
+  drop-in read scope for `AshA2ui.QueryRunner`.
+  """
+  @type table :: %{
+          name: atom,
+          component: AshA2ui.Component.t(),
+          resource: module,
+          read_action: atom | nil,
+          query: AshA2ui.Query.t() | nil,
+          loads: list,
+          row_actions: [atom],
+          records_path: String.t(),
+          query_path: String.t() | nil
+        }
+
   @type t :: %__MODULE__{
           resource: module,
           surface_id: String.t(),
@@ -70,7 +106,9 @@ defmodule AshA2ui.ResolvedView do
           query: AshA2ui.Query.t() | nil,
           row_actions: [atom],
           selects: %{atom => select},
-          loads: list
+          loads: list,
+          tables: [table],
+          refreshes: %{atom => [atom]}
         }
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
@@ -102,22 +140,58 @@ defmodule AshA2ui.ResolvedView do
     fields = normalize_fields(resource, components, declared_fields, Map.keys(selects))
     components = Enum.map(components, &normalize_component(&1, fields))
 
-    table = Enum.find(components, &(&1.name == :table))
     form = Enum.find(components, &(&1.name == :form))
+    tables = resolve_tables(resource_or_ui_module, resource, components, fields)
+    single = if match?([_only], tables), do: hd(tables)
 
     %__MODULE__{
       resource: resource,
       surface_id: surface_id(resource_or_ui_module, resource),
       components: components,
       fields: fields,
-      read_action: component_action(table, :read_action, resource, :read),
+      read_action: single && single.read_action,
       create_action: component_action(form, :create_action, resource, :create),
       update_action: component_action(form, :update_action, resource, :update),
-      query: resolve_query(resource_or_ui_module, table),
-      row_actions: (table && table.row_actions) || [],
+      query: single && single.query,
+      row_actions: tables |> Enum.flat_map(& &1.row_actions) |> Enum.uniq(),
       selects: selects,
-      loads: loads(resource, table, fields)
+      loads: tables |> Enum.flat_map(& &1.loads) |> Enum.uniq(),
+      tables: tables,
+      refreshes:
+        Map.new(AshA2ui.Info.action_settings(resource_or_ui_module), &{&1.name, &1.refreshes})
     }
+  end
+
+  @doc """
+  Whether the view is a multi-table surface (two or more `:table`
+  components), switching the data model to the scoped
+  `/records/<component_name>` / `/query/<component_name>` paths.
+  """
+  @spec multi_table?(t()) :: boolean
+  def multi_table?(%__MODULE__{tables: tables}), do: match?([_, _ | _], tables)
+
+  # --- table scopes -------------------------------------------------------------
+
+  defp resolve_tables(resource_or_ui_module, resource, components, fields) do
+    table_components = Enum.filter(components, &(&1.name == :table))
+    multi? = match?([_, _ | _], table_components)
+
+    Enum.map(table_components, fn component ->
+      name = AshA2ui.Component.key(component)
+      query = resolve_query(resource_or_ui_module, component)
+
+      %{
+        name: name,
+        component: component,
+        resource: resource,
+        read_action: component_action(component, :read_action, resource, :read),
+        query: query,
+        loads: loads(resource, component, fields),
+        row_actions: component.row_actions,
+        records_path: (multi? && "/records/#{name}") || "/records",
+        query_path: query && ((multi? && "/query/#{name}") || "/query")
+      }
+    end)
   end
 
   # --- relationship selects ---------------------------------------------------
@@ -193,8 +267,6 @@ defmodule AshA2ui.ResolvedView do
   # entry per relationship prefix of a `source` column ([:user, :email] ->
   # :user; [:a, :b, :attr] -> {:a, [:b]}) plus the name of every field that
   # is a public calculation or aggregate of the resource.
-  defp loads(_resource, nil, _fields), do: []
-
   defp loads(resource, table, fields) do
     source_loads =
       table.fields

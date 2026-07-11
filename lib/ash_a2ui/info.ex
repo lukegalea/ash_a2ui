@@ -46,6 +46,17 @@ defmodule AshA2ui.Info do
   end
 
   @doc """
+  The `action` entities (per-action refresh metadata) declared in the `a2ui`
+  section.
+  """
+  @spec action_settings(module) :: [AshA2ui.Action.t()]
+  def action_settings(resource_or_ui_module) do
+    resource_or_ui_module
+    |> Extension.get_entities([:a2ui])
+    |> Enum.filter(&is_struct(&1, AshA2ui.Action))
+  end
+
+  @doc """
   Resolves the Ash resource behind `resource_or_ui_module`: the module's
   `for_resource` option if set (standalone UI modules), otherwise the module
   itself (which must be an `Ash.Resource`).
@@ -107,55 +118,79 @@ defmodule AshA2ui.Info do
     V0_9_1.encode_data_model(resolved_view, records, opts)
   end
 
-  # Loads the surface's records through a normal `Ash.read` (policies apply).
-  # Surfaces without a table component render no records. With a `query`
-  # configured, the read runs through `AshA2ui.QueryRunner` — with the
-  # caller-carried `:query_state` when given (validated like any client
-  # input, falling back to the declared defaults), otherwise with the
-  # query's declared defaults (default sort, page 1) — and the resulting
-  # `/query` state is handed to the encoder via the `:query_state` option.
+  # Loads the surface's records through normal `Ash.read`s (policies apply).
+  # Surfaces without a table component render no records; single-table
+  # surfaces load a plain record list; multi-table surfaces load one list
+  # per table (`%{table_name => [record]}`). Tables with a `query` read
+  # through `AshA2ui.QueryRunner` — with the caller-carried `:query_state`
+  # when given (validated like any client input, falling back to the
+  # declared defaults; on multi-table surfaces an object keyed by table
+  # component name), otherwise with the query's declared defaults (default
+  # sort, page 1) — and the resulting `/query` state (per table on
+  # multi-table surfaces) is handed to the encoder via the `:query_state`
+  # option.
   defp load_records!(resolved_view, opts) do
-    cond do
-      not Enum.any?(resolved_view.components, &(&1.name == :table)) ->
+    case resolved_view.tables do
+      [] ->
         {[], opts}
 
-      is_nil(resolved_view.read_action) ->
+      [single] ->
+        {records, query_state} = load_table!(resolved_view, single, opts)
+        {records, (query_state && Keyword.put(opts, :query_state, query_state)) || opts}
+
+      tables ->
+        loaded = Enum.map(tables, &{&1.name, load_table!(resolved_view, &1, opts)})
+
+        records = Map.new(loaded, fn {name, {records, _state}} -> {name, records} end)
+
+        states =
+          for {name, {_records, state}} <- loaded, not is_nil(state), into: %{}, do: {name, state}
+
+        {records, (states != %{} && Keyword.put(opts, :query_state, states)) || opts}
+    end
+  end
+
+  defp load_table!(resolved_view, table, opts) do
+    cond do
+      is_nil(table.read_action) ->
         raise ArgumentError,
               "cannot load records for #{inspect(resolved_view.resource)}: the resource has " <>
                 "no read action (declare one, or set `read_action` on the table component)"
 
-      resolved_view.query ->
-        params = query_params(resolved_view, opts)
+      table.query ->
+        params = query_params(resolved_view, table, opts)
 
-        case AshA2ui.QueryRunner.run(resolved_view, params, read_opts(resolved_view, opts)) do
-          {:ok, records, query_state} ->
-            {records, Keyword.put(opts, :query_state, query_state)}
-
-          {:error, error} ->
-            raise Ash.Error.to_error_class(error)
+        case AshA2ui.QueryRunner.run(table, params, read_opts(resolved_view, opts)) do
+          {:ok, records, query_state} -> {records, query_state}
+          {:error, error} -> raise Ash.Error.to_error_class(error)
         end
 
       true ->
         records =
-          resolved_view.resource
-          |> Ash.Query.for_read(resolved_view.read_action)
-          |> Ash.Query.load(resolved_view.loads)
+          table.resource
+          |> Ash.Query.for_read(table.read_action)
+          |> Ash.Query.load(table.loads)
           |> Ash.read!(read_opts(resolved_view, opts))
 
-        {records, opts}
+        {records, nil}
     end
   end
 
-  defp query_params(resolved_view, opts) do
-    case Keyword.get(opts, :query_state) do
-      state when is_map(state) ->
-        case AshA2ui.QueryRunner.parse(resolved_view, %{"query" => state}) do
-          {:ok, params} -> params
-          {:error, _reason} -> AshA2ui.QueryRunner.default_params(resolved_view.query)
-        end
+  # The caller-carried :query_state is the single table's state map, or (on
+  # multi-table surfaces) an object keyed by table component name.
+  defp query_params(resolved_view, table, opts) do
+    carried = Keyword.get(opts, :query_state)
 
-      _missing ->
-        AshA2ui.QueryRunner.default_params(resolved_view.query)
+    state =
+      if ResolvedView.multi_table?(resolved_view) do
+        is_map(carried) && Map.get(carried, to_string(table.name))
+      else
+        carried
+      end
+
+    case is_map(state) && AshA2ui.QueryRunner.parse(table, %{"query" => state}) do
+      {:ok, params} -> params
+      _invalid_or_missing -> AshA2ui.QueryRunner.default_params(table.query)
     end
   end
 

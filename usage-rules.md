@@ -74,11 +74,26 @@ end
   `false` if you don't want that action on the resource; it is ignored in
   standalone modules).
 - Component names are exactly `:table` and `:form` — there are no other
-  component kinds in v0.
+  component kinds in v0. Multiple `:table` components are allowed when each
+  extra one carries a distinguishing name
+  (`component :table, :new_items do ... end`); that turns the surface
+  multi-table with a scoped data model (`/records/<name>`,
+  `/query/<name>`) — see the multi-section-surfaces topic before designing
+  one. At most one `:form` per surface.
+- Table fields may name public **calculations and aggregates** — they load
+  (`Ash.Query.load`) and serialize like attributes. They are display-only:
+  form fields reject them at compile time (not writable), and only
+  aggregates/expression calculations may appear in a query's `sortable`.
+- On multi-section surfaces, scope success refreshes with `action` entities
+  (`action :approve do refreshes [:new_items] end`) so a row action rewrites
+  only its own section; the default refreshes every table.
 - **Always declare `row_actions` explicitly and minimally.** It is the
   server-side allowlist for the `invoke` action — anything listed becomes
   invokable by any client that can reach the surface; anything not listed is
   rejected before Ash is called. Never add an action "because it exists".
+  Update actions in `row_actions` run **argument-less** on the record
+  (touch-style state transitions) — actions needing values belong in the
+  form or a generic action with `:record_id` (`ash_a2ui:actions`).
 - Omit `fields` only when the inferred set (public attributes for tables,
   action `accept`s for forms) is genuinely what you want shown. Otherwise
   list fields explicitly.
@@ -138,8 +153,10 @@ end
   relationship select options, `/ui/status` for lifecycle feedback,
   `/ui/action_result` + `/ui/action_result_text` for map-returning generic
   actions (raw map + display text, cleared on every subsequent action),
-  `/query` for query state — never through ad-hoc paths or custom message
-  types. Renderers depend on these paths.
+  `/query` for query state (multi-table surfaces scope records and query
+  state per table: `/records/<component_name>`, `/query/<component_name>`)
+  — never through ad-hoc paths or custom message types. Renderers depend on
+  these paths.
 
 ## Avoid list
 

@@ -67,7 +67,9 @@ defmodule AshA2ui.QueryEncoderTest do
 
     test "a query without search_fields omits the search input" do
       view = ResolvedView.resolve(Paginated)
-      view = %{view | query: %{view.query | search_fields: []}}
+      patched = %{view.query | search_fields: []}
+      [table] = view.tables
+      view = %{view | query: patched, tables: [%{table | query: patched}]}
 
       messages = V0_9_1.encode_surface(view, [], [])
       Enum.each(messages, &assert_valid_server_message/1)
