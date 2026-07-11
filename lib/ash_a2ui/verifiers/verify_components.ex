@@ -184,7 +184,7 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
       |> MapSet.new(&Component.key/1)
 
     Enum.reduce_while(actions, :ok, fn action, :ok ->
-      case Enum.find(action.refreshes, &(not MapSet.member?(table_keys, &1))) do
+      case Enum.find(List.wrap(action.refreshes), &(not MapSet.member?(table_keys, &1))) do
         nil ->
           {:cont, :ok}
 

@@ -27,11 +27,11 @@ AshA2ui.ActionHandler.handle(resource_or_ui_module, envelope,
   `{:error, _}`** — error messages carry the validation feedback the
   renderer must display.
 
-## The four action names
+## The five action names
 
-Only `"submit_form"`, `"invoke"`, `"select_row"` and `"query"` exist. Don't
-invent new `action.name` values; add a proper Ash action and expose it via
-`row_actions` instead.
+Only `"submit_form"`, `"invoke"`, `"prompt"`, `"select_row"` and `"query"`
+exist. Don't invent new `action.name` values; add a proper Ash action and
+expose it via `row_actions` instead.
 
 - `"submit_form"` — context `%{"values" => %{...}, "recordId" => id | nil}`.
   No `recordId` runs the form's create action; with one, the update action.
@@ -48,14 +48,24 @@ invent new `action.name` values; add a proper Ash action and expose it via
   `:record_id` argument receives the context's `"recordId"`.
 
   **Update actions via `invoke` call the named action itself** with no
-  params on the identified record — an argument-less "touch-style" update
-  (`invoke` carries no form values by design). This was chosen over
-  rejecting update actions in `row_actions` because argument-less updates
-  (approve/dismiss/archive state transitions) are exactly what row buttons
-  are for; actions that *need* arguments belong in the form
-  (`update_action`) or in a generic action with a `:record_id` argument.
-  Don't put an update action in `row_actions` expecting it to receive form
-  values — it won't.
+  params on the identified record — an argument-less "touch-style" update.
+  Actions that need user input declare `prompt_fields` on their `action`
+  entity: then (and only then) the invoke context's `"values"` map is
+  filtered to the declared prompt fields, cast against the Ash action's
+  arguments/accepts, and passed as params (`"values"` on prompt-less actions
+  is ignored). Don't put an update action in `row_actions` expecting it to
+  receive *form* values — it won't; form input belongs to `update_action`.
+
+  If the action's entity declares `visible_when` conditions, the handler
+  fetches the identified record and re-evaluates them on **every** invoke —
+  a non-visible action is rejected via `/ui/status` no matter what the
+  client rendered. Never rely on the rendering to hide a button; the
+  handler enforcement is the guarantee.
+- `"prompt"` — context `%{"action" => name, "recordId" => id}`. Sent by the
+  trigger of a prompt Modal (an action with `prompt_fields`). No Ash write:
+  the handler validates the allowlist + `visible_when`, pre-fills
+  `/prompt/values/<action>` from the record, and clears `/errors`. The
+  actual write is the subsequent `"invoke"` with `"values"`.
 - `"select_row"` — context `%{"recordId" => id}`. Returns one
   `updateDataModel` populating `/form` with the record's values (edit-form
   population).
@@ -87,6 +97,8 @@ them:
   written after `query` actions and query-aware success refreshes
   (multi-table surfaces: `/query/<component_name>` per query-attached
   table).
+- `/prompt/values/<action>` — a prompt Modal's input values: pre-filled by
+  `prompt`, cleared to `%{}` after a successful prompt `invoke`.
 
 On `Ash.Error.Forbidden` only a `/ui/status` "not authorized" message is
 emitted — no field errors, to avoid leaking policy details.
@@ -105,7 +117,31 @@ end
 Use it when a row action logically belongs to one section — refreshing
 unrelated tables wastes reads and can visibly reset their pagination. The
 `/form`/`/errors`/`/ui/*` follow-ups are never affected. Refresh targets and
-action reachability are compile-time verified.
+action reachability are compile-time verified. `refreshes` may be omitted
+when the entity only carries `prompt_fields`/`visible_when` — omitted means
+"refresh every table" (the default).
+
+## Prompts and conditional visibility on `action` entities
+
+```elixir
+action :decline do
+  prompt_fields [:notes]                    # args/accepts of :decline, compile-verified
+  prompt_title "Decline referral"           # optional Modal heading
+  visible_when status: [:pending, :approved]
+end
+```
+
+- `prompt_fields` renders the row action as a Modal (trigger button +
+  inputs + Confirm) and freezes the `prompt`/`invoke "values"` wire
+  contract above. Keep prompts to the action's real arguments — the handler
+  filters everything else out anyway.
+- `visible_when` is simple ANDed equality on public attributes or
+  expression calculations (`nil` = is_nil, list = membership) —
+  deliberately not a rules engine. Rendering hides the button per row
+  (server-computed `"_actions"` / `"_visible_<action>"` row keys + a
+  templated slot); the handler enforcement is mandatory and independent.
+  Real authorization still belongs in Ash policies — `visible_when` is UX
+  scoping inside the `row_actions` allowlist.
 
 ## Rules
 

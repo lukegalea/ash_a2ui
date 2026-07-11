@@ -13,7 +13,7 @@ not declared is rejected before Ash is called.
 ```elixir
 a2ui do
   query :default do
-    search_fields [:subject]              # string attributes, ci-contains, OR'd
+    search_fields [:subject, [:author, :email]]  # string attrs or paths, ci-contains, OR'd
     sortable [:subject, :inserted_at]     # the only sortable fields
     filters [:status]                     # equality filters on these fields
     default_sort inserted_at: :desc
@@ -30,16 +30,85 @@ end
 
 All referenced fields must be **public attributes** (and `search_fields`
 must be string-typed) — verified at compile time, like every other DSL
-reference — with one extension: `sortable` (and `default_sort`) may also
-name **public aggregates and expression-based calculations**, because Ash
-can push those into a generic sort. Module-based (non-expression)
-calculations are not generically sortable and are rejected with a tailored
-compile error, as are calculations/aggregates anywhere in `search_fields` or
-`filters` (search needs string attributes; filters need castable attribute
-types). Relationship-sourced `source` columns (see
+reference — with these extensions:
+
+- `search_fields` entries may be **relationship paths** to a string
+  attribute (`[:author, :email]`): every step but the last must be a public
+  relationship, the last a public string attribute of the final destination
+  (the same rules as `source` columns). The search condition references the
+  terminal attribute through the path — Ash data layers apply `exists`
+  semantics to to-many paths, so a match on *any* related record includes
+  the row.
+- `sortable` (and `default_sort`) may also name **public aggregates and
+  expression-based calculations**, because Ash can push those into a
+  generic sort. Module-based (non-expression) calculations are not
+  generically sortable and are rejected with a tailored compile error.
+- `filters` may also name **expression-based public calculations** —
+  equality on the calculation's value, cast against the calculation's
+  type/constraints. Module-based calculations have no data-layer expression
+  and are rejected at compile time (mirroring the sorting rule); aggregates
+  are not filterable.
+
+Relationship-sourced `source` columns (see
 [Relationship Rendering](relationships.md)) are render-only and rejected in
 query allowlists. A table without a `query` behaves exactly as before: all
 records, no query controls.
+
+Multi-key sorts mixing calculations and attributes compose naturally:
+`default_sort status_priority: :asc, code: :asc` (with `status_priority` an
+expression calculation) orders by the calc first, then the attribute — no
+extra machinery needed.
+
+## Named filter presets
+
+Composite predicates — "pending" meaning several conditions at once — do not
+fit equality filters, and the allowlist principle forbids letting clients
+send predicates. **Presets** solve this: the server declares named composite
+filters, and the client selects one **by name**.
+
+```elixir
+query :default do
+  filters [:status]
+  default_preset :active
+
+  preset :active do
+    filter deleted_at: nil                      # is_nil
+  end
+
+  preset :pending do
+    filter status: :pending, deleted_at: nil    # conditions ANDed
+  end
+
+  preset :closed do
+    filter status: [:approved, :declined]       # list = membership
+  end
+
+  preset :deleted do
+    read_action :deleted                        # escape hatch (see below)
+  end
+end
+```
+
+A `filter` preset is a keyword list ANDed onto the base query: `nil` means
+`is_nil`, a list means membership (`in`), anything else is equality. Keys
+follow the `filters` rules (public attributes or expression calculations;
+values verified castable at compile time). Predicates the keyword form
+can't express — `not is_nil(...)`, ranges, ORs — use the `read_action`
+escape hatch: the preset reads through a dedicated read action (with its own
+`filter expr(...)`) instead of the table's `read_action`. Search, filters,
+sort and pagination all compose on top of either kind.
+
+On the wire, the `/query` state map gains a `"preset"` key (only when the
+query declares presets) and the encoder emits a `ChoicePicker`
+(`query_preset_picker`, bound to `/query/preset`) whose options are the
+preset names. `default_preset` names the preset applied when the client
+selects none — a missing or empty `"preset"` falls back to it, and the
+picker omits the `"All"`/`""` (no preset) option, making the declared set
+closed: the unscoped base read is unreachable from the client. Without a
+`default_preset`, `""` means "no preset" and an `"All"` option is emitted
+first. Unknown preset names are rejected before Ash is called, like every
+other allowlist violation. Presets are UX scoping, not a security boundary —
+authorization stays in Ash policies.
 
 ## What gets emitted
 
@@ -47,9 +116,11 @@ When the table declares a query, the encoder adds to the component tree:
 
 - a search `TextField` bound to `/query/search` (omitted when there are no
   `search_fields`),
+- a preset `ChoicePicker` bound to `/query/preset` (only when the query
+  declares presets — see above),
 - one `ChoicePicker` per filter bound to `/query/filters/<name>` with an
-  `"All"` (empty value) option first — options come from the attribute's
-  `one_of` constraints (or True/False for booleans),
+  `"All"` (empty value) option first — options come from the attribute's (or
+  calculation's) `one_of` constraints (or True/False for booleans),
 - an **Apply** button and **Previous/Next** pagination buttons.
 
 All of them dispatch the `"query"` client action. The wire contract:
@@ -97,8 +168,9 @@ surfaces keep the plain `/query` paths and need no `"component"`.
 
 - a sort field not in `sortable` → rejected,
 - a filter name not in `filters` → rejected,
-- a filter value that doesn't cast to the attribute's type/constraints →
+- a filter value that doesn't cast to the field's type/constraints →
   rejected,
+- a preset name not declared as a `preset` → rejected,
 - a search on a query with no `search_fields` → rejected,
 - requested `pageSize` is clamped to `1..max_page_size`, `page` to ≥ 1.
 
@@ -145,7 +217,9 @@ they pass `:query_state` themselves.
 ## Limitations (v0)
 
 - Filters are equality-only (`filters [:status]` = "status equals the
-  submitted value"). Ranged/custom filters are roadmap.
+  submitted value"). Ranged/custom client-driven filters are deliberately
+  not supported — declare a named preset (or a preset `read_action`) for
+  composite server-side predicates instead.
 - One query per table (multi-table surfaces may attach one query to each
   table); queries are per-surface, not shared.
 - No sort UI is emitted (sort arrives via the `"query"` action, e.g. from an

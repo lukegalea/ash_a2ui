@@ -18,12 +18,31 @@ defmodule AshA2ui.QueryRunner do
       %{
         "search" => "",
         "filters" => %{"status" => "", "category" => ""},   # every declared filter, "" = inactive
+        "preset" => "pending",                              # only when the query declares presets
         "sort" => %{"field" => "name", "dir" => "asc"},     # or nil when unsorted
         "page" => 1,
         "pageSize" => 25,
         "totalCount" => 42,                                 # or nil when the data layer can't count
         "hasMore" => true
       }
+
+  ## Search fields
+
+  `search_fields` entries are string attributes (`:subject`) or relationship
+  paths to one (`[:author, :email]`); each produces a case-insensitive
+  contains condition (path entries reference the terminal attribute through
+  the relationship path), OR'd together.
+
+  ## Presets
+
+  When the query declares `preset` entities, the client may select one **by
+  name** via the `"preset"` key of the query state — the predicates
+  themselves live server-side only. A `filter`-based preset ANDs its
+  conditions onto the base query (`nil` = `is_nil`, list = membership,
+  otherwise equality); a `read_action`-based preset reads through that
+  action instead of the table's `read_action`. A missing `"preset"` key (and
+  `""`) falls back to the query's `default_preset` (or no preset when none
+  is declared); unknown names are rejected.
 
   ## Pagination mechanism
 
@@ -47,6 +66,7 @@ defmodule AshA2ui.QueryRunner do
   @type params :: %{
           search: String.t(),
           filters: [{atom, term}],
+          preset: atom | nil,
           sort: {atom, :asc | :desc} | nil,
           page: pos_integer,
           page_size: pos_integer
@@ -81,21 +101,38 @@ defmodule AshA2ui.QueryRunner do
     with {:ok, state} <- query_state(context),
          {:ok, search} <- parse_search(query, state),
          {:ok, filters} <- parse_filters(view.resource, query, state),
+         {:ok, preset} <- parse_preset(query, state),
          {:ok, sort} <- parse_sort(query, state),
          {:ok, page} <- parse_page(state, context),
          {:ok, page_size} <- parse_page_size(query, state) do
-      {:ok, %{search: search, filters: filters, sort: sort, page: page, page_size: page_size}}
+      {:ok,
+       %{
+         search: search,
+         filters: filters,
+         preset: preset,
+         sort: sort,
+         page: page,
+         page_size: page_size
+       }}
     end
   end
 
   @doc """
   The validated params equivalent to an empty client context: no search, no
-  filters, the declared default sort, page 1 at the declared page size. Used
-  for initial surface loads and refreshes without client query state.
+  filters, the declared default preset, the declared default sort, page 1 at
+  the declared page size. Used for initial surface loads and refreshes
+  without client query state.
   """
   @spec default_params(AshA2ui.Query.t()) :: params
   def default_params(query) do
-    %{search: "", filters: [], sort: nil, page: 1, page_size: query.page_size}
+    %{
+      search: "",
+      filters: [],
+      preset: query.default_preset,
+      sort: nil,
+      page: 1,
+      page_size: query.page_size
+    }
   end
 
   @doc """
@@ -115,6 +152,15 @@ defmodule AshA2ui.QueryRunner do
       "totalCount" => total_count,
       "hasMore" => has_more
     }
+    |> put_preset_state(query, params)
+  end
+
+  # The "preset" key only exists on queries that declare presets — the state
+  # shape of preset-less queries is unchanged.
+  defp put_preset_state(state, %{presets: []}, _params), do: state
+
+  defp put_preset_state(state, _query, params) do
+    Map.put(state, "preset", to_string(params.preset || ""))
   end
 
   @doc """
@@ -131,10 +177,12 @@ defmodule AshA2ui.QueryRunner do
   def run(view, params, ash_opts) do
     query = view.query
     effective_sort = effective_sort(query, params)
+    preset = params.preset && Enum.find(query.presets, &(&1.name == params.preset))
 
     filtered =
       view.resource
-      |> Ash.Query.for_read(read_action(view), %{}, ash_opts)
+      |> Ash.Query.for_read(read_action(view, preset), %{}, ash_opts)
+      |> apply_preset(preset)
       |> apply_filters(params.filters)
       |> apply_search(query, params.search)
 
@@ -230,6 +278,30 @@ defmodule AshA2ui.QueryRunner do
     end
   end
 
+  # A missing preset key (or the ChoicePicker's "" placeholder) falls back
+  # to the declared default; names are string-compared against the declared
+  # presets — never creating atoms from client input.
+  defp parse_preset(query, state) do
+    case Map.get(state, "preset") do
+      empty when empty in [nil, ""] ->
+        {:ok, query.default_preset}
+
+      name when is_binary(name) ->
+        case Enum.find(query.presets, &(to_string(&1.name) == name)) do
+          nil ->
+            {:error,
+             "Preset #{inspect(name)} is not allowlisted: it is not declared in the query's " <>
+               "presets."}
+
+          preset ->
+            {:ok, preset.name}
+        end
+
+      _other ->
+        {:error, ~s(Malformed query action: "preset" must be a string.)}
+    end
+  end
+
   # ChoicePickers may bind a single string or a string list (multipleSelection);
   # accept both. Every value must cast to the attribute's type + constraints.
   defp cast_filter_value(resource, field, values) when is_list(values) do
@@ -248,11 +320,14 @@ defmodule AshA2ui.QueryRunner do
     end
   end
 
+  # Filters may target attributes or (expression-backed, verified at compile
+  # time) public calculations; both carry a type + constraints to cast with.
   defp cast_filter_value(resource, field, value) do
-    attribute = ResourceInfo.attribute(resource, field)
+    %{type: type, constraints: constraints} =
+      ResourceInfo.attribute(resource, field) || ResourceInfo.calculation(resource, field)
 
-    with {:ok, cast} <- Ash.Type.cast_input(attribute.type, value, attribute.constraints),
-         {:ok, cast} <- Ash.Type.apply_constraints(attribute.type, cast, attribute.constraints) do
+    with {:ok, cast} <- Ash.Type.cast_input(type, value, constraints),
+         {:ok, cast} <- Ash.Type.apply_constraints(type, cast, constraints) do
       {:ok, cast}
     else
       _error -> :error
@@ -317,6 +392,24 @@ defmodule AshA2ui.QueryRunner do
 
   # --- query building ---------------------------------------------------------
 
+  # A filter-based preset ANDs its declared conditions onto the base query
+  # (nil = is_nil, list = membership, otherwise equality); a read_action
+  # preset already switched the read (see read_action/2).
+  defp apply_preset(query, %{filter: conditions}) when is_list(conditions) do
+    Enum.reduce(conditions, query, fn
+      {field, nil}, query ->
+        Ash.Query.filter(query, is_nil(^ref(field)))
+
+      {field, values}, query when is_list(values) ->
+        Ash.Query.filter(query, ^ref(field) in ^values)
+
+      {field, value}, query ->
+        Ash.Query.filter(query, ^ref(field) == ^value)
+    end)
+  end
+
+  defp apply_preset(query, _no_filter_preset), do: query
+
   defp apply_filters(query, filters) do
     Enum.reduce(filters, query, fn
       {field, values}, query when is_list(values) ->
@@ -334,10 +427,22 @@ defmodule AshA2ui.QueryRunner do
 
     condition =
       ui_query.search_fields
-      |> Enum.map(&expr(contains(^ref(&1), ^ci_search)))
+      |> Enum.map(&search_condition(&1, ci_search))
       |> Enum.reduce(&expr(^&2 or ^&1))
 
     Ash.Query.filter(query, ^condition)
+  end
+
+  # A plain attribute matches directly; a relationship path references the
+  # terminal attribute through the path (Ash data layers apply exists
+  # semantics to to-many paths in filters).
+  defp search_condition(field, ci_search) when is_atom(field) do
+    expr(contains(^ref(field), ^ci_search))
+  end
+
+  defp search_condition(path, ci_search) when is_list(path) do
+    {relationship_path, [attribute]} = Enum.split(path, -1)
+    expr(contains(^ref(relationship_path, attribute), ^ci_search))
   end
 
   defp effective_sort(query, params) do
@@ -363,7 +468,11 @@ defmodule AshA2ui.QueryRunner do
     end
   end
 
-  defp read_action(view),
+  # A read_action-based preset reads through its dedicated action; otherwise
+  # the table's declared (or primary) read applies.
+  defp read_action(_view, %{read_action: action}) when not is_nil(action), do: action
+
+  defp read_action(view, _preset),
     do: view.read_action || ResourceInfo.primary_action!(view.resource, :read).name
 
   # --- /query state -----------------------------------------------------------

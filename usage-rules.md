@@ -141,9 +141,14 @@ end
   maps validation errors onto the reserved data-model paths. Calling Ash
   actions directly from transport code skips the allowlist and the error
   mapping. Full contract in `ash_a2ui:actions`.
-- Action names are exactly `"submit_form"`, `"select_row"`, `"invoke"`, and
-  `"query"`. Don't invent new `action.name` values; add a proper Ash action
-  and expose it via `row_actions` instead.
+- Action names are exactly `"submit_form"`, `"select_row"`, `"invoke"`,
+  `"prompt"`, and `"query"`. Don't invent new `action.name` values; add a
+  proper Ash action and expose it via `row_actions` instead.
+- Row actions that need user input declare `prompt_fields` on their
+  `action` entity (Modal prompt; `invoke` then carries a `"values"` map
+  filtered + cast to those fields). Per-row availability is `visible_when`
+  on the entity — rendered best-effort, but **enforced by the handler on
+  every invoke**. Details in `ash_a2ui:actions`.
 - **Search/sort/filter/pagination go through a declared `query` entity**
   (see `ash_a2ui:queries`): a named allowlist the server enforces. Never
   accept client sort/filter params not declared in a query, and never feed
@@ -154,7 +159,8 @@ end
   `/ui/action_result` + `/ui/action_result_text` for map-returning generic
   actions (raw map + display text, cleared on every subsequent action),
   `/query` for query state (multi-table surfaces scope records and query
-  state per table: `/records/<component_name>`, `/query/<component_name>`)
+  state per table: `/records/<component_name>`, `/query/<component_name>`),
+  `/prompt/values/<action>` for prompt Modal state
   — never through ad-hoc paths or custom message types. Renderers depend on
   these paths.
 

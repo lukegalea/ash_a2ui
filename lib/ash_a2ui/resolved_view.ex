@@ -29,9 +29,15 @@ defmodule AshA2ui.ResolvedView do
       declaration order): its component key, effective read action, resolved
       query, per-table loads/row_actions, and the frozen data-model paths
       its records/query state live at (see `t:table/0`)
+    * `actions` maps Ash action names to their `AshA2ui.Action` metadata
+      entities (refresh targets, prompt fields, visibility conditions);
+      actions without an entity have no entry
     * `refreshes` maps Ash action names to the table components their
-      success refreshes (from `action` entities); actions without an entry
-      refresh every table
+      success refreshes (from `action` entities); actions without an entry —
+      or whose entity omits `refreshes` (`nil`) — refresh every table
+    * each table's `loads` additionally covers the expression calculations
+      referenced by `visible_when` conditions of the table's row actions, so
+      per-row visibility can be evaluated on the loaded records
     * on single-table surfaces the legacy top-level `read_action` / `query` /
       `row_actions` / `loads` fields mirror the single table exactly as
       before; on multi-table surfaces `read_action`/`query` are `nil` and
@@ -57,6 +63,7 @@ defmodule AshA2ui.ResolvedView do
     selects: %{},
     loads: [],
     tables: [],
+    actions: %{},
     refreshes: %{}
   ]
 
@@ -108,7 +115,8 @@ defmodule AshA2ui.ResolvedView do
           selects: %{atom => select},
           loads: list,
           tables: [table],
-          refreshes: %{atom => [atom]}
+          actions: %{atom => AshA2ui.Action.t()},
+          refreshes: %{atom => [atom] | nil}
         }
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
@@ -141,7 +149,11 @@ defmodule AshA2ui.ResolvedView do
     components = Enum.map(components, &normalize_component(&1, fields))
 
     form = Enum.find(components, &(&1.name == :form))
-    tables = resolve_tables(resource_or_ui_module, resource, components, fields)
+
+    actions =
+      Map.new(AshA2ui.Info.action_settings(resource_or_ui_module), &{&1.name, &1})
+
+    tables = resolve_tables(resource_or_ui_module, resource, components, fields, actions)
     single = if match?([_only], tables), do: hd(tables)
 
     %__MODULE__{
@@ -157,8 +169,8 @@ defmodule AshA2ui.ResolvedView do
       selects: selects,
       loads: tables |> Enum.flat_map(& &1.loads) |> Enum.uniq(),
       tables: tables,
-      refreshes:
-        Map.new(AshA2ui.Info.action_settings(resource_or_ui_module), &{&1.name, &1.refreshes})
+      actions: actions,
+      refreshes: Map.new(actions, fn {name, action} -> {name, action.refreshes} end)
     }
   end
 
@@ -172,7 +184,7 @@ defmodule AshA2ui.ResolvedView do
 
   # --- table scopes -------------------------------------------------------------
 
-  defp resolve_tables(resource_or_ui_module, resource, components, fields) do
+  defp resolve_tables(resource_or_ui_module, resource, components, fields, actions) do
     table_components = Enum.filter(components, &(&1.name == :table))
     multi? = match?([_, _ | _], table_components)
 
@@ -186,12 +198,32 @@ defmodule AshA2ui.ResolvedView do
         resource: resource,
         read_action: component_action(component, :read_action, resource, :read),
         query: query,
-        loads: loads(resource, component, fields),
+        loads:
+          Enum.uniq(
+            loads(resource, component, fields) ++ condition_loads(resource, component, actions)
+          ),
         row_actions: component.row_actions,
         records_path: (multi? && "/records/#{name}") || "/records",
         query_path: query && ((multi? && "/query/#{name}") || "/query")
       }
     end)
+  end
+
+  # Calculations referenced by visible_when conditions of this table's row
+  # actions must be loaded with the records so per-row visibility can be
+  # evaluated (deduplicated against the rendered-field loads).
+  defp condition_loads(resource, component, actions) do
+    component.row_actions
+    |> Enum.flat_map(fn row_action ->
+      case actions[row_action] do
+        %{visible_when: [_ | _] = conditions} ->
+          AshA2ui.Conditions.condition_loads(resource, conditions)
+
+        _no_conditions ->
+          []
+      end
+    end)
+    |> Enum.uniq()
   end
 
   # --- relationship selects ---------------------------------------------------

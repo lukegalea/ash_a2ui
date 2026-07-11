@@ -293,10 +293,10 @@ defmodule AshA2ui.QueryDslTest do
       assert result =~ ~r/expression-backed calculations/
     end
 
-    test "calculation in filters does not compile cleanly" do
+    test "expression calculation in filters compiles cleanly" do
       result =
         capture_io(:stderr, fn ->
-          defmodule CalcFilter do
+          defmodule ExprCalcFilter do
             @moduledoc false
             use Ash.Resource, domain: nil, extensions: [AshA2ui]
 
@@ -326,8 +326,44 @@ defmodule AshA2ui.QueryDslTest do
           end
         end)
 
-      assert result =~ ~r/:loud is a calculation/
-      assert result =~ ~r/never in `filters`/
+      assert result == ""
+    end
+
+    test "module-based calculation in filters does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule ModuleCalcFilter do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :title, :string, public?: true
+            end
+
+            calculations do
+              calculate :shout, :string, AshA2ui.Test.Article.ShoutTitle, public?: true
+            end
+
+            actions do
+              defaults [:read]
+            end
+
+            a2ui do
+              query :default do
+                filters [:shout]
+              end
+
+              component :table do
+                fields [:title]
+                query :default
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/the calculation :shout is not filterable/
+      assert result =~ ~r/expression-backed calculations/
     end
 
     test "aggregate in search_fields does not compile cleanly" do
@@ -369,8 +405,8 @@ defmodule AshA2ui.QueryDslTest do
           end
         end)
 
-      assert result =~ ~r/:comment_count is an aggregate/
-      assert result =~ ~r/never in `search_fields`/
+      assert result =~ ~r/references unknown field :comment_count in search_fields/
+      assert result =~ ~r/public string-typed attribute/
     end
 
     test "table referencing an undeclared query does not compile cleanly" do

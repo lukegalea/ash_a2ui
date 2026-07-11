@@ -94,6 +94,55 @@ defmodule AshA2ui do
     ]
   }
 
+  @preset %Spark.Dsl.Entity{
+    name: :preset,
+    describe: """
+    A named, server-side composite filter the client selects by name via the
+    `"preset"` query parameter — the predicates themselves never travel over
+    the wire. Declare either a declarative keyword `filter` (conditions ANDed;
+    `nil` means `is_nil`, a list means membership) or a dedicated
+    `read_action` as an escape hatch for predicates the keyword form can't
+    express.
+    """,
+    examples: [
+      """
+      preset :pending do
+        filter status: :pending, deleted_at: nil
+      end
+      """,
+      """
+      preset :deleted do
+        read_action :deleted
+      end
+      """
+    ],
+    target: AshA2ui.Preset,
+    args: [:name],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "The name of the preset, sent by the client as the `\"preset\"` query parameter."
+      ],
+      filter: [
+        type: :keyword_list,
+        doc: """
+        Keyword conditions ANDed onto the table's base query. Keys are public
+        attributes or public expression calculations; `nil` values mean
+        `is_nil`, list values mean membership, anything else is equality.
+        """
+      ],
+      read_action: [
+        type: :atom,
+        doc: """
+        A read action used instead of the table's `read_action` while this
+        preset is selected — the escape hatch for predicates the keyword
+        `filter` form can't express. Mutually exclusive with `filter`.
+        """
+      ]
+    ]
+  }
+
   @query %Spark.Dsl.Entity{
     name: :query,
     describe: """
@@ -105,17 +154,22 @@ defmodule AshA2ui do
     examples: [
       """
       query :default do
-        search_fields [:subject]
+        search_fields [:subject, [:author, :email]]
         sortable [:subject, :inserted_at]
         filters [:status]
         default_sort inserted_at: :desc
         page_size 25
         max_page_size 100
+
+        preset :pending do
+          filter status: :pending
+        end
       end
       """
     ],
     target: AshA2ui.Query,
     args: [:name],
+    entities: [presets: [@preset]],
     schema: [
       name: [
         type: :atom,
@@ -123,10 +177,15 @@ defmodule AshA2ui do
         doc: "The name of the query, referenced by a table component's `query` option."
       ],
       search_fields: [
-        type: {:list, :atom},
+        type: {:list, {:or, [:atom, {:list, :atom}]}},
         default: [],
-        doc:
-          "Public string attributes searched with a case-insensitive contains, OR'd together. Empty means search is rejected."
+        doc: """
+        Fields searched with a case-insensitive contains, OR'd together. Each
+        entry is a public string attribute (`:subject`) or a relationship path
+        to one (`[:author, :email]` — every step but the last a public
+        relationship, the last a public string attribute of the destination).
+        Empty means search is rejected.
+        """
       ],
       sortable: [
         type: {:list, :atom},
@@ -136,7 +195,14 @@ defmodule AshA2ui do
       filters: [
         type: {:list, :atom},
         default: [],
-        doc: "Public attributes the client may equality-filter on. Anything else is rejected."
+        doc: """
+        Public attributes or public expression calculations the client may
+        equality-filter on. Anything else is rejected.
+        """
+      ],
+      default_preset: [
+        type: :atom,
+        doc: "The preset applied when the client selects none. Must name a declared preset."
       ],
       default_sort: [
         type: {:list, {:tuple, [:atom, {:in, [:asc, :desc]}]}},
@@ -231,14 +297,20 @@ defmodule AshA2ui do
   @action %Spark.Dsl.Entity{
     name: :action,
     describe: """
-    Per-action refresh metadata. When the named Ash action succeeds (invoked
-    as a row action or submitted by the form), only the listed table
-    components are refreshed — instead of the default "refresh every table".
+    Per-action metadata: refresh targets, argument prompts, and per-row
+    visibility conditions.
     """,
     examples: [
       """
       action :approve do
         refreshes [:new_items]
+        visible_when status: :pending
+      end
+      """,
+      """
+      action :decline do
+        prompt_fields [:notes]
+        prompt_title "Decline referral"
       end
       """
     ],
@@ -253,12 +325,39 @@ defmodule AshA2ui do
       ],
       refreshes: [
         type: {:list, :atom},
-        required: true,
         doc: """
         The table components refreshed after this action succeeds, by
         component name (`refreshes [:new_items]`; the unnamed table is
-        `:table`). `[]` refreshes no table. Actions without an `action`
-        entity refresh every table (the default).
+        `:table`). `[]` refreshes no table. Omitted (and for actions without
+        an `action` entity) every table is refreshed (the default).
+        """
+      ],
+      prompt_fields: [
+        type: {:list, :atom},
+        default: [],
+        doc: """
+        Arguments/accepts of the Ash action collected from the user in a
+        per-row Modal prompt before the action is invoked (row actions only).
+        Clicking the row button opens the Modal instead of invoking directly;
+        its confirm button sends `invoke` with a `"values"` map.
+        """
+      ],
+      prompt_title: [
+        type: :string,
+        doc: """
+        Heading shown inside the prompt Modal. Defaults to the humanized
+        action name.
+        """
+      ],
+      visible_when: [
+        type: :keyword_list,
+        default: [],
+        doc: """
+        Per-record conditions gating this row action, ANDed together
+        (`visible_when status: :pending`). Keys are public attributes or
+        public expression calculations; `nil` values mean `is_nil`, list
+        values mean membership, anything else is equality. Enforced
+        server-side on every invoke; rendering hides the button per row.
         """
       ]
     ]

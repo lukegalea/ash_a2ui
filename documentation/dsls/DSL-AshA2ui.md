@@ -21,6 +21,7 @@ for the resource named by `for_resource`).
 
 ### Nested DSLs
  * [query](#a2ui-query)
+   * preset
  * [component](#a2ui-component)
  * [field](#a2ui-field)
  * [action](#a2ui-action)
@@ -74,17 +75,23 @@ Client `"query"` actions are validated against these lists — anything not
 declared here is rejected before Ash is called.
 
 
+### Nested DSLs
+ * [preset](#a2ui-query-preset)
 
 
 ### Examples
 ```
 query :default do
-  search_fields [:subject]
+  search_fields [:subject, [:author, :email]]
   sortable [:subject, :inserted_at]
   filters [:status]
   default_sort inserted_at: :desc
   page_size 25
   max_page_size 100
+
+  preset :pending do
+    filter status: :pending
+  end
 end
 
 ```
@@ -100,13 +107,67 @@ end
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`search_fields`](#a2ui-query-search_fields){: #a2ui-query-search_fields } | `list(atom)` | `[]` | Public string attributes searched with a case-insensitive contains, OR'd together. Empty means search is rejected. |
+| [`search_fields`](#a2ui-query-search_fields){: #a2ui-query-search_fields } | `list(atom \| list(atom))` | `[]` | Fields searched with a case-insensitive contains, OR'd together. Each entry is a public string attribute (`:subject`) or a relationship path to one (`[:author, :email]` — every step but the last a public relationship, the last a public string attribute of the destination). Empty means search is rejected. |
 | [`sortable`](#a2ui-query-sortable){: #a2ui-query-sortable } | `list(atom)` | `[]` | Public attributes the client may sort by. Anything else is rejected. |
-| [`filters`](#a2ui-query-filters){: #a2ui-query-filters } | `list(atom)` | `[]` | Public attributes the client may equality-filter on. Anything else is rejected. |
+| [`filters`](#a2ui-query-filters){: #a2ui-query-filters } | `list(atom)` | `[]` | Public attributes or public expression calculations the client may equality-filter on. Anything else is rejected. |
+| [`default_preset`](#a2ui-query-default_preset){: #a2ui-query-default_preset } | `atom` |  | The preset applied when the client selects none. Must name a declared preset. |
 | [`default_sort`](#a2ui-query-default_sort){: #a2ui-query-default_sort } | `list({atom, :asc \| :desc})` | `[]` | The sort applied when the client requests none, e.g. `default_sort inserted_at: :desc`. |
 | [`page_size`](#a2ui-query-page_size){: #a2ui-query-page_size } | `pos_integer` | `25` | The page size used when the client requests none. |
 | [`max_page_size`](#a2ui-query-max_page_size){: #a2ui-query-max_page_size } | `pos_integer` | `100` | The hard upper bound client-requested page sizes are clamped to. |
 
+
+### a2ui.query.preset
+```elixir
+preset name
+```
+
+
+A named, server-side composite filter the client selects by name via the
+`"preset"` query parameter — the predicates themselves never travel over
+the wire. Declare either a declarative keyword `filter` (conditions ANDed;
+`nil` means `is_nil`, a list means membership) or a dedicated
+`read_action` as an escape hatch for predicates the keyword form can't
+express.
+
+
+
+
+### Examples
+```
+preset :pending do
+  filter status: :pending, deleted_at: nil
+end
+
+```
+
+```
+preset :deleted do
+  read_action :deleted
+end
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`name`](#a2ui-query-preset-name){: #a2ui-query-preset-name .spark-required} | `atom` |  | The name of the preset, sent by the client as the `"preset"` query parameter. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`filter`](#a2ui-query-preset-filter){: #a2ui-query-preset-filter } | `keyword` |  | Keyword conditions ANDed onto the table's base query. Keys are public attributes or public expression calculations; `nil` values mean `is_nil`, list values mean membership, anything else is equality. |
+| [`read_action`](#a2ui-query-preset-read_action){: #a2ui-query-preset-read_action } | `atom` |  | A read action used instead of the table's `read_action` while this preset is selected — the escape hatch for predicates the keyword `filter` form can't express. Mutually exclusive with `filter`. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Preset`
 
 
 
@@ -232,9 +293,8 @@ action name
 ```
 
 
-Per-action refresh metadata. When the named Ash action succeeds (invoked
-as a row action or submitted by the form), only the listed table
-components are refreshed — instead of the default "refresh every table".
+Per-action metadata: refresh targets, argument prompts, and per-row
+visibility conditions.
 
 
 
@@ -243,6 +303,15 @@ components are refreshed — instead of the default "refresh every table".
 ```
 action :approve do
   refreshes [:new_items]
+  visible_when status: :pending
+end
+
+```
+
+```
+action :decline do
+  prompt_fields [:notes]
+  prompt_title "Decline referral"
 end
 
 ```
@@ -258,7 +327,10 @@ end
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`refreshes`](#a2ui-action-refreshes){: #a2ui-action-refreshes .spark-required} | `list(atom)` |  | The table components refreshed after this action succeeds, by component name (`refreshes [:new_items]`; the unnamed table is `:table`). `[]` refreshes no table. Actions without an `action` entity refresh every table (the default). |
+| [`refreshes`](#a2ui-action-refreshes){: #a2ui-action-refreshes } | `list(atom)` |  | The table components refreshed after this action succeeds, by component name (`refreshes [:new_items]`; the unnamed table is `:table`). `[]` refreshes no table. Omitted (and for actions without an `action` entity) every table is refreshed (the default). |
+| [`prompt_fields`](#a2ui-action-prompt_fields){: #a2ui-action-prompt_fields } | `list(atom)` | `[]` | Arguments/accepts of the Ash action collected from the user in a per-row Modal prompt before the action is invoked (row actions only). Clicking the row button opens the Modal instead of invoking directly; its confirm button sends `invoke` with a `"values"` map. |
+| [`prompt_title`](#a2ui-action-prompt_title){: #a2ui-action-prompt_title } | `String.t` |  | Heading shown inside the prompt Modal. Defaults to the humanized action name. |
+| [`visible_when`](#a2ui-action-visible_when){: #a2ui-action-visible_when } | `keyword` | `[]` | Per-record conditions gating this row action, ANDed together (`visible_when status: :pending`). Keys are public attributes or public expression calculations; `nil` values mean `is_nil`, list values mean membership, anything else is equality. Enforced server-side on every invoke; rendering hides the button per row. |
 
 
 

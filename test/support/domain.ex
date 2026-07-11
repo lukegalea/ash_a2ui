@@ -17,5 +17,6 @@ defmodule AshA2ui.Test.Domain do
     resource AshA2ui.Test.Article
     resource AshA2ui.Test.Comment
     resource AshA2ui.Test.ReviewItem
+    resource AshA2ui.Test.Referral
   end
 end

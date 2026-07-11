@@ -16,8 +16,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     * `table_heading` — `Text` (h2) with the humanized resource name
     * `query_controls` — only when the table declares a `query`: a `Row` of a
       search `TextField` (`query_search_input`, bound to `/query/search`,
-      omitted when the query has no `search_fields`), one `ChoicePicker` per
-      declared filter (`query_filter_<name>`, bound to
+      omitted when the query has no `search_fields`), a preset `ChoicePicker`
+      (`query_preset_picker`, bound to `/query/preset`, only when the query
+      declares presets — options are the preset names, preceded by an
+      `"All"`/`""` option unless a `default_preset` is declared), one
+      `ChoicePicker` per declared filter (`query_filter_<name>`, bound to
       `/query/filters/<name>`, with an `"All"` option first) and a
       `query_apply_button` (event `query`, context
       `{"query": {"path": "/query"}, "page": 1}` — the page-1 reset)
@@ -30,6 +33,36 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       `{"action": "<name>", "recordId": {"path": "id"}}`) and a
       `row_select_button` (event `select_row`, context
       `{"recordId": {"path": "id"}}`)
+
+  ## Row-action prompts (prompt_fields)
+
+  A row action whose `action` entity declares `prompt_fields` renders as a
+  `Modal` (`row_action_<action>_modal`) instead of a bare button: the row
+  slot holds the Modal, whose `trigger` is the usual
+  `row_action_<action>_button` — now dispatching event `prompt` with context
+  `{"action": "<name>", "recordId": {"path": "id"}, "component": "<table>"}`
+  so the server pre-fills `/prompt/values/<action>` — and whose `content` is
+  `row_action_<action>_prompt`, a `Column` of a title `Text`, one `TextField`
+  per prompt field (bound to the absolute `/prompt/values/<action>/<field>`
+  path; template-relative paths cannot reach the shared prompt state), a
+  per-field error `Text` (bound to `/errors/<field>`) and a confirm `Button`
+  (`row_action_<action>_confirm_button`: event `invoke`, context carrying
+  `"values": {"path": "/prompt/values/<action>"}` alongside the usual
+  `"action"`/`"recordId"`/`"component"`). Modal open/close is client-side
+  (the v0.9.1 protocol has no server-controlled open state); the server
+  contract is only the `prompt` pre-fill and the `invoke` values.
+
+  ## Conditional row actions (visible_when)
+
+  A row action whose `action` entity declares `visible_when` conditions is
+  wrapped in `row_action_<action>_slot` — a `List` templated over the
+  row-relative `_visible_<action>` path (`[%{"id" => id}]` when visible,
+  `[]` when hidden, computed server-side; see `AshA2ui.Conditions`).
+  Renderers supporting nested templates render zero or one button per row;
+  rows also carry `"_actions"` (the visible action names) for renderers that
+  don't. Rendering is best-effort — enforcement lives in
+  `AshA2ui.ActionHandler`, which re-evaluates the conditions on every
+  invoke.
     * `query_pagination` — only when the table declares a `query`: a `Row` of
       `query_prev_button` / `query_page_text` (bound to `/query/page`) /
       `query_next_button`; the buttons carry event `query` with context
@@ -60,6 +93,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "options" => %{"<field>" => [%{"label" => ..., "value" => ...}]},
         "ui" => %{"status" => "", "action_result" => %{}, "action_result_text" => ""}
       }
+
+  Surfaces with prompt-enabled row actions additionally carry `"prompt"` —
+  `%{"values" => %{"<action>" => %{"<field>" => ""}}}` — and rows of tables
+  with `visible_when` row actions gain the `"_actions"` /
+  `"_visible_<action>"` keys (see the sections above).
 
   `source` table columns serialize by walking the loaded relationship path
   (`[:user, :email]` -> `record.user.email`); a nil or unloaded relationship
@@ -132,7 +170,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
              "options" => options_data(resolved_view, opts),
              "ui" => %{"status" => "", "action_result" => %{}, "action_result_text" => ""}
            }
-           |> put_query_state(resolved_view, opts)}
+           |> put_query_state(resolved_view, opts)
+           |> put_prompt_state(resolved_view)}
       end
 
     %{
@@ -297,15 +336,17 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp query_components(view, table, sfx) do
     query = table.query
     search = (query.search_fields != [] && [search_input(table, sfx)]) || []
+    presets = (query.presets != [] && [preset_picker(query, table, sfx)]) || []
     filters = Enum.map(query.filters, &filter_picker(view.resource, table, &1, sfx))
 
     controls = %{
       "id" => "query#{sfx}_controls",
       "component" => "Row",
-      "children" => Enum.map(search ++ filters, & &1["id"]) ++ ["query#{sfx}_apply_button"]
+      "children" =>
+        Enum.map(search ++ presets ++ filters, & &1["id"]) ++ ["query#{sfx}_apply_button"]
     }
 
-    [controls | search ++ filters] ++
+    [controls | search ++ presets ++ filters] ++
       apply_button(table, sfx) ++ pagination_components(table, sfx)
   end
 
@@ -315,6 +356,31 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "component" => "TextField",
       "label" => "Search",
       "value" => %{"path" => "#{table.query_path}/search"}
+    }
+  end
+
+  # The preset picker sends only the preset NAME over the wire — the
+  # predicates live server-side. With a default_preset the option set is
+  # closed (no "" escape back to the unscoped base read); without one an
+  # "All" option ("" = no preset) comes first, mirroring the filter pickers.
+  defp preset_picker(query, table, sfx) do
+    preset_options =
+      Enum.map(query.presets, &%{"label" => humanize(&1.name), "value" => to_string(&1.name)})
+
+    options =
+      if query.default_preset do
+        preset_options
+      else
+        [%{"label" => "All", "value" => ""} | preset_options]
+      end
+
+    %{
+      "id" => "query#{sfx}_preset_picker",
+      "component" => "ChoicePicker",
+      "label" => "View",
+      "variant" => "mutuallyExclusive",
+      "value" => %{"path" => "#{table.query_path}/preset"},
+      "options" => options
     }
   end
 
@@ -395,16 +461,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp table_descendants(view, table, sfx) do
     fields = table.component.fields
     cell_ids = Enum.map(fields, &"table_cell#{sfx}_#{&1}")
-    action_button_ids = Enum.map(table.row_actions, &"row_action#{sfx}_#{&1}_button")
+
+    {action_ids, action_components} =
+      table.row_actions
+      |> Enum.map(&row_action_components(view, table, &1, sfx))
+      |> Enum.unzip()
 
     row = %{
       "id" => "record_row#{sfx}",
       "component" => "Row",
-      "children" => cell_ids ++ action_button_ids ++ ["row_select#{sfx}_button"]
+      "children" => cell_ids ++ action_ids ++ ["row_select#{sfx}_button"]
     }
 
     cells = Enum.map(fields, &cell(view, &1, sfx))
-    action_buttons = Enum.flat_map(table.row_actions, &row_action_button(view, table, &1, sfx))
 
     select_button = [
       %{
@@ -424,7 +493,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{"id" => "row_select#{sfx}_text", "component" => "Text", "text" => "Select"}
     ]
 
-    [row] ++ cells ++ action_buttons ++ select_button
+    [row] ++ cells ++ List.flatten(action_components) ++ select_button
   end
 
   defp cell(view, field_name, sfx) do
@@ -452,12 +521,39 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   defp cell_text(field), do: %{"path" => to_string(field.name)}
 
-  defp row_action_button(view, table, action, sfx) do
+  # One row action's components plus the id placed in the row's children:
+  # a plain invoke Button by default; a Modal (trigger button + prompt
+  # content) when the action declares prompt_fields; either wrapped in a
+  # visibility slot (a List templated over the row-relative
+  # `_visible_<action>` path) when the action declares visible_when.
+  defp row_action_components(view, table, action, sfx) do
+    setting = Map.get(view.actions, action)
+    prompt? = match?(%{prompt_fields: [_ | _]}, setting)
+    conditional? = match?(%{visible_when: [_ | _]}, setting)
+    base = "row_action#{sfx}_#{action}"
+
+    inner_id = if prompt?, do: "#{base}_modal", else: "#{base}_button"
+    anchor_id = if conditional?, do: "#{base}_slot", else: inner_id
+
+    button =
+      if prompt? do
+        prompt_trigger_button(table, action, base) ++
+          prompt_components(view, table, action, base, setting)
+      else
+        invoke_button(view, table, action, base)
+      end
+
+    slot = if conditional?, do: [visibility_slot(base, inner_id, action)], else: []
+
+    {anchor_id, button ++ slot}
+  end
+
+  defp invoke_button(view, table, action, base) do
     [
       %{
-        "id" => "row_action#{sfx}_#{action}_button",
+        "id" => "#{base}_button",
         "component" => "Button",
-        "child" => "row_action#{sfx}_#{action}_text",
+        "child" => "#{base}_text",
         "action" => %{
           "event" => %{
             "name" => "invoke",
@@ -474,11 +570,137 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         }
       },
       %{
-        "id" => "row_action#{sfx}_#{action}_text",
+        "id" => "#{base}_text",
         "component" => "Text",
         "text" => humanize(action)
       }
     ]
+  end
+
+  # The Modal's trigger: opening is client-side (interacting with the
+  # trigger), while the `prompt` event lets the server pre-fill
+  # /prompt/values/<action> and clear stale /errors.
+  defp prompt_trigger_button(table, action, base) do
+    [
+      %{
+        "id" => "#{base}_button",
+        "component" => "Button",
+        "child" => "#{base}_text",
+        "action" => %{
+          "event" => %{
+            "name" => "prompt",
+            "context" => %{
+              "action" => to_string(action),
+              "recordId" => %{"path" => "id"},
+              "component" => to_string(table.name)
+            }
+          }
+        }
+      },
+      %{
+        "id" => "#{base}_text",
+        "component" => "Text",
+        "text" => humanize(action)
+      }
+    ]
+  end
+
+  # The Modal and its content: a title, one TextField per prompt field bound
+  # to the absolute /prompt/values/<action>/<field> path (template-relative
+  # paths cannot reach the shared prompt state), a per-field error Text, and
+  # the confirm Button whose invoke context carries the "values" binding.
+  defp prompt_components(view, table, action, base, setting) do
+    title = setting.prompt_title || humanize(action)
+
+    field_children =
+      Enum.flat_map(setting.prompt_fields, fn field ->
+        ["#{base}_prompt_input_#{field}", "#{base}_prompt_error_#{field}"]
+      end)
+
+    inputs =
+      Enum.map(setting.prompt_fields, fn field ->
+        %{
+          "id" => "#{base}_prompt_input_#{field}",
+          "component" => "TextField",
+          "label" => prompt_label(view, field),
+          "value" => %{"path" => "/prompt/values/#{action}/#{field}"}
+        }
+      end)
+
+    errors =
+      Enum.map(setting.prompt_fields, fn field ->
+        %{
+          "id" => "#{base}_prompt_error_#{field}",
+          "component" => "Text",
+          "text" => %{"path" => "/errors/#{field}"},
+          "variant" => "caption"
+        }
+      end)
+
+    [
+      %{
+        "id" => "#{base}_modal",
+        "component" => "Modal",
+        "trigger" => "#{base}_button",
+        "content" => "#{base}_prompt"
+      },
+      %{
+        "id" => "#{base}_prompt",
+        "component" => "Column",
+        "children" => ["#{base}_prompt_title" | field_children] ++ ["#{base}_confirm_button"]
+      },
+      %{
+        "id" => "#{base}_prompt_title",
+        "component" => "Text",
+        "text" => title,
+        "variant" => "h3"
+      }
+    ] ++
+      inputs ++
+      errors ++
+      [
+        %{
+          "id" => "#{base}_confirm_button",
+          "component" => "Button",
+          "variant" => "primary",
+          "child" => "#{base}_confirm_text",
+          "action" => %{
+            "event" => %{
+              "name" => "invoke",
+              "context" =>
+                put_query_binding(
+                  %{
+                    "action" => to_string(action),
+                    "recordId" => %{"path" => "id"},
+                    "component" => to_string(table.name),
+                    "values" => %{"path" => "/prompt/values/#{action}"}
+                  },
+                  view
+                )
+            }
+          }
+        },
+        %{"id" => "#{base}_confirm_text", "component" => "Text", "text" => "Confirm"}
+      ]
+  end
+
+  defp prompt_label(view, field) do
+    case view.fields[field] do
+      %{label: label} when is_binary(label) -> label
+      _undeclared -> humanize(field)
+    end
+  end
+
+  # Zero-or-one nested template: `_visible_<action>` on the row is either
+  # [] or [%{"id" => id}], so the slot renders the action only when the
+  # server computed it visible (and the item's "id" keeps the
+  # template-relative recordId binding working).
+  defp visibility_slot(base, inner_id, action) do
+    %{
+      "id" => "#{base}_slot",
+      "component" => "List",
+      "children" => %{"componentId" => inner_id, "path" => "_visible_#{action}"}
+    }
   end
 
   defp form_components(_view, form) do
@@ -589,15 +811,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp date_only?(resource, field_name),
     do: attribute_type(resource, field_name) == Ash.Type.Date
 
+  # Filterable fields may be attributes or (expression-backed) calculations;
+  # both carry a type + constraints for picker options and variants.
   defp attribute_type(resource, field_name) do
-    case ResourceInfo.attribute(resource, field_name) do
+    case ResourceInfo.attribute(resource, field_name) ||
+           ResourceInfo.calculation(resource, field_name) do
       %{type: type} -> Ash.Type.get_type(type)
       nil -> nil
     end
   end
 
   defp attribute_constraints(resource, field_name) do
-    case ResourceInfo.attribute(resource, field_name) do
+    case ResourceInfo.attribute(resource, field_name) ||
+           ResourceInfo.calculation(resource, field_name) do
       %{constraints: constraints} when is_list(constraints) -> constraints
       _ -> []
     end
@@ -647,6 +873,22 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     )
   end
 
+  # The reserved /prompt state: one empty values map per prompt-enabled row
+  # action, so the Modal inputs always have a bindable path. Omitted
+  # entirely on surfaces without prompts (frozen shape unchanged).
+  defp put_prompt_state(value, view) do
+    prompt_values =
+      for {name, %{prompt_fields: [_ | _] = fields}} <- view.actions, into: %{} do
+        {to_string(name), Map.new(fields, &{to_string(&1), ""})}
+      end
+
+    if prompt_values == %{} do
+      value
+    else
+      Map.put(value, "prompt", %{"values" => prompt_values})
+    end
+  end
+
   # --- record serialization ---
 
   defp serialize_record(view, table, record) do
@@ -656,9 +898,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         nil -> view.fields |> Map.values() |> Enum.reject(& &1.hidden) |> Enum.map(& &1.name)
       end
 
-    [:id | field_names]
-    |> Enum.uniq()
-    |> Map.new(fn name -> {to_string(name), field_value(view, record, name)} end)
+    row =
+      [:id | field_names]
+      |> Enum.uniq()
+      |> Map.new(fn name -> {to_string(name), field_value(view, record, name)} end)
+
+    Map.merge(row, (table && AshA2ui.Conditions.row_visibility(view, table, record)) || %{})
   end
 
   # `source` columns read through the loaded relationship path (nil-safe: a

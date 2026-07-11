@@ -40,21 +40,41 @@ defmodule AshA2ui.ActionHandler do
       one-element string lists — they are unwrapped before Ash casts them to
       the attribute/argument type.
 
-    * `"invoke"` — context `%{"action" => name, "recordId" => id | nil}`.
+    * `"invoke"` — context
+      `%{"action" => name, "recordId" => id | nil, "values" => map | absent}`.
       Invokes a destroy/update/generic action by name. The action **must be
       listed in the resolved view's `row_actions`** — that allowlist is the
       authorization surface for client-triggered actions; anything else is
-      rejected with a `/ui/status` error before touching Ash. Destroy- and
+      rejected with a `/ui/status` error before touching Ash. When the
+      action's `action` entity declares `visible_when` conditions, the
+      identified record is fetched (with any condition calculations loaded)
+      and the conditions are evaluated server-side — an invoke on a
+      non-visible action is rejected with a `/ui/status` error, regardless
+      of what the client rendered. Destroy- and
       update-type actions run **the named action** on the record identified
-      by `"recordId"` with empty params (update row actions are touch-style:
-      their changes come from `change` blocks and defaults, never client
-      input). For generic
+      by `"recordId"`. Params are empty unless the action's `action` entity
+      declares `prompt_fields`: then the context's `"values"` map is
+      filtered to the declared prompt fields and cast against the Ash
+      action's arguments/accepts (unknown keys silently dropped; `"values"`
+      is ignored entirely for actions without `prompt_fields`); validation
+      errors map to `/errors/<field>` as usual, and a success clears the
+      action's `/prompt/values/<action>` state. For generic
       actions that define a `:record_id` argument, the context's `"recordId"`
       is passed through. A generic action returning a map has its raw result
       placed at `/ui/action_result` and a human-readable rendering (one
       "Humanized key: value" line per key) at `/ui/action_result_text`
       (handler-defined conventions, not part of the A2UI spec). Both paths
       are cleared by every subsequent successful action.
+
+    * `"prompt"` — context `%{"action" => name, "recordId" => id}`. Sent by
+      the trigger button of a prompt Modal (see `AshA2ui.Encoder.V0_9_1`)
+      when it opens. The action must be an allowlisted row action declaring
+      `prompt_fields`, and its `visible_when` conditions (if any) are
+      enforced against the identified record. On success returns
+      `updateDataModel` messages pre-filling `/prompt/values/<action>` (each
+      prompt field's current record value when it is a public attribute,
+      `""` otherwise) and clearing `/errors`. No Ash write happens — the
+      write is the subsequent `"invoke"` from the Modal's confirm button.
 
     * `"select_row"` — context `%{"recordId" => id}`. Returns a single
       `updateDataModel` populating `/form` with the record's field values
@@ -96,6 +116,7 @@ defmodule AshA2ui.ActionHandler do
   """
 
   alias Ash.Resource.Info, as: ResourceInfo
+  alias AshA2ui.Conditions
   alias AshA2ui.QueryRunner
   alias AshA2ui.ResolvedView
 
@@ -212,7 +233,38 @@ defmodule AshA2ui.ActionHandler do
          ]}
 
       true ->
-        invoke(allowed, Map.get(context, "recordId"), env)
+        invoke(allowed, Map.get(context, "recordId"), Map.get(context, "values"), env)
+    end
+  end
+
+  defp dispatch("prompt", context, %{view: view, ash_opts: ash_opts}) do
+    requested = Map.get(context, "action")
+    allowed = requested && Enum.find(view.row_actions, &(to_string(&1) == requested))
+    setting = allowed && Map.get(view.actions, allowed)
+    record_id = Map.get(context, "recordId")
+
+    cond do
+      not is_binary(requested) ->
+        {:error, [status(view, ~s(Malformed prompt action: context is missing "action".))]}
+
+      is_nil(allowed) ->
+        {:error,
+         [
+           status(
+             view,
+             "Action #{inspect(requested)} is not allowed: it is not listed in the " <>
+               "view's row_actions."
+           )
+         ]}
+
+      not match?(%{prompt_fields: [_ | _]}, setting) ->
+        {:error, [status(view, "Action #{inspect(requested)} does not declare prompt_fields.")]}
+
+      is_nil(record_id) ->
+        {:error, [status(view, ~s(Malformed prompt action: context is missing "recordId".))]}
+
+      true ->
+        prompt(view, setting, record_id, ash_opts)
     end
   end
 
@@ -231,11 +283,9 @@ defmodule AshA2ui.ActionHandler do
          {:parse, {:ok, params}} <- {:parse, QueryRunner.parse(table, context)},
          {:run, {:ok, records, query_state}} <-
            {:run, QueryRunner.run(table, params, ash_opts)} do
-      rows = Enum.map(records, &record_values(view, &1, table_fields(table)))
-
       {:ok,
        [
-         update_data_model(view, table.records_path, rows),
+         update_data_model(view, table.records_path, rows(view, table, records)),
          update_data_model(view, table.query_path, query_state)
        ]}
     else
@@ -299,30 +349,88 @@ defmodule AshA2ui.ActionHandler do
 
   # --- invoke ----------------------------------------------------------------
 
-  defp invoke(action_name, record_id, %{view: view} = env) do
-    env = Map.put(env, :invoked, action_name)
+  defp invoke(action_name, record_id, values, %{view: view} = env) do
+    setting = Map.get(view.actions, action_name)
+    env = env |> Map.put(:invoked, action_name) |> Map.put(:setting, setting)
 
-    case ResourceInfo.action(view.resource, action_name) do
-      %{type: :destroy} ->
-        invoke_destroy(action_name, record_id, env)
+    case enforce_visibility(view, setting, record_id, env.ash_opts) do
+      :ok ->
+        params = prompt_params(view, setting, action_name, values)
 
-      %{type: :update} ->
-        invoke_update(action_name, record_id, env)
+        case ResourceInfo.action(view.resource, action_name) do
+          %{type: :destroy} ->
+            invoke_destroy(action_name, record_id, params, env)
 
-      %{type: :action} = action ->
-        invoke_generic(action, record_id, env)
+          %{type: :update} ->
+            invoke_update(action_name, record_id, params, env)
 
-      _other ->
-        {:error,
-         [status(view, "Action #{inspect(action_name)} cannot be invoked as a row action.")]}
+          %{type: :action} = action ->
+            invoke_generic(action, record_id, params, env)
+
+          _other ->
+            {:error,
+             [status(view, "Action #{inspect(action_name)} cannot be invoked as a row action.")]}
+        end
+
+      {:error, messages} ->
+        {:error, messages}
     end
   end
 
-  defp invoke_destroy(action_name, record_id, %{view: view, ash_opts: ash_opts} = env) do
+  # Handler-side visible_when enforcement (mandatory — rendering hides
+  # buttons best-effort, but the server is the authority): the identified
+  # record is fetched with any condition calculations loaded, and every
+  # condition must hold or the invoke is rejected before touching the write.
+  defp enforce_visibility(_view, nil, _record_id, _ash_opts), do: :ok
+  defp enforce_visibility(_view, %{visible_when: []}, _record_id, _ash_opts), do: :ok
+
+  defp enforce_visibility(view, %{name: name}, nil, _ash_opts) do
+    {:error,
+     [
+       status(
+         view,
+         "Action #{inspect(to_string(name))} declares visible_when conditions and " <>
+           ~s(requires a "recordId" to evaluate them.)
+       )
+     ]}
+  end
+
+  defp enforce_visibility(view, %{visible_when: conditions, name: name}, record_id, ash_opts) do
+    loads = Conditions.condition_loads(view.resource, conditions)
+
+    case fetch_record(view, record_id, ash_opts, loads) do
+      {:ok, record} ->
+        if Conditions.visible?(view.resource, conditions, record) do
+          :ok
+        else
+          {:error,
+           [status(view, "Action #{inspect(to_string(name))} is not available for this record.")]}
+        end
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  # The invoke params: empty unless the action declares prompt_fields — then
+  # the client-sent "values" map is filtered to the declared prompt fields
+  # (nothing outside them ever reaches the changeset) and cast against the
+  # Ash action's arguments/accepts. "values" on prompt-less actions is
+  # ignored entirely.
+  defp prompt_params(view, %{prompt_fields: [_ | _] = fields}, action_name, values)
+       when is_map(values) do
+    allowed = MapSet.new(fields, &Atom.to_string/1)
+    filtered = Map.filter(values, fn {key, _value} -> normalize_key(key) in allowed end)
+    cast_values(view.resource, action_name, filtered)
+  end
+
+  defp prompt_params(_view, _setting, _action_name, _values), do: %{}
+
+  defp invoke_destroy(action_name, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
     result =
       with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
         record
-        |> Ash.Changeset.for_destroy(action_name, %{}, ash_opts)
+        |> Ash.Changeset.for_destroy(action_name, params, ash_opts)
         |> Ash.destroy()
       end
 
@@ -330,24 +438,80 @@ defmodule AshA2ui.ActionHandler do
   end
 
   # An `invoke` on an update-type row action runs *that* action on the
-  # identified record with empty params (touch-style actions whose changes
-  # come from `change` blocks / defaults) — never the form's update action.
-  defp invoke_update(action_name, record_id, %{view: view, ash_opts: ash_opts} = env) do
+  # identified record — with empty params (touch-style actions whose changes
+  # come from `change` blocks / defaults), or with the cast prompt values
+  # when the action declares prompt_fields. Never the form's update action.
+  defp invoke_update(action_name, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
     result =
       with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
         record
-        |> Ash.Changeset.for_update(action_name, %{}, ash_opts)
+        |> Ash.Changeset.for_update(action_name, params, ash_opts)
         |> Ash.update()
       end
 
     after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
   end
 
-  defp invoke_generic(action, record_id, %{view: view, ash_opts: ash_opts} = env) do
+  defp invoke_generic(action, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
     view.resource
-    |> Ash.ActionInput.for_action(action.name, generic_params(action, record_id), ash_opts)
+    |> Ash.ActionInput.for_action(
+      action.name,
+      Map.merge(generic_params(action, record_id), params),
+      ash_opts
+    )
     |> Ash.run_action()
     |> generic_result(env, "Action #{inspect(to_string(action.name))} completed.")
+  end
+
+  # --- prompt ----------------------------------------------------------------
+
+  # Pre-fills /prompt/values/<action> when the prompt Modal opens: each
+  # prompt field's current record value when it is a public attribute of the
+  # resource, "" otherwise (arguments have no stored value). Clears /errors
+  # so stale validation messages don't show inside a fresh prompt.
+  defp prompt(view, setting, record_id, ash_opts) do
+    loads = Conditions.condition_loads(view.resource, setting.visible_when)
+
+    case fetch_record(view, record_id, ash_opts, loads) do
+      {:ok, record} ->
+        if Conditions.visible?(view.resource, setting.visible_when, record) do
+          {:ok, prompt_prefill_messages(view, setting, record)}
+        else
+          {:error,
+           [
+             status(
+               view,
+               "Action #{inspect(to_string(setting.name))} is not available for this record."
+             )
+           ]}
+        end
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  defp prompt_prefill_messages(view, setting, record) do
+    prefill =
+      Map.new(setting.prompt_fields, fn field ->
+        {Atom.to_string(field), prefill_value(view.resource, record, field)}
+      end)
+
+    [
+      update_data_model(view, "/prompt/values/#{setting.name}", prefill),
+      update_data_model(view, "/errors", %{})
+    ]
+  end
+
+  defp prefill_value(resource, record, field) do
+    if ResourceInfo.attribute(resource, field) do
+      case json_value(Map.get(record, field)) do
+        nil -> ""
+        value -> value
+      end
+    else
+      ""
+    end
   end
 
   defp generic_result({:ok, result}, %{view: view} = env, status_text)
@@ -422,12 +586,19 @@ defmodule AshA2ui.ActionHandler do
              update_data_model(view, "/ui/status", status_text),
              update_data_model(view, "/ui/action_result", %{}),
              update_data_model(view, "/ui/action_result_text", "")
-           ] ++ extra}
+           ] ++ prompt_clear(env) ++ extra}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
     end
   end
+
+  # A successful prompt-backed invoke resets its /prompt/values/<action>
+  # state so the next prompt starts clean.
+  defp prompt_clear(%{view: view, setting: %{prompt_fields: [_ | _], name: name}}),
+    do: [update_data_model(view, "/prompt/values/#{name}", %{})]
+
+  defp prompt_clear(_env), do: []
 
   defp refresh_messages(%{view: view, ash_opts: ash_opts, refresh: refresh} = env) do
     view
@@ -471,8 +642,15 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  # Table rows carry the per-row visibility data (`"_actions"` +
+  # `"_visible_<action>"`, see AshA2ui.Conditions) when any of the table's
+  # row actions declare visible_when conditions.
   defp rows(view, table, records) do
-    Enum.map(records, &record_values(view, &1, table_fields(table)))
+    Enum.map(records, fn record ->
+      view
+      |> record_values(record, table_fields(table))
+      |> Map.merge(Conditions.row_visibility(view, table, record))
+    end)
   end
 
   # Human-readable, selectable text for a map-returning generic action:
@@ -510,9 +688,15 @@ defmodule AshA2ui.ActionHandler do
 
   # Record lookups (updates, destroys, select_row) go through the single
   # table's read action; on multi-table surfaces — where per-table reads may
-  # be filtered slices — through the resource's primary read.
-  defp fetch_record(view, record_id, ash_opts) do
-    Ash.get(view.resource, record_id, Keyword.put(ash_opts, :action, read_action(view)))
+  # be filtered slices — through the resource's primary read. `loads` covers
+  # visible_when condition calculations when enforcement needs them.
+  defp fetch_record(view, record_id, ash_opts, loads \\ []) do
+    opts =
+      ash_opts
+      |> Keyword.put(:action, read_action(view))
+      |> Keyword.put(:load, loads)
+
+    Ash.get(view.resource, record_id, opts)
   end
 
   defp read_action(view), do: view.read_action || primary_action(view.resource, :read)

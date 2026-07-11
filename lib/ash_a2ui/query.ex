@@ -11,9 +11,11 @@ defmodule AshA2ui.Query do
 
   defstruct [
     :name,
+    :default_preset,
     search_fields: [],
     sortable: [],
     filters: [],
+    presets: [],
     default_sort: [],
     page_size: 25,
     max_page_size: 100,
@@ -22,9 +24,11 @@ defmodule AshA2ui.Query do
 
   @type t :: %__MODULE__{
           name: atom,
-          search_fields: [atom],
+          search_fields: [atom | [atom]],
           sortable: [atom],
           filters: [atom],
+          presets: [AshA2ui.Preset.t()],
+          default_preset: atom | nil,
           default_sort: [{atom, :asc | :desc}],
           page_size: pos_integer,
           max_page_size: pos_integer

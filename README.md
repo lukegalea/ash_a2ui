@@ -193,12 +193,21 @@ client sort/filter params are rejected before Ash is called):
 ```elixir
 a2ui do
   query :default do
-    search_fields [:subject]          # case-insensitive contains, OR'd
+    search_fields [:subject, [:requester, :email]]  # attrs or relationship paths, ci-contains, OR'd
     sortable [:subject, :inserted_at]
-    filters [:status]                 # equality filters
+    filters [:status]                 # equality filters (expression calcs allowed)
     default_sort inserted_at: :desc
     page_size 25
     max_page_size 100
+    default_preset :active
+
+    preset :active do                 # composite predicates, selected by NAME
+      filter deleted_at: nil
+    end
+
+    preset :deleted do
+      read_action :deleted            # escape hatch for richer predicates
+    end
   end
 
   component :table do
@@ -208,10 +217,42 @@ a2ui do
 end
 ```
 
-The encoder emits the search field, filter pickers, and pagination buttons;
-the `"query"` action validates every request against the allowlist and
-answers with `/records` + `/query` data-model updates. See
+The encoder emits the search field, preset + filter pickers, and pagination
+buttons; the `"query"` action validates every request against the allowlist
+and answers with `/records` + `/query` data-model updates. Clients never
+send predicates — presets travel as names only. See
 [Queries and Pagination](documentation/topics/queries-and-pagination.md).
+
+### Row actions with prompts and conditional visibility
+
+Row actions can collect arguments through a Modal prompt and show/hide per
+row from record state — enforced server-side on every invoke:
+
+```elixir
+a2ui do
+  component :table do
+    fields [:code, :status]
+    row_actions [:approve, :decline]
+    query :default
+  end
+
+  action :approve do
+    visible_when status: :pending     # per-row; handler re-checks on invoke
+  end
+
+  action :decline do
+    prompt_fields [:notes]            # must be args/accepts of :decline
+    prompt_title "Decline referral"
+    visible_when status: [:pending, :approved]
+  end
+end
+```
+
+`:decline` renders as a `Modal` whose Confirm sends `invoke` with a
+`"values"` map (filtered to the declared prompt fields, cast against the
+action's arguments); validation errors land on `/errors/notes` inside the
+Modal. See
+[Actions and Authorization](documentation/topics/actions-and-authorization.md).
 
 ### Multiple table sections with scoped refreshes
 
@@ -427,14 +468,44 @@ Shipped beyond the v0 core:
   (`/records/<component_name>`, `/query/<component_name>`), and `action`
   entities that limit which sections a successful action refreshes (see
   [Multi-Section Surfaces](documentation/topics/multi-section-surfaces.md)).
+- ✅ **Row-action prompts (`prompt_fields`)** — row actions that collect
+  arguments through a basic-catalog `Modal` before invoking
+  (`action :decline do prompt_fields [:notes] end`): the trigger pre-fills
+  `/prompt/values/<action>` via the `prompt` action, and the Modal's Confirm
+  sends `invoke` with a `"values"` map filtered + cast against the Ash
+  action's arguments/accepts (see
+  [Actions and Authorization](documentation/topics/actions-and-authorization.md)).
+- ✅ **Relationship-path search** — `search_fields` entries may be paths to
+  string attributes through public relationships
+  (`search_fields [:code, [:referrer, :email]]`), matched with the same
+  case-insensitive contains (see
+  [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
+- ✅ **Calculation filters + named filter presets** — `filters` may name
+  expression-backed public calculations, and `preset` entities declare
+  server-side composite predicates the client selects **by name**
+  (`preset :pending do filter status: :pending, deleted_at: nil end`, with a
+  `read_action` escape hatch and `default_preset`; a `ChoicePicker` is
+  emitted and `/query` gains `"preset"`) (see
+  [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
+- ✅ **Conditional row-action visibility (`visible_when`)** — per-row
+  show/hide from record state
+  (`action :approve do visible_when status: :pending end`): server-computed
+  `"_actions"`/`"_visible_<action>"` row data + a templated slot render it,
+  and the handler re-evaluates the conditions on every invoke (see
+  [Actions and Authorization](documentation/topics/actions-and-authorization.md)).
+- ✅ **Multi-key calculation sorting** — `default_sort` (and client sorts)
+  compose expression calculations with attributes
+  (`default_sort status_priority: :asc, code: :asc`) with no extra
+  machinery.
 
 Documented as roadmap (not built):
 
 - **A2UI v1.0 spec support** once it leaves RC — the payload builder is
   isolated behind a versioned encoder (`AshA2ui.Encoder.V0_9_1`) so a new spec
   version is a new encoder module.
-- **Richer `query` filters** — ranged/custom filter shapes beyond the shipped
-  equality filters, and multiple queries per table.
+- **Richer client-driven `query` filters** — ranged/custom filter shapes
+  beyond the shipped equality filters and named presets, and multiple
+  queries per table.
 - **Searchable/paginated relationship selects** — for option sets beyond
   `option_limit`; today's selects load a capped, sorted option list.
 - **Nested forms** — interaction modes driven by

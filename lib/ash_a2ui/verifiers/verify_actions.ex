@@ -7,7 +7,17 @@ defmodule AshA2ui.Verifiers.VerifyActions do
     * `create_action` must exist and be of type `:create`,
     * `update_action` must exist and be of type `:update`,
     * every entry in `row_actions` must exist (any type — destroy and generic
-      actions are allowed).
+      actions are allowed),
+
+  and that `action` entity metadata is sound against the resource:
+
+    * `prompt_fields` may only be declared on actions listed in a table's
+      `row_actions`, and every entry must be an argument or accepted
+      attribute of the Ash action (the prompt values are cast against them),
+    * `visible_when` may only be declared on row actions; its keys must be
+      public attributes or public expression calculations, and its values
+      must cast to the field's type (`nil` and per-member list values
+      included).
 
   Raises `Spark.Error.DslError` (surfaced by Spark as a compile-time
   diagnostic) on failure. Skipped when no resource can be resolved (standalone
@@ -31,7 +41,10 @@ defmodule AshA2ui.Verifiers.VerifyActions do
 
       target ->
         module = Verifier.get_persisted(dsl_state, :module)
-        verify_components(dsl_state, target, module)
+
+        with :ok <- verify_components(dsl_state, target, module) do
+          verify_action_settings(dsl_state, target, module)
+        end
     end
   end
 
@@ -105,6 +118,155 @@ defmodule AshA2ui.Verifiers.VerifyActions do
              "row action #{inspect(missing)} does not exist on " <>
                inspect(resource_name(target: target, module: module))
          )}
+    end
+  end
+
+  # --- action entity metadata (prompt_fields / visible_when) -----------------
+
+  defp verify_action_settings(dsl_state, target, module) do
+    row_action_names =
+      dsl_state
+      |> components()
+      |> Enum.flat_map(& &1.row_actions)
+      |> MapSet.new()
+
+    dsl_state
+    |> Verifier.get_entities([:a2ui])
+    |> Enum.filter(&is_struct(&1, AshA2ui.Action))
+    |> Enum.reduce_while(:ok, fn setting, :ok ->
+      case verify_action_setting(setting, row_action_names, target, module) do
+        :ok -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp verify_action_setting(setting, row_action_names, target, module) do
+    with :ok <- verify_row_action_only(setting, :prompt_fields, row_action_names, module),
+         :ok <- verify_row_action_only(setting, :visible_when, row_action_names, module),
+         :ok <- verify_prompt_fields(setting, target, module) do
+      verify_visible_when(setting, target, module)
+    end
+  end
+
+  defp verify_row_action_only(setting, option, row_action_names, module) do
+    if Map.fetch!(setting, option) == [] or MapSet.member?(row_action_names, setting.name) do
+      :ok
+    else
+      {:error,
+       DslError.exception(
+         module: module,
+         path: [:a2ui, :action, setting.name, option],
+         message:
+           "action #{inspect(setting.name)} declares #{option}, but it is not listed in " <>
+             "any table's row_actions — #{option} only applies to row actions"
+       )}
+    end
+  end
+
+  # Prompt values are cast against the Ash action's arguments and accepted
+  # attributes, so every prompt field must be one of them.
+  defp verify_prompt_fields(%{prompt_fields: []}, _target, _module), do: :ok
+
+  defp verify_prompt_fields(setting, target, module) do
+    case Info.action(target, setting.name) do
+      nil ->
+        # Missing actions are reported by verify_row_actions.
+        :ok
+
+      action ->
+        known =
+          MapSet.new(Enum.map(action.arguments, & &1.name) ++ List.wrap(Map.get(action, :accept)))
+
+        case Enum.find(setting.prompt_fields, &(not MapSet.member?(known, &1))) do
+          nil ->
+            :ok
+
+          unknown ->
+            {:error,
+             DslError.exception(
+               module: module,
+               path: [:a2ui, :action, setting.name, :prompt_fields],
+               message:
+                 "prompt field #{inspect(unknown)} is neither an argument nor an accepted " <>
+                   "attribute of action #{inspect(setting.name)} " <>
+                   "(known: #{inspect(MapSet.to_list(known))})"
+             )}
+        end
+    end
+  end
+
+  defp verify_visible_when(%{visible_when: []}, _target, _module), do: :ok
+
+  defp verify_visible_when(setting, target, module) do
+    Enum.reduce_while(setting.visible_when, :ok, fn {key, value}, :ok ->
+      case verify_condition(setting, key, value, target, module) do
+        :ok -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  # visible_when keys follow the same rules as query filters: public
+  # attributes or expression-backed public calculations (the calc must be
+  # loadable to evaluate the condition on fetched records).
+  defp verify_condition(setting, key, value, target, module) do
+    field =
+      public_attribute(target, key) ||
+        (expression_calculation?(target, key) && Info.public_calculation(target, key))
+
+    cond do
+      !field ->
+        {:error,
+         DslError.exception(
+           module: module,
+           path: [:a2ui, :action, setting.name, :visible_when],
+           message:
+             "visible_when key #{inspect(key)} on action #{inspect(setting.name)} must be " <>
+               "a public attribute or an expression-backed public calculation of the resource"
+         )}
+
+      not castable_condition?(field, value) ->
+        {:error,
+         DslError.exception(
+           module: module,
+           path: [:a2ui, :action, setting.name, :visible_when],
+           message:
+             "visible_when value #{inspect(value)} for #{inspect(key)} on action " <>
+               "#{inspect(setting.name)} does not cast to the field's type"
+         )}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp public_attribute(target, key) do
+    case Info.attribute(target, key) do
+      %{public?: true} = attribute -> attribute
+      _private_or_missing -> nil
+    end
+  end
+
+  # The same expression-backed requirement generic sorting has, so
+  # `sortable?/3` doubles as the check.
+  defp expression_calculation?(target, key) do
+    not is_nil(Info.public_calculation(target, key)) and
+      Info.sortable?(target, key, include_private?: false)
+  end
+
+  defp castable_condition?(_field, nil), do: true
+
+  defp castable_condition?(field, values) when is_list(values) do
+    Enum.all?(values, &castable_condition?(field, &1))
+  end
+
+  defp castable_condition?(field, value) do
+    with {:ok, cast} <- Ash.Type.cast_input(field.type, value, field.constraints),
+         {:ok, _cast} <- Ash.Type.apply_constraints(field.type, cast, field.constraints) do
+      true
+    else
+      _error -> false
     end
   end
 

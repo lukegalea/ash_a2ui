@@ -19,8 +19,9 @@ custom hooks, and tests can rely on them.
 | `/ui/status` | Operation feedback text (the flash-equivalent) | After every handled action (success/error) |
 | `/ui/action_result` | The raw map returned by a map-returning generic action | An `invoke`d generic action returns a plain map (cleared by every subsequent successful action) |
 | `/ui/action_result_text` | The human-readable rendering of `/ui/action_result` | Same as `/ui/action_result` |
-| `/query` | The current search/filter/sort/pagination state of a query-enabled table (multi-table surfaces: an object keyed by table component name) | Initial render; after every `query` action; alongside query-aware success refreshes |
+| `/query` | The current search/filter/preset/sort/pagination state of a query-enabled table (multi-table surfaces: an object keyed by table component name) | Initial render; after every `query` action; alongside query-aware success refreshes |
 | `/query/<component_name>` | One table's query state on a **multi-table** surface | Same as `/query`, per table |
+| `/prompt/values/<action>` | The input values of a prompt-enabled row action's Modal (only on surfaces with `prompt_fields` actions) | Initial render (empty); pre-filled on `prompt`; cleared after a successful prompt `invoke` |
 
 Everything under these paths uses camelCase string keys, matching the rest of
 the wire format.
@@ -262,6 +263,7 @@ contract):
 {
   "search": "",
   "filters": { "status": "", "category": "" },
+  "preset": "pending",
   "sort": { "field": "inserted_at", "dir": "desc" },
   "page": 1,
   "pageSize": 25,
@@ -274,6 +276,10 @@ Conventions:
 
 - `filters` always contains **every declared filter name**; an empty string
   means "inactive", so client bindings at `/query/filters/<name>` are stable.
+- `preset` is present **only when the query declares presets** (see
+  [Queries and Pagination](queries-and-pagination.md)): the selected
+  preset's name, or `""` when none is active. The client only ever sends a
+  preset *name* — never predicates.
 - `sort` is `{"field": ..., "dir": "asc" | "desc"}` or `null` when unsorted.
 - `totalCount` is an integer, or `null` when the data layer cannot count.
 - `hasMore` says whether a next page exists.
@@ -286,6 +292,39 @@ The `query` client action's context is `{"query": <the /query map>}` plus an
 optional literal `"page"` override or relative `"pageDelta"`; everything in
 it is validated against the DSL-declared allowlist and rejected via
 `/ui/status` when not declared.
+
+## `/prompt/values/<action>` — row-action prompt state
+
+When a row action declares `prompt_fields` (see
+[Actions and Authorization](actions-and-authorization.md)), its Modal inputs
+bind to `/prompt/values/<action>/<field>` — absolute paths, because the
+basic catalog's action contexts cannot nest objects and the prompt state is
+shared across rows (only one Modal is open at a time). Conventions:
+
+- The initial data model carries `"prompt"` (only on surfaces with
+  prompt-enabled actions): one values map per prompt action, every declared
+  field present as `""`.
+- Clicking the trigger sends the `"prompt"` action; the server rewrites
+  `/prompt/values/<action>` with the record's current values (public
+  attributes; `""` for pure arguments) and clears `/errors`.
+- The Modal's Confirm sends `"invoke"` with
+  `"values": {"path": "/prompt/values/<action>"}`; a success clears the
+  action's values map back to `{}`, a validation failure writes
+  `/errors/<field>` (rendered inside the Modal).
+
+## Per-row visibility: `"_actions"` and `"_visible_<action>"`
+
+Rows of a table whose `row_actions` include `visible_when`-conditional
+actions carry two extra keys (server-computed; see
+[Actions and Authorization](actions-and-authorization.md)):
+
+- `"_actions"` — the names of the row actions visible for this record,
+- `"_visible_<action>"` — `[{"id": <record id>}]` when visible, `[]` when
+  hidden; the emitted per-action `List` slot templates over this
+  row-relative path to render zero or one button.
+
+Rows of tables without conditional actions are unchanged (no underscore
+keys).
 
 ## Why conventions instead of message types
 

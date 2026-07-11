@@ -12,12 +12,21 @@ anything else before Ash is called.
 ```elixir
 a2ui do
   query :default do
-    search_fields [:subject]            # string attributes only, ci-contains, OR'd
+    search_fields [:subject, [:requester, :email]]  # string attrs or rel paths, ci-contains, OR'd
     sortable [:subject, :inserted_at]
     filters [:status]                   # equality filters
     default_sort inserted_at: :desc
     page_size 25
     max_page_size 100
+    default_preset :active
+
+    preset :active do
+      filter deleted_at: nil            # nil = is_nil; list = in; else equality
+    end
+
+    preset :deleted do
+      read_action :deleted              # escape hatch for richer predicates
+    end
   end
 
   component :table do
@@ -31,11 +40,22 @@ end
   `search_fields` that the surface actually needs — every entry is
   client-reachable. Never mirror all public attributes "because they exist".
 - All query fields must be public attributes; `search_fields` must be
-  string-typed. `sortable`/`default_sort` may additionally name public
-  aggregates and expression-based calculations (module-based calculations
-  are not generically sortable and are rejected); calculations/aggregates
-  are never allowed in `search_fields` or `filters`. All verified at compile
+  string-typed — a `search_fields` entry may also be a **relationship path**
+  to a public string attribute (`[:requester, :email]`; to-many paths match
+  when *any* related record matches). `sortable`/`default_sort` may
+  additionally name public aggregates and expression-based calculations, and
+  `filters` may name expression-based calculations (module-based
+  calculations have no data-layer expression and are rejected everywhere;
+  aggregates are sort-only). All verified at compile
   time — fix the declaration, do not work around the verifier.
+- **Presets are the composite-filter mechanism.** The client selects a
+  preset **by name** (`"preset"` in the query state; a `ChoicePicker` is
+  emitted) — predicates never travel over the wire. Use a keyword `filter`
+  for AND-of-equality/is_nil/membership; use `read_action` for anything
+  richer (`not is_nil`, ranges, ORs). `default_preset` applies when the
+  client selects none *and* closes the set (no `""`/"All" escape to the
+  unscoped base read); without it, `""` means "no preset". Presets are UX
+  scoping — authorization stays in Ash policies.
 - On multi-table surfaces each named table may attach its own query; state
   lives at `/query/<component_name>` and the `query` action context requires
   `"component"` (the emitted controls send it automatically).
@@ -73,5 +93,8 @@ end
 - ❌ Widening `sortable`/`filters` to every public attribute.
 - ❌ Inventing a second query mechanism (custom action names, ad-hoc context
   keys) instead of declaring a `query` entity.
-- ❌ Expecting range/fuzzy/custom filters — v0 filters are equality-only
-  (documented limitation; roadmap).
+- ❌ Expecting range/fuzzy/custom *client-driven* filters — filters are
+  equality-only by design. Composite/rich predicates belong in a named
+  `preset` (or a preset `read_action`), selected by name.
+- ❌ Accepting client-sent predicates for presets — the wire carries only
+  the preset **name**.

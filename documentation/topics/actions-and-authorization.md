@@ -47,8 +47,10 @@ The v0 `action.name` vocabulary:
 | `action.name` | Meaning | Maps to |
 |---|---|---|
 | `"submit_form"` | The form component was submitted | The form's `create_action` or `update_action` (with `recordId` → update, without → create) |
-| `"invoke"` | A row action button was clicked | The named action in `row_actions` |
+| `"invoke"` | A row action button was clicked (or a prompt Modal confirmed) | The named action in `row_actions` |
+| `"prompt"` | A prompt Modal's trigger was clicked | No Ash write — pre-fills `/prompt/values/<action>` for the Modal inputs |
 | `"select_row"` | A table row was selected | Selection state (e.g. loading a record into the form) |
+| `"query"` | Query controls were applied | The table's `query` allowlist (see [Queries and Pagination](queries-and-pagination.md)) |
 
 When the view declares no form/table action, the handler falls back to the
 resource's **primary** create/update/read action — so minimal surfaces work
@@ -58,6 +60,89 @@ Both result tuples carry valid server→client messages: on success, a data
 refresh plus `/ui/status` feedback; on failure, validation errors mapped onto
 `/errors/<field>` paths (see
 [Data Model Conventions](data-model-conventions.md)).
+
+## Row actions with argument prompts (`prompt_fields`)
+
+A row action that needs user input — "decline with a note" — declares its
+prompt fields on an `action` entity:
+
+```elixir
+component :table do
+  row_actions [:approve, :decline]
+end
+
+action :decline do
+  prompt_fields [:notes]                 # must be args/accepts of :decline
+  prompt_title "Decline referral"        # optional; defaults to the humanized name
+end
+```
+
+Every prompt field must be an **argument or accepted attribute** of the Ash
+action (verified at compile time). The encoder then renders the action as a
+basic-catalog `Modal` instead of a bare button:
+
+- the row button becomes the Modal's `trigger` and dispatches the `"prompt"`
+  action (`{"action": "decline", "recordId": {"path": "id"}, "component":
+  "table"}`); the server answers by pre-filling
+  `/prompt/values/decline` (each field's current record value when it is a
+  public attribute, `""` otherwise) and clearing `/errors`,
+- the Modal `content` is a Column with a title, one `TextField` per prompt
+  field bound to `/prompt/values/decline/<field>`, a per-field error `Text`
+  bound to `/errors/<field>`, and a **Confirm** button,
+- Confirm dispatches a regular `"invoke"` whose context carries
+  `"values": {"path": "/prompt/values/decline"}` alongside
+  `"action"`/`"recordId"`.
+
+Handler-side, the `invoke` context's `"values"` map is **filtered to the
+declared `prompt_fields`** (nothing outside them ever reaches the
+changeset), cast against the action's arguments/accepts, and passed as the
+action params. Validation errors land on `/errors/<field>` as usual — they
+render inside the open Modal. A success clears
+`/prompt/values/<action>`. For actions *without* `prompt_fields`, `"values"`
+is ignored entirely — the pre-Wave-4 empty-params behavior is unchanged.
+
+Protocol notes: Modal open/close is client-side (the v0.9.1 basic catalog
+has no server-controlled open state), so the server cannot force the Modal
+shut — the frozen contract is only the `prompt` pre-fill and the `invoke`
+`"values"` map. Prompt inputs bind **absolute** `/prompt/...` paths because
+the catalog's `Action.context` values cannot nest objects; the shared state
+is safe because only one Modal is open at a time.
+
+## Conditional row actions (`visible_when`)
+
+Per-row availability driven by record state:
+
+```elixir
+action :approve do
+  visible_when status: :pending, deleted_at: nil
+end
+```
+
+`visible_when` is a keyword list of conditions ANDed together — `nil` means
+`is_nil`, a list means membership, anything else is equality — on **public
+attributes or expression-backed public calculations** (values verified
+castable at compile time). It is deliberately *not* a rules engine: anything
+richer belongs in an Ash policy or a dedicated read action.
+
+Two halves, with different guarantees:
+
+- **Enforcement (mandatory):** on every `invoke` (and `prompt`) of a
+  conditional action, the handler fetches the identified record (loading any
+  condition calculations) and re-evaluates the conditions. A non-visible
+  action is rejected with a `/ui/status` error before touching the write —
+  regardless of what the client rendered.
+- **Rendering (best-effort):** the v0.9.1 basic catalog has no `visible`
+  property or template conditionals, so visibility is server-computed data:
+  each row gains `"_actions"` (the visible action names) and a
+  `"_visible_<action>"` list (`[{"id": <record id>}]` or `[]`), and the
+  action renders inside a `List` slot templated over that row-relative path
+  — renderers that support nested templates show zero or one button per
+  row. Renderers that don't can still consult `"_actions"`; either way the
+  handler enforcement above is the authority.
+
+Note `visible_when` is a UX affordance layered *inside* the `row_actions`
+allowlist — it narrows when an allowlisted action applies, and Ash policies
+remain the real authorization boundary.
 
 ## `row_actions` is the allowlist
 

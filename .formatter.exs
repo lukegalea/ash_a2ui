@@ -8,10 +8,12 @@ spark_locals_without_parens = [
   component: 2,
   component: 3,
   create_action: 1,
+  default_preset: 1,
   default_sort: 1,
   field: 1,
   field: 2,
   fields: 1,
+  filter: 1,
   filters: 1,
   for_resource: 1,
   format: 1,
@@ -24,6 +26,10 @@ spark_locals_without_parens = [
   option_value: 1,
   order: 1,
   page_size: 1,
+  preset: 1,
+  preset: 2,
+  prompt_fields: 1,
+  prompt_title: 1,
   query: 1,
   query: 2,
   read_action: 1,
@@ -35,6 +41,7 @@ spark_locals_without_parens = [
   source: 1,
   surface_id: 1,
   update_action: 1,
+  visible_when: 1,
   widget: 1
 ]
 

@@ -2,17 +2,25 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
   @moduledoc """
   Verifies at compile time that every `query` entity is a sound allowlist:
 
-    * `search_fields` and `filters` entries must be public attributes of the
-      resolved resource (relationship-sourced `source` columns get a
-      dedicated "not sortable" error, calculations/aggregates a dedicated
-      "sortable-only" error),
+    * `search_fields` entries must be public string-typed attributes (they
+      are matched with a case-insensitive contains) — or relationship paths
+      to one (`[:author, :email]`: every step but the last a public
+      relationship, the last a public string attribute of the final
+      destination),
+    * `filters` entries must be public attributes or public
+      expression-backed calculations of the resolved resource
+      (relationship-sourced `source` columns get a dedicated error,
+      module-based calculations and aggregates a tailored rejection),
     * `sortable` and `default_sort` entries must be public attributes, or
       public calculations/aggregates that Ash can sort generically
       (`Ash.Resource.Info.sortable?/3`: expression-backed calculations and
       non-`:first`-over-unsortable aggregates) — non-sortable
       calculations/aggregates get a tailored error,
-    * `search_fields` entries must be string-typed (they are matched with a
-      case-insensitive contains),
+    * `preset` entities must have unique names and declare exactly one of
+      `filter` / `read_action`; `filter` keys must be public attributes or
+      public expression calculations with castable values, and `read_action`
+      must name a `:read` action of the resource,
+    * `default_preset` must name a declared preset,
     * `page_size` must not exceed `max_page_size`,
     * query names must be unique, and
     * a component's `query` option must reference a declared query.
@@ -92,14 +100,14 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
 
   defp verify_query(query, ctx) do
     with :ok <- verify_allowlists(query, ctx),
-         :ok <- verify_search_types(query, ctx.attributes, ctx.module) do
+         :ok <- verify_search_fields(query, ctx),
+         :ok <- verify_presets(query, ctx) do
       verify_page_sizes(query, ctx.module)
     end
   end
 
   defp verify_allowlists(query, ctx) do
     [
-      search_fields: query.search_fields,
       sortable: query.sortable,
       filters: query.filters,
       default_sort: Keyword.keys(query.default_sort)
@@ -122,8 +130,9 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
   end
 
   # Sort options accept attributes and generically-sortable public
-  # calculations/aggregates; search/filter options accept plain attributes
-  # only. Everything else gets a tailored rejection.
+  # calculations/aggregates; `filters` accepts attributes and
+  # expression-backed public calculations (equality on the calc value).
+  # Everything else gets a tailored rejection.
   defp verify_field(query, option, name, ctx) do
     kind = field_kind(name, ctx)
     sort_option? = option in [:sortable, :default_sort]
@@ -135,6 +144,9 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
       kind when kind in [:calculation, :aggregate] and sort_option? ->
         verify_sortable(query, option, name, kind, ctx)
 
+      :calculation when option == :filters ->
+        verify_filterable_calculation(query, option, name, ctx)
+
       kind when kind in [:calculation, :aggregate] ->
         {:error,
          allowlist_error(
@@ -142,8 +154,9 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
            option,
            ctx.module,
            "query #{inspect(query.name)} lists #{inspect(name)} in #{option}, but " <>
-             "#{inspect(name)} is #{with_article(kind)} — calculations and aggregates may " <>
-             "only appear in `sortable`/`default_sort`, never in `#{option}`"
+             "#{inspect(name)} is #{with_article(kind)} — aggregates may only appear in " <>
+             "`sortable`/`default_sort`, and calculations additionally in `filters` " <>
+             "(when expression-backed), never in `#{option}`"
          )}
 
       :source ->
@@ -163,9 +176,30 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
          query #{inspect(query.name)} references unknown field #{inspect(name)} in #{option}.
 
          Every field in a query allowlist must be a public attribute (or, for sortable/\
-         default_sort, a sortable public calculation or aggregate) of the resource. \
+         default_sort, a sortable public calculation or aggregate; for filters, an \
+         expression-backed public calculation) of the resource. \
          Available attributes: #{inspect(Map.keys(ctx.attributes))}
          """)}
+    end
+  end
+
+  # `filters` equality on a calculation requires a data-layer expression —
+  # the same requirement generic sorting has, so `sortable?/3` doubles as
+  # the expression-backed check.
+  defp verify_filterable_calculation(query, option, name, ctx) do
+    if Info.sortable?(ctx.target, name, include_private?: false) do
+      :ok
+    else
+      {:error,
+       allowlist_error(
+         query,
+         option,
+         ctx.module,
+         "query #{inspect(query.name)} lists #{inspect(name)} in #{option}, but the " <>
+           "calculation #{inspect(name)} is not filterable: only expression-backed " <>
+           "calculations (`calculate ..., expr(...)`) can be filtered generically — " <>
+           "module-based calculations have no data-layer expression"
+       )}
     end
   end
 
@@ -216,28 +250,281 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
     )
   end
 
-  defp verify_search_types(query, attributes, module) do
-    query.search_fields
-    |> Enum.find(fn name ->
-      case attributes[name] do
-        %{type: type} -> Ash.Type.get_type(type) not in @string_types
-        nil -> false
+  # A search_fields entry is a public string attribute, or a relationship
+  # path to one — every step but the last a public relationship, the last a
+  # public string attribute of the final destination (same rules as `source`
+  # columns, see AshA2ui.Verifiers.VerifyRelationships).
+  defp verify_search_fields(query, ctx) do
+    Enum.reduce_while(query.search_fields, :ok, fn entry, :ok ->
+      case verify_search_field(query, entry, ctx) do
+        :ok -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
       end
     end)
+  end
+
+  defp verify_search_field(query, name, ctx) when is_atom(name) do
+    case field_kind(name, ctx) do
+      :attribute ->
+        verify_search_type(query, name, ctx.attributes[name], ctx.module)
+
+      _other ->
+        {:error,
+         allowlist_error(query, :search_fields, ctx.module, """
+         query #{inspect(query.name)} references unknown field #{inspect(name)} in search_fields.
+
+         Every search_fields entry must be a public string-typed attribute, or a \
+         relationship path to one (e.g. `[:author, :email]`). \
+         Available attributes: #{inspect(Map.keys(ctx.attributes))}
+         """)}
+    end
+  end
+
+  defp verify_search_field(query, path, ctx) when is_list(path) and length(path) >= 2 do
+    {relationship_steps, [terminal]} = Enum.split(path, -1)
+
+    case walk_relationships(relationship_steps, ctx.target) do
+      {:error, step} ->
+        {:error,
+         search_path_error(
+           query,
+           path,
+           ctx.module,
+           "step #{inspect(step)} is not a public relationship"
+         )}
+
+      {:ok, destination} ->
+        case Info.attribute(destination, terminal) do
+          %{public?: true} = attribute ->
+            verify_search_type(query, path, attribute, ctx.module)
+
+          _private_or_missing ->
+            {:error,
+             search_path_error(
+               query,
+               path,
+               ctx.module,
+               "terminal step #{inspect(terminal)} is not a public attribute of " <>
+                 inspect(destination)
+             )}
+        end
+    end
+  end
+
+  defp verify_search_field(query, path, ctx) do
+    {:error, search_path_error(query, path, ctx.module, "a path must have at least two steps")}
+  end
+
+  defp walk_relationships(steps, target) do
+    Enum.reduce_while(steps, {:ok, target}, fn step, {:ok, current} ->
+      case Info.relationship(current, step) do
+        %{public?: true, destination: destination} -> {:cont, {:ok, destination}}
+        _private_or_missing -> {:halt, {:error, step}}
+      end
+    end)
+  end
+
+  defp verify_search_type(query, entry, %{type: type}, module) do
+    if Ash.Type.get_type(type) in @string_types do
+      :ok
+    else
+      {:error,
+       DslError.exception(
+         module: module,
+         path: [:a2ui, :query, query.name, :search_fields],
+         message:
+           "query #{inspect(query.name)} search_fields entry #{inspect(entry)} must " <>
+             "be a string-typed attribute (search uses a case-insensitive contains)"
+       )}
+    end
+  end
+
+  defp search_path_error(query, path, module, detail) do
+    DslError.exception(
+      module: module,
+      path: [:a2ui, :query, query.name, :search_fields],
+      message:
+        "query #{inspect(query.name)} search_fields path #{inspect(path)} is invalid: " <>
+          "#{detail}. Every step but the last must be a public relationship, and the " <>
+          "last a public string attribute of the final destination."
+    )
+  end
+
+  # --- presets ----------------------------------------------------------------
+
+  defp verify_presets(query, ctx) do
+    with :ok <- verify_unique_preset_names(query, ctx.module),
+         :ok <- verify_preset_definitions(query, ctx) do
+      verify_default_preset(query, ctx.module)
+    end
+  end
+
+  defp verify_unique_preset_names(query, module) do
+    query.presets
+    |> Enum.frequencies_by(& &1.name)
+    |> Enum.find(fn {_name, count} -> count > 1 end)
     |> case do
       nil ->
         :ok
 
-      non_string ->
+      {name, _count} ->
         {:error,
-         DslError.exception(
-           module: module,
-           path: [:a2ui, :query, query.name, :search_fields],
-           message:
-             "query #{inspect(query.name)} search_fields entry #{inspect(non_string)} must " <>
-               "be a string-typed attribute (search uses a case-insensitive contains)"
+         preset_error(query, name, module, "duplicate preset name: preset names must be unique")}
+    end
+  end
+
+  defp verify_preset_definitions(query, ctx) do
+    Enum.reduce_while(query.presets, :ok, fn preset, :ok ->
+      case verify_preset(query, preset, ctx) do
+        :ok -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  defp verify_preset(query, preset, ctx) do
+    case {preset.filter, preset.read_action} do
+      {nil, nil} ->
+        {:error,
+         preset_error(query, preset.name, ctx.module, "declare either filter or read_action")}
+
+      {filter, nil} when is_list(filter) ->
+        verify_preset_filter(query, preset, filter, ctx)
+
+      {nil, read_action} ->
+        verify_preset_read_action(query, preset, read_action, ctx)
+
+      {_filter, _read_action} ->
+        {:error,
+         preset_error(
+           query,
+           preset.name,
+           ctx.module,
+           "filter and read_action are mutually exclusive — declare exactly one"
          )}
     end
+  end
+
+  defp verify_preset_filter(query, preset, filter, ctx) do
+    Enum.reduce_while(filter, :ok, fn {key, value}, :ok ->
+      case verify_preset_condition(query, preset, key, value, ctx) do
+        :ok -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  # Preset filter keys follow the `filters` allowlist rules: public
+  # attributes or expression-backed public calculations. Values must cast to
+  # the field's type (nil means is_nil; a list means membership, each member
+  # cast).
+  defp verify_preset_condition(query, preset, key, value, ctx) do
+    kind = field_kind(key, ctx)
+
+    filterable? =
+      case kind do
+        :attribute -> true
+        :calculation -> Info.sortable?(ctx.target, key, include_private?: false)
+        _other -> false
+      end
+
+    cond do
+      not filterable? ->
+        {:error,
+         preset_error(
+           query,
+           preset.name,
+           ctx.module,
+           "filter key #{inspect(key)} must be a public attribute or an expression-backed " <>
+             "public calculation of the resource"
+         )}
+
+      not castable_condition?(ctx.target, key, value) ->
+        {:error,
+         preset_error(
+           query,
+           preset.name,
+           ctx.module,
+           "filter value #{inspect(value)} for #{inspect(key)} does not cast to the " <>
+             "field's type"
+         )}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp castable_condition?(_target, _key, nil), do: true
+
+  defp castable_condition?(target, key, values) when is_list(values) do
+    Enum.all?(values, &castable_condition?(target, key, &1))
+  end
+
+  defp castable_condition?(target, key, value) do
+    case Info.attribute(target, key) || Info.calculation(target, key) do
+      %{type: type, constraints: constraints} ->
+        with {:ok, cast} <- Ash.Type.cast_input(type, value, constraints),
+             {:ok, _cast} <- Ash.Type.apply_constraints(type, cast, constraints) do
+          true
+        else
+          _error -> false
+        end
+
+      nil ->
+        false
+    end
+  end
+
+  defp verify_preset_read_action(query, preset, read_action, ctx) do
+    case Info.action(ctx.target, read_action) do
+      %{type: :read} ->
+        :ok
+
+      %{type: actual} ->
+        {:error,
+         preset_error(
+           query,
+           preset.name,
+           ctx.module,
+           "read_action #{inspect(read_action)} must be of type :read, but it is a " <>
+             "#{inspect(actual)} action"
+         )}
+
+      nil ->
+        {:error,
+         preset_error(
+           query,
+           preset.name,
+           ctx.module,
+           "read_action #{inspect(read_action)} does not exist on the resource"
+         )}
+    end
+  end
+
+  defp verify_default_preset(%{default_preset: nil}, _module), do: :ok
+
+  defp verify_default_preset(query, module) do
+    if Enum.any?(query.presets, &(&1.name == query.default_preset)) do
+      :ok
+    else
+      {:error,
+       DslError.exception(
+         module: module,
+         path: [:a2ui, :query, query.name, :default_preset],
+         message:
+           "query #{inspect(query.name)} default_preset #{inspect(query.default_preset)} " <>
+             "does not name a declared preset " <>
+             "(declared: #{inspect(Enum.map(query.presets, & &1.name))})"
+       )}
+    end
+  end
+
+  defp preset_error(query, preset_name, module, message) do
+    DslError.exception(
+      module: module,
+      path: [:a2ui, :query, query.name, :preset, preset_name],
+      message: "preset #{inspect(preset_name)} of query #{inspect(query.name)}: #{message}"
+    )
   end
 
   defp verify_page_sizes(%{page_size: page_size, max_page_size: max} = query, module)

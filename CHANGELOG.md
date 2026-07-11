@@ -10,6 +10,53 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- Row-action prompts: `action` entities gain `prompt_fields` (arguments/
+  accepts of the Ash action, compile-verified) and `prompt_title`. Prompt
+  actions render as a basic-catalog `Modal` (`row_action_<action>_modal`
+  wrapping the trigger button and a content Column of TextFields bound to
+  the new reserved `/prompt/values/<action>/<field>` paths). The trigger
+  dispatches the new `"prompt"` client action (allowlist + `visible_when`
+  enforced; pre-fills `/prompt/values/<action>` from the record and clears
+  `/errors`); the Modal's Confirm sends `"invoke"` whose context now may
+  carry a `"values"` map — filtered to the declared prompt fields, cast
+  against the action's arguments/accepts, and passed as the action params
+  (ignored entirely on prompt-less actions). Successful prompt invokes
+  clear `/prompt/values/<action>`; validation errors land on
+  `/errors/<field>` as usual. `refreshes` on `action` entities is now
+  optional (omitted = refresh every table).
+- Relationship-path search: `search_fields` entries may be relationship
+  paths to public string attributes (`[:referrer, :email]`) — every step but
+  the last a public relationship, verified at compile time; matched with the
+  same case-insensitive contains through the path (`exists` semantics on
+  to-many paths).
+- Calculation filters: query `filters` may name expression-backed public
+  calculations (equality on the calc value, cast against the calculation's
+  type/constraints); module-based calculations are rejected at compile time,
+  mirroring the sorting rule.
+- Named filter presets: `preset` entities inside `query` declare server-side
+  composite predicates the client selects by name only —
+  `preset :pending do filter status: :pending, deleted_at: nil end`
+  (keyword conditions ANDed; `nil` = `is_nil`, list = membership) or
+  `preset :deleted do read_action :deleted end` (the escape hatch for
+  predicates the keyword form can't express). `default_preset` applies when
+  the client selects none and closes the preset set. `/query` state gains a
+  `"preset"` key (only on preset-declaring queries) and the encoder emits a
+  `query_preset_picker` ChoicePicker.
+- Conditional row-action visibility: `action` entities gain `visible_when`
+  (keyword equality/is_nil/membership conditions on public attributes or
+  expression calculations, compile-verified castable). The handler enforces
+  the conditions on every `invoke`/`prompt` (fetching the record with any
+  condition calculations loaded; non-visible actions rejected via
+  `/ui/status`). Rendering is best-effort: rows of affected tables gain
+  `"_actions"` (visible action names) and `"_visible_<action>"`
+  (`[{"id": ...}]`/`[]`) keys, and conditional actions render inside a
+  `List` slot templated over the row-relative `_visible_<action>` path —
+  the v0.9.1 basic catalog has no visibility property, so renderers without
+  nested-template support fall back to `"_actions"`.
+- Multi-key calculation sorting verified: `default_sort` and client sorts
+  compose expression calculations with attributes
+  (`default_sort status_priority: :asc, code: :asc`); no new machinery,
+  pinned by test.
 - Calculation & aggregate columns: table (and display) fields may name
   public calculations and aggregates. They are `Ash.Query.load`ed on every
   read path (initial render, post-action refreshes, `query` reads) and
