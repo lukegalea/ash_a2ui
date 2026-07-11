@@ -167,6 +167,18 @@ defmodule AshA2ui.Wave4ReferralTest do
       assert query!(%{"preset" => ""})["/query"]["preset"] == "active"
     end
 
+    test "a one-element list preset is unwrapped (ChoicePickers bind string lists)" do
+      # The @a2ui/lit ChoicePicker writes its selection to /query/preset as a
+      # list — the browser sends ["pending"], not "pending".
+      values = query!(%{"preset" => ["pending"]})
+      assert codes(values["/records"]) == ["PEND-1"]
+      assert values["/query"]["preset"] == "pending"
+
+      # An empty list (nothing picked) falls back to the default preset.
+      assert query!(%{"preset" => []})["/query"]["preset"] == "active"
+      assert query!(%{"preset" => [""]})["/query"]["preset"] == "active"
+    end
+
     test "unknown preset names are rejected before Ash is called" do
       assert {:error, messages} =
                handle!("query", %{"query" => %{"preset" => "everything"}})

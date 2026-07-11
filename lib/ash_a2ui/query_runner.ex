@@ -281,8 +281,14 @@ defmodule AshA2ui.QueryRunner do
   # A missing preset key (or the ChoicePicker's "" placeholder) falls back
   # to the declared default; names are string-compared against the declared
   # presets — never creating atoms from client input.
+  #
+  # The preset picker is semantically single-select, but the client binds
+  # ChoicePicker values as string lists — a picked preset arrives as
+  # ["name"] and the "All" placeholder as [""] or [] — so one-element lists
+  # are unwrapped before matching (mirrors form-value unwrapping in
+  # ActionHandler).
   defp parse_preset(query, state) do
-    case Map.get(state, "preset") do
+    case Map.get(state, "preset") |> unwrap_preset() do
       empty when empty in [nil, ""] ->
         {:ok, query.default_preset}
 
@@ -301,6 +307,10 @@ defmodule AshA2ui.QueryRunner do
         {:error, ~s(Malformed query action: "preset" must be a string.)}
     end
   end
+
+  defp unwrap_preset([value]), do: value
+  defp unwrap_preset([]), do: nil
+  defp unwrap_preset(value), do: value
 
   # ChoicePickers may bind a single string or a string list (multipleSelection);
   # accept both. Every value must cast to the attribute's type + constraints.
