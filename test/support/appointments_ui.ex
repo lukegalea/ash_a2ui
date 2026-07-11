@@ -44,7 +44,7 @@ defmodule AshA2ui.Test.AppointmentsUI do
     query :default do
       search_fields [:title]
       sortable [:scheduled_for]
-      range_filters([:scheduled_for])
+      range_filters [:scheduled_for]
       default_sort scheduled_for: :desc
       page_size 5
       max_page_size 10
@@ -59,9 +59,9 @@ defmodule AshA2ui.Test.AppointmentsUI do
       fields [:title, :status, :scheduled_for]
       read_action :read
       query :default
-      context_filter(owner_id: :owner, clinic_id: :clinic)
-      require_context([:owner, :clinic])
-      select_context(:appointment)
+      context_filter owner_id: :owner, clinic_id: :clinic
+      require_context [:owner, :clinic]
+      select_context :appointment
     end
 
     component :detail, :appointment_detail do
