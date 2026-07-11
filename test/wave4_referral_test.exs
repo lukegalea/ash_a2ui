@@ -21,7 +21,12 @@ defmodule AshA2ui.Wave4ReferralTest do
     referred = Ash.create!(Author, %{name: "Ned Newcomer", email: "ned@referrals.test"})
 
     pending =
-      Ash.create!(Referral, %{code: "PEND-1", referrer_id: referrer.id, referred_id: referred.id})
+      Ash.create!(Referral, %{
+        code: "PEND-1",
+        referrer_id: referrer.id,
+        referred_id: referred.id,
+        contact_email: "Pending.User@Example.COM"
+      })
 
     approved =
       Referral
@@ -200,6 +205,23 @@ defmodule AshA2ui.Wave4ReferralTest do
     end
   end
 
+  # --- wire value encoding ---------------------------------------------------
+
+  describe "CiString wire encoding" do
+    # Regression: the query/records refresh path inspect()-ed CiString structs
+    # onto the wire (`#Ash.CiString<"...">`), while the initial data model left
+    # them raw. Both paths must serialize CiStrings as plain strings.
+    test "the initial data model serializes ci_string fields as plain strings" do
+      row = Enum.find(initial_data_model()["records"], &(&1["code"] == "PEND-1"))
+      assert row["contact_email"] == "Pending.User@Example.COM"
+    end
+
+    test "the query records path serializes ci_string fields as plain strings" do
+      row = query!(%{})["/records"] |> Enum.find(&(&1["code"] == "PEND-1"))
+      assert row["contact_email"] == "Pending.User@Example.COM"
+    end
+  end
+
   # --- conditional row-action visibility ----------------------------------------
 
   describe "visible_when rendering" do
@@ -234,6 +256,7 @@ defmodule AshA2ui.Wave4ReferralTest do
                "table_cell_code",
                "table_cell_status",
                "table_cell_status_label",
+               "table_cell_contact_email",
                "row_action_approve_slot",
                "row_action_decline_slot",
                "row_action_soft_delete_button",

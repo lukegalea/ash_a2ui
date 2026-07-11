@@ -36,6 +36,7 @@ defmodule AshA2ui.Test.Referral do
       default: :pending
 
     attribute :notes, :string, public?: true
+    attribute :contact_email, :ci_string, public?: true
     attribute :deleted_at, :utc_datetime_usec, public?: true
   end
 
@@ -108,7 +109,7 @@ defmodule AshA2ui.Test.Referral do
     end
 
     component :table do
-      fields [:code, :status, :status_label]
+      fields [:code, :status, :status_label, :contact_email]
       read_action :read
       row_actions [:approve, :decline, :soft_delete]
       query :default

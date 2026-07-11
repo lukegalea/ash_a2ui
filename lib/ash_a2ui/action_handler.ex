@@ -1375,6 +1375,7 @@ defmodule AshA2ui.ActionHandler do
   # A calculation/aggregate that slipped past `loads` must not leak an
   # inspect()-ed struct onto the wire.
   defp json_value(%Ash.NotLoaded{}), do: nil
+  defp json_value(%Ash.CiString{} = value), do: to_string(value)
   defp json_value(%Decimal{} = value), do: Decimal.to_string(value)
   defp json_value(%Date{} = value), do: Date.to_iso8601(value)
   defp json_value(%Time{} = value), do: Time.to_iso8601(value)
