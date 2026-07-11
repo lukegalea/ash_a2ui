@@ -23,7 +23,8 @@ defmodule AshA2ui.ResolvedView do
       `relationship` option) to its resolved option-loading config; those
       fields default to the `:choice_picker` widget
     * `loads` is the `Ash.Query.load/2` statement covering every relationship
-      path needed by `source` table columns
+      path needed by `source` table columns plus every calculation/aggregate
+      field rendered by the table
 
   FROZEN CONTRACT — the struct fields and `resolve/2` signature are the
   interface every parallel track codes against; do not change outside an
@@ -115,7 +116,7 @@ defmodule AshA2ui.ResolvedView do
       query: resolve_query(resource_or_ui_module, table),
       row_actions: (table && table.row_actions) || [],
       selects: selects,
-      loads: loads(table, fields)
+      loads: loads(resource, table, fields)
     }
   end
 
@@ -186,20 +187,32 @@ defmodule AshA2ui.ResolvedView do
     end
   end
 
-  # --- source-column loads -----------------------------------------------------
+  # --- record loads --------------------------------------------------------------
 
-  # One Ash.Query.load statement per relationship prefix of a rendered
-  # `source` column ([:user, :email] -> :user; [:a, :b, :attr] -> {:a, [:b]}).
-  defp loads(nil, _fields), do: []
+  # The Ash.Query.load statement covering a table's rendered fields: one
+  # entry per relationship prefix of a `source` column ([:user, :email] ->
+  # :user; [:a, :b, :attr] -> {:a, [:b]}) plus the name of every field that
+  # is a public calculation or aggregate of the resource.
+  defp loads(_resource, nil, _fields), do: []
 
-  defp loads(table, fields) do
-    table.fields
-    |> Enum.map(&(fields[&1] && fields[&1].source))
-    |> Enum.reject(&is_nil/1)
-    |> Enum.map(&Enum.drop(&1, -1))
-    |> Enum.reject(&(&1 == []))
-    |> Enum.uniq()
-    |> Enum.map(&path_to_load/1)
+  defp loads(resource, table, fields) do
+    source_loads =
+      table.fields
+      |> Enum.map(&(fields[&1] && fields[&1].source))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&Enum.drop(&1, -1))
+      |> Enum.reject(&(&1 == []))
+      |> Enum.uniq()
+      |> Enum.map(&path_to_load/1)
+
+    calc_loads = Enum.filter(table.fields, &calculation_or_aggregate?(resource, &1))
+
+    source_loads ++ calc_loads
+  end
+
+  defp calculation_or_aggregate?(resource, name) do
+    not is_nil(ResourceInfo.calculation(resource, name)) or
+      not is_nil(ResourceInfo.aggregate(resource, name))
   end
 
   defp path_to_load([relationship]), do: relationship
@@ -271,8 +284,11 @@ defmodule AshA2ui.ResolvedView do
     %{component | fields: effective}
   end
 
+  # Calculations carry a type/constraints just like attributes; aggregates
+  # (and unknown fields) fall back to the TypeMapper default (:text_field —
+  # the widget is irrelevant for table display anyway).
   defp default_widget(resource, name) do
-    case Ash.Resource.Info.attribute(resource, name) do
+    case ResourceInfo.attribute(resource, name) || ResourceInfo.calculation(resource, name) do
       %{type: type, constraints: constraints} -> AshA2ui.TypeMapper.widget_for(type, constraints)
       nil -> AshA2ui.TypeMapper.widget_for(nil)
     end

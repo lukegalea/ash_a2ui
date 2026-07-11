@@ -14,5 +14,7 @@ defmodule AshA2ui.Test.Domain do
     resource AshA2ui.Test.Paginated
     resource AshA2ui.Test.Author
     resource AshA2ui.Test.Post
+    resource AshA2ui.Test.Article
+    resource AshA2ui.Test.Comment
   end
 end

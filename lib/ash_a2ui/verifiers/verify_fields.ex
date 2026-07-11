@@ -4,7 +4,9 @@ defmodule AshA2ui.Verifiers.VerifyFields do
 
     * every component field (declared or inferred) and every `field` override
       name is a public attribute, calculation, or aggregate of the resolved
-      resource, and
+      resource,
+    * `:form` component fields never name a calculation or aggregate (they
+      are not writable — table-only), and
     * `:form` component fields are a subset of the accepts + argument names of
       the form's create/update action(s).
 
@@ -89,6 +91,43 @@ defmodule AshA2ui.Verifiers.VerifyFields do
   end
 
   defp verify_form_fields(%AshA2ui.Component{name: :form} = component, target, module, exempt) do
+    with :ok <- verify_form_fields_writable(component, target, module) do
+      verify_form_fields_accepted(component, target, module, exempt)
+    end
+  end
+
+  defp verify_form_fields(_component, _target, _module, _exempt), do: :ok
+
+  # Calculations and aggregates are read-only projections — rendering them as
+  # form inputs would emit a wire contract the action can never accept.
+  defp verify_form_fields_writable(component, target, module) do
+    case Enum.find(component.fields || [], &calculation_or_aggregate(target, &1)) do
+      nil ->
+        :ok
+
+      rejected ->
+        {:error,
+         DslError.exception(
+           module: module,
+           path: [:a2ui, :component, :form, :fields],
+           message:
+             "component :form field #{inspect(rejected)} is " <>
+               "#{calculation_or_aggregate(target, rejected)} — calculations and " <>
+               "aggregates are not writable and cannot be form fields (render them as " <>
+               "table columns instead)"
+         )}
+    end
+  end
+
+  defp calculation_or_aggregate(target, name) do
+    cond do
+      not is_nil(Info.public_calculation(target, name)) -> "a calculation"
+      not is_nil(Info.public_aggregate(target, name)) -> "an aggregate"
+      true -> nil
+    end
+  end
+
+  defp verify_form_fields_accepted(component, target, module, exempt) do
     case form_inputs(target, component) do
       nil ->
         :ok
@@ -113,8 +152,6 @@ defmodule AshA2ui.Verifiers.VerifyFields do
         end
     end
   end
-
-  defp verify_form_fields(_component, _target, _module, _exempt), do: :ok
 
   defp verify_field_overrides(dsl_state, module, known, exempt) do
     dsl_state

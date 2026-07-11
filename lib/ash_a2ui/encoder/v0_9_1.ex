@@ -595,6 +595,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp source_safe(nil), do: ""
   defp source_safe(value), do: json_safe(value)
 
+  # A calculation/aggregate that slipped past `loads` must not leak an
+  # inspect()-ed struct onto the wire.
+  defp json_safe(%Ash.NotLoaded{}), do: nil
   defp json_safe(%Decimal{} = decimal), do: Decimal.to_string(decimal)
   defp json_safe(%Date{} = date), do: Date.to_iso8601(date)
   defp json_safe(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)

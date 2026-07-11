@@ -172,6 +172,89 @@ defmodule AshA2ui.VerifierTest do
       refute result =~ ~r/is not accepted/
       refute result =~ ~r/unknown field/
     end
+
+    test "calculation as a form field does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule CalculationFormField do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            calculations do
+              calculate :loud_name, :string, expr(name <> "!"), public?: true
+            end
+
+            actions do
+              defaults [:read]
+
+              create :create do
+                primary? true
+                accept [:name]
+                argument :loud_name, :string
+              end
+            end
+
+            a2ui do
+              component :form do
+                fields [:name, :loud_name]
+                create_action :create
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/component :form field :loud_name is a calculation/
+      assert result =~ ~r/not writable/
+    end
+
+    test "aggregate as a form field does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule AggregateFormField do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            relationships do
+              has_many :comments, AshA2ui.Test.Comment,
+                destination_attribute: :article_id,
+                public?: true
+            end
+
+            aggregates do
+              count :comment_count, :comments, public?: true
+            end
+
+            actions do
+              defaults [:read]
+
+              create :create do
+                primary? true
+                accept [:name]
+              end
+            end
+
+            a2ui do
+              component :form do
+                fields [:name, :comment_count]
+                create_action :create
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/component :form field :comment_count is an aggregate/
+      assert result =~ ~r/not writable/
+    end
   end
 
   describe "VerifyActions" do

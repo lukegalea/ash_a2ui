@@ -256,6 +256,123 @@ defmodule AshA2ui.QueryDslTest do
       assert result =~ ~r/query :default references unknown field :ghost in default_sort/
     end
 
+    test "module-based (non-expression) calculation in sortable does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule ModuleCalcSortable do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :title, :string, public?: true
+            end
+
+            calculations do
+              calculate :shout, :string, AshA2ui.Test.Article.ShoutTitle, public?: true
+            end
+
+            actions do
+              defaults [:read]
+            end
+
+            a2ui do
+              query :default do
+                sortable [:shout]
+              end
+
+              component :table do
+                fields [:title, :shout]
+                query :default
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/the calculation :shout is not sortable/
+      assert result =~ ~r/expression-backed calculations/
+    end
+
+    test "calculation in filters does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule CalcFilter do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :title, :string, public?: true
+            end
+
+            calculations do
+              calculate :loud, :string, expr(title <> "!"), public?: true
+            end
+
+            actions do
+              defaults [:read]
+            end
+
+            a2ui do
+              query :default do
+                filters [:loud]
+              end
+
+              component :table do
+                fields [:title]
+                query :default
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/:loud is a calculation/
+      assert result =~ ~r/never in `filters`/
+    end
+
+    test "aggregate in search_fields does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule AggregateSearch do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :title, :string, public?: true
+            end
+
+            relationships do
+              has_many :comments, AshA2ui.Test.Comment,
+                destination_attribute: :article_id,
+                public?: true
+            end
+
+            aggregates do
+              count :comment_count, :comments, public?: true
+            end
+
+            actions do
+              defaults [:read]
+            end
+
+            a2ui do
+              query :default do
+                search_fields [:comment_count]
+              end
+
+              component :table do
+                fields [:title]
+                query :default
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/:comment_count is an aggregate/
+      assert result =~ ~r/never in `search_fields`/
+    end
+
     test "table referencing an undeclared query does not compile cleanly" do
       result =
         capture_io(:stderr, fn ->

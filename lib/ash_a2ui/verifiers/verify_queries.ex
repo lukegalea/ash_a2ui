@@ -2,9 +2,15 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
   @moduledoc """
   Verifies at compile time that every `query` entity is a sound allowlist:
 
-    * `search_fields`, `sortable`, `filters`, and `default_sort` keys must be
-      public attributes of the resolved resource (relationship-sourced
-      `source` columns get a dedicated "not sortable" error),
+    * `search_fields` and `filters` entries must be public attributes of the
+      resolved resource (relationship-sourced `source` columns get a
+      dedicated "not sortable" error, calculations/aggregates a dedicated
+      "sortable-only" error),
+    * `sortable` and `default_sort` entries must be public attributes, or
+      public calculations/aggregates that Ash can sort generically
+      (`Ash.Resource.Info.sortable?/3`: expression-backed calculations and
+      non-`:first`-over-unsortable aggregates) — non-sortable
+      calculations/aggregates get a tailored error,
     * `search_fields` entries must be string-typed (they are matched with a
       case-insensitive contains),
     * `page_size` must not exceed `max_page_size`,
@@ -69,24 +75,29 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
   end
 
   defp verify_queries(queries, target, source_fields, module) do
-    attributes = public_attributes(target)
+    ctx = %{
+      target: target,
+      attributes: public_attributes(target),
+      source_fields: source_fields,
+      module: module
+    }
 
     Enum.reduce_while(queries, :ok, fn query, :ok ->
-      case verify_query(query, attributes, source_fields, module) do
+      case verify_query(query, ctx) do
         :ok -> {:cont, :ok}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp verify_query(query, attributes, source_fields, module) do
-    with :ok <- verify_allowlists(query, attributes, source_fields, module),
-         :ok <- verify_search_types(query, attributes, module) do
-      verify_page_sizes(query, module)
+  defp verify_query(query, ctx) do
+    with :ok <- verify_allowlists(query, ctx),
+         :ok <- verify_search_types(query, ctx.attributes, ctx.module) do
+      verify_page_sizes(query, ctx.module)
     end
   end
 
-  defp verify_allowlists(query, attributes, source_fields, module) do
+  defp verify_allowlists(query, ctx) do
     [
       search_fields: query.search_fields,
       sortable: query.sortable,
@@ -94,43 +105,115 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
       default_sort: Keyword.keys(query.default_sort)
     ]
     |> Enum.reduce_while(:ok, fn {option, names}, :ok ->
-      case verify_fields(query, option, names, attributes, source_fields, module) do
+      case verify_fields(query, option, names, ctx) do
         :ok -> {:cont, :ok}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp verify_fields(query, option, names, attributes, source_fields, module) do
-    case Enum.find(names, &(not Map.has_key?(attributes, &1))) do
-      nil ->
+  defp verify_fields(query, option, names, ctx) do
+    Enum.reduce_while(names, :ok, fn name, :ok ->
+      case verify_field(query, option, name, ctx) do
+        :ok -> {:cont, :ok}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  # Sort options accept attributes and generically-sortable public
+  # calculations/aggregates; search/filter options accept plain attributes
+  # only. Everything else gets a tailored rejection.
+  defp verify_field(query, option, name, ctx) do
+    kind = field_kind(name, ctx)
+    sort_option? = option in [:sortable, :default_sort]
+
+    case kind do
+      :attribute ->
         :ok
 
-      unknown ->
-        if MapSet.member?(source_fields, unknown) do
-          {:error,
-           DslError.exception(
-             module: module,
-             path: [:a2ui, :query, query.name, option],
-             message:
-               "query #{inspect(query.name)} lists #{inspect(unknown)} in #{option}, but " <>
-                 "#{inspect(unknown)} is a relationship-sourced column and is not sortable " <>
-                 "or filterable — only plain public attributes may appear in query allowlists"
-           )}
-        else
-          {:error,
-           DslError.exception(
-             module: module,
-             path: [:a2ui, :query, query.name, option],
-             message: """
-             query #{inspect(query.name)} references unknown field #{inspect(unknown)} in #{option}.
+      kind when kind in [:calculation, :aggregate] and sort_option? ->
+        verify_sortable(query, option, name, kind, ctx)
 
-             Every field in a query allowlist must be a public attribute of the resource. \
-             Available fields: #{inspect(Map.keys(attributes))}
-             """
-           )}
-        end
+      kind when kind in [:calculation, :aggregate] ->
+        {:error,
+         allowlist_error(
+           query,
+           option,
+           ctx.module,
+           "query #{inspect(query.name)} lists #{inspect(name)} in #{option}, but " <>
+             "#{inspect(name)} is #{with_article(kind)} — calculations and aggregates may " <>
+             "only appear in `sortable`/`default_sort`, never in `#{option}`"
+         )}
+
+      :source ->
+        {:error,
+         allowlist_error(
+           query,
+           option,
+           ctx.module,
+           "query #{inspect(query.name)} lists #{inspect(name)} in #{option}, but " <>
+             "#{inspect(name)} is a relationship-sourced column and is not sortable " <>
+             "or filterable — only plain public attributes may appear in query allowlists"
+         )}
+
+      :unknown ->
+        {:error,
+         allowlist_error(query, option, ctx.module, """
+         query #{inspect(query.name)} references unknown field #{inspect(name)} in #{option}.
+
+         Every field in a query allowlist must be a public attribute (or, for sortable/\
+         default_sort, a sortable public calculation or aggregate) of the resource. \
+         Available attributes: #{inspect(Map.keys(ctx.attributes))}
+         """)}
     end
+  end
+
+  defp verify_sortable(query, option, name, kind, ctx) do
+    if Info.sortable?(ctx.target, name, include_private?: false) do
+      :ok
+    else
+      detail =
+        case kind do
+          :calculation ->
+            "only expression-backed calculations (`calculate ..., expr(...)`) can be " <>
+              "sorted generically — module-based calculations have no data-layer expression"
+
+          :aggregate ->
+            "this aggregate kind/field cannot be sorted generically " <>
+              "(e.g. a `:first` aggregate over an unsortable field)"
+        end
+
+      {:error,
+       allowlist_error(
+         query,
+         option,
+         ctx.module,
+         "query #{inspect(query.name)} lists #{inspect(name)} in #{option}, but the " <>
+           "#{kind} #{inspect(name)} is not sortable: #{detail}"
+       )}
+    end
+  end
+
+  defp with_article(:aggregate), do: "an aggregate"
+  defp with_article(kind), do: "a #{kind}"
+
+  defp field_kind(name, ctx) do
+    cond do
+      Map.has_key?(ctx.attributes, name) -> :attribute
+      not is_nil(Info.public_calculation(ctx.target, name)) -> :calculation
+      not is_nil(Info.public_aggregate(ctx.target, name)) -> :aggregate
+      MapSet.member?(ctx.source_fields, name) -> :source
+      true -> :unknown
+    end
+  end
+
+  defp allowlist_error(query, option, module, message) do
+    DslError.exception(
+      module: module,
+      path: [:a2ui, :query, query.name, option],
+      message: message
+    )
   end
 
   defp verify_search_types(query, attributes, module) do
