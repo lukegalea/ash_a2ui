@@ -42,6 +42,54 @@ defmodule AshA2ui do
       format: [
         type: :atom,
         doc: "Named formatter hint (e.g. `:date`) applied when rendering values."
+      ],
+      relationship: [
+        type: :atom,
+        doc: """
+        The `belongs_to` relationship this form field selects a record for. Only needed as
+        an explicit override (e.g. action-argument fields); fields whose name matches a
+        `belongs_to` relationship's `source_attribute` are inferred automatically.
+        """
+      ],
+      option_label: [
+        type: :atom,
+        doc: """
+        The destination attribute shown as the option label of a relationship select.
+        Defaults to the first existing public attribute of `[:name, :title, :label,
+        :username, :email]` on the destination, else its primary key.
+        """
+      ],
+      option_value: [
+        type: :atom,
+        doc: """
+        The destination attribute submitted as the option value of a relationship select.
+        Defaults to the destination's primary key (required explicitly when that primary
+        key is composite).
+        """
+      ],
+      option_sort: [
+        type: :atom,
+        doc: """
+        The destination attribute the options of a relationship select are sorted by
+        (ascending). Defaults to the resolved `option_label`.
+        """
+      ],
+      option_limit: [
+        type: :pos_integer,
+        default: 100,
+        doc: """
+        Maximum number of options loaded for a relationship select. Option sets larger
+        than this are truncated — large sets need the roadmap's searchable selects.
+        """
+      ],
+      source: [
+        type: {:list, :atom},
+        doc: """
+        A relationship path (e.g. `[:user, :email]`) this table column reads its value
+        through. Every step but the last must be a public relationship; the last must be
+        a public attribute of the final destination. Source columns are table-only and
+        not sortable.
+        """
       ]
     ]
   }
@@ -225,7 +273,8 @@ defmodule AshA2ui do
   @verifiers [
     AshA2ui.Verifiers.VerifyFields,
     AshA2ui.Verifiers.VerifyActions,
-    AshA2ui.Verifiers.VerifyQueries
+    AshA2ui.Verifiers.VerifyQueries,
+    AshA2ui.Verifiers.VerifyRelationships
   ]
 
   @moduledoc """

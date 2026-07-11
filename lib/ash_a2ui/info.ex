@@ -83,6 +83,7 @@ defmodule AshA2ui.Info do
   def build_surface(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
     {records, opts} = load_records!(resolved_view, opts)
+    opts = Keyword.put(opts, :options, load_options!(resolved_view, opts))
 
     V0_9_1.encode_surface(resolved_view, records, opts)
   end
@@ -97,6 +98,7 @@ defmodule AshA2ui.Info do
   def build_data_model(resource_or_ui_module, opts \\ []) do
     resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
     {records, opts} = load_records!(resolved_view, opts)
+    opts = Keyword.put(opts, :options, load_options!(resolved_view, opts))
 
     V0_9_1.encode_data_model(resolved_view, records, opts)
   end
@@ -131,11 +133,56 @@ defmodule AshA2ui.Info do
         records =
           resolved_view.resource
           |> Ash.Query.for_read(resolved_view.read_action)
+          |> Ash.Query.load(resolved_view.loads)
           |> Ash.read!(read_opts(resolved_view, opts))
 
         {records, opts}
     end
   end
+
+  # Loads the option lists for the view's relationship selects: the
+  # destination's primary read action with the same actor/tenant/authorize?
+  # opts (policies apply to option reads), sorted by `option_sort` and capped
+  # at `option_limit`. Returns `%{field_name => [%{"label" => _, "value" => _}]}`
+  # — the shape written to the reserved `/options/<field>` paths.
+  defp load_options!(resolved_view, opts) do
+    Map.new(resolved_view.selects, fn {field_name, select} ->
+      records =
+        select.destination
+        |> Ash.Query.for_read(ResourceInfo.primary_action!(select.destination, :read).name)
+        |> Ash.Query.sort([{select.option_sort, :asc}])
+        |> Ash.Query.limit(select.option_limit)
+        |> Ash.read!(option_read_opts(select.destination, opts))
+
+      options =
+        Enum.map(records, fn record ->
+          value = option_string(Map.get(record, select.option_value))
+          label = Map.get(record, select.option_label)
+
+          %{"label" => (label && option_string(label)) || value, "value" => value}
+        end)
+
+      {field_name, options}
+    end)
+  end
+
+  defp option_read_opts(destination, opts) do
+    domain =
+      ResourceInfo.domain(destination) || opts[:domain] ||
+        raise(ArgumentError, "no domain configured for #{inspect(destination)}")
+
+    [
+      domain: domain,
+      actor: opts[:actor],
+      tenant: opts[:tenant],
+      authorize?: Keyword.get(opts, :authorize?, true)
+    ]
+  end
+
+  defp option_string(%Date{} = date), do: Date.to_iso8601(date)
+  defp option_string(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
+  defp option_string(%Decimal{} = decimal), do: Decimal.to_string(decimal)
+  defp option_string(value), do: to_string(value)
 
   defp read_opts(resolved_view, opts) do
     domain =

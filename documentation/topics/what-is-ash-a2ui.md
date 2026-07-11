@@ -69,8 +69,12 @@ See [Rendering Clients](rendering-clients.md) for both in detail.
   `actor:`/`tenant:` and `authorize?: true`;
   see [Actions and Authorization](actions-and-authorization.md).
 - **PubSub live refresh** — via the LiveView transport.
+- **Server-enforced queries** — named search/sort/filter/pagination
+  allowlists; see [Queries and Pagination](queries-and-pagination.md).
+- **Relationship rendering** — `belongs_to` form selects and `source` table
+  columns; see [Relationship Rendering](relationships.md).
 
-Everything else (relationships, pagination/filtering, overrides, custom
+Everything else (nested forms, searchable selects, overrides, custom
 catalogs, v1.0 spec…) is deliberately roadmap — see the
 [README](../../README.md) for the list.
 

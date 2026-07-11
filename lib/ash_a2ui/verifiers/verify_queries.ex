@@ -3,7 +3,8 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
   Verifies at compile time that every `query` entity is a sound allowlist:
 
     * `search_fields`, `sortable`, `filters`, and `default_sort` keys must be
-      public attributes of the resolved resource,
+      public attributes of the resolved resource (relationship-sourced
+      `source` columns get a dedicated "not sortable" error),
     * `search_fields` entries must be string-typed (they are matched with a
       case-insensitive contains),
     * `page_size` must not exceed `max_page_size`,
@@ -33,12 +34,20 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
       target ->
         module = Verifier.get_persisted(dsl_state, :module)
         queries = queries(dsl_state)
+        source_fields = source_field_names(dsl_state)
 
         with :ok <- verify_unique_names(queries, module),
-             :ok <- verify_queries(queries, target, module) do
+             :ok <- verify_queries(queries, target, source_fields, module) do
           verify_references(dsl_state, queries, module)
         end
     end
+  end
+
+  defp source_field_names(dsl_state) do
+    dsl_state
+    |> Verifier.get_entities([:a2ui])
+    |> Enum.filter(&(is_struct(&1, AshA2ui.Field) and not is_nil(&1.source)))
+    |> MapSet.new(& &1.name)
   end
 
   defp verify_unique_names(queries, module) do
@@ -59,25 +68,25 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
     end
   end
 
-  defp verify_queries(queries, target, module) do
+  defp verify_queries(queries, target, source_fields, module) do
     attributes = public_attributes(target)
 
     Enum.reduce_while(queries, :ok, fn query, :ok ->
-      case verify_query(query, attributes, module) do
+      case verify_query(query, attributes, source_fields, module) do
         :ok -> {:cont, :ok}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp verify_query(query, attributes, module) do
-    with :ok <- verify_allowlists(query, attributes, module),
+  defp verify_query(query, attributes, source_fields, module) do
+    with :ok <- verify_allowlists(query, attributes, source_fields, module),
          :ok <- verify_search_types(query, attributes, module) do
       verify_page_sizes(query, module)
     end
   end
 
-  defp verify_allowlists(query, attributes, module) do
+  defp verify_allowlists(query, attributes, source_fields, module) do
     [
       search_fields: query.search_fields,
       sortable: query.sortable,
@@ -85,30 +94,42 @@ defmodule AshA2ui.Verifiers.VerifyQueries do
       default_sort: Keyword.keys(query.default_sort)
     ]
     |> Enum.reduce_while(:ok, fn {option, names}, :ok ->
-      case verify_fields(query, option, names, attributes, module) do
+      case verify_fields(query, option, names, attributes, source_fields, module) do
         :ok -> {:cont, :ok}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp verify_fields(query, option, names, attributes, module) do
+  defp verify_fields(query, option, names, attributes, source_fields, module) do
     case Enum.find(names, &(not Map.has_key?(attributes, &1))) do
       nil ->
         :ok
 
       unknown ->
-        {:error,
-         DslError.exception(
-           module: module,
-           path: [:a2ui, :query, query.name, option],
-           message: """
-           query #{inspect(query.name)} references unknown field #{inspect(unknown)} in #{option}.
+        if MapSet.member?(source_fields, unknown) do
+          {:error,
+           DslError.exception(
+             module: module,
+             path: [:a2ui, :query, query.name, option],
+             message:
+               "query #{inspect(query.name)} lists #{inspect(unknown)} in #{option}, but " <>
+                 "#{inspect(unknown)} is a relationship-sourced column and is not sortable " <>
+                 "or filterable — only plain public attributes may appear in query allowlists"
+           )}
+        else
+          {:error,
+           DslError.exception(
+             module: module,
+             path: [:a2ui, :query, query.name, option],
+             message: """
+             query #{inspect(query.name)} references unknown field #{inspect(unknown)} in #{option}.
 
-           Every field in a query allowlist must be a public attribute of the resource. \
-           Available fields: #{inspect(Map.keys(attributes))}
-           """
-         )}
+             Every field in a query allowlist must be a public attribute of the resource. \
+             Available fields: #{inspect(Map.keys(attributes))}
+             """
+           )}
+        end
     end
   end
 

@@ -198,6 +198,12 @@ end
 | [`order`](#a2ui-field-order){: #a2ui-field-order } | `non_neg_integer` | `0` | Sort order of the field within components. Lower comes first. |
 | [`hidden`](#a2ui-field-hidden){: #a2ui-field-hidden } | `boolean` | `false` | Hide this field from all components. |
 | [`format`](#a2ui-field-format){: #a2ui-field-format } | `atom` |  | Named formatter hint (e.g. `:date`) applied when rendering values. |
+| [`relationship`](#a2ui-field-relationship){: #a2ui-field-relationship } | `atom` |  | The `belongs_to` relationship this form field selects a record for. Only needed as an explicit override (e.g. action-argument fields); fields whose name matches a `belongs_to` relationship's `source_attribute` are inferred automatically. |
+| [`option_label`](#a2ui-field-option_label){: #a2ui-field-option_label } | `atom` |  | The destination attribute shown as the option label of a relationship select. Defaults to the first existing public attribute of `[:name, :title, :label, :username, :email]` on the destination, else its primary key. |
+| [`option_value`](#a2ui-field-option_value){: #a2ui-field-option_value } | `atom` |  | The destination attribute submitted as the option value of a relationship select. Defaults to the destination's primary key (required explicitly when that primary key is composite). |
+| [`option_sort`](#a2ui-field-option_sort){: #a2ui-field-option_sort } | `atom` |  | The destination attribute the options of a relationship select are sorted by (ascending). Defaults to the resolved `option_label`. |
+| [`option_limit`](#a2ui-field-option_limit){: #a2ui-field-option_limit } | `pos_integer` | `100` | Maximum number of options loaded for a relationship select. Option sets larger than this are truncated — large sets need the roadmap's searchable selects. |
+| [`source`](#a2ui-field-source){: #a2ui-field-source } | `list(atom)` |  | A relationship path (e.g. `[:user, :email]`) this table column reads its value through. Every step but the last must be a public relationship; the last must be a public attribute of the final destination. Source columns are table-only and not sortable. |
 
 
 

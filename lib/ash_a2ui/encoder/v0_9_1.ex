@@ -39,8 +39,15 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       `{"values": {"path": "/form"}, "recordId": {"path": "/form/id"}}`).
       Inputs use the field's resolved widget (`TextField` / `CheckBox` /
       `ChoicePicker` / `DateTimeInput`), bind `value` to `/form/<field>`, and
-      errors are `Text` (caption) bound to `/errors/<field>`
+      errors are `Text` (caption) bound to `/errors/<field>`. Relationship
+      selects render as `ChoicePicker`s whose loaded options are emitted
+      inline (the v0.9.1 basic catalog requires a literal options array) and
+      mirrored at `/options/<field>` in the data model
     * `status_text` — `Text` bound to `/ui/status`
+    * `action_result_panel` — `Column` wrapping `action_result_text`, a
+      `Text` bound to `/ui/action_result_text` (the display text of
+      map-returning generic action results; empty until an action produces
+      one)
 
   ## Data model
 
@@ -50,8 +57,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "records" => [%{"id" => ..., "<field>" => ...}, ...],
         "form" => %{},
         "errors" => %{},
-        "ui" => %{"status" => ""}
+        "options" => %{"<field>" => [%{"label" => ..., "value" => ...}]},
+        "ui" => %{"status" => "", "action_result" => %{}, "action_result_text" => ""}
       }
+
+  `source` table columns serialize by walking the loaded relationship path
+  (`[:user, :email]` -> `record.user.email`); a nil or unloaded relationship
+  serializes to `""`.
 
   Query-enabled surfaces additionally carry `"query"` — the `/query` state
   shape documented on `AshA2ui.QueryRunner` — and their `submit_form`/`invoke`
@@ -85,7 +97,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "version" => @version,
         "updateComponents" => %{
           "surfaceId" => resolved_view.surface_id,
-          "components" => components(resolved_view)
+          "components" => components(resolved_view, select_options(resolved_view, opts))
         }
       },
       encode_data_model(resolved_view, records, opts)
@@ -116,7 +128,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
              "records" => serialized,
              "form" => %{},
              "errors" => %{},
-             "ui" => %{"status" => ""}
+             "options" => options_data(resolved_view, opts),
+             "ui" => %{"status" => "", "action_result" => %{}, "action_result_text" => ""}
            }
            |> put_query_state(resolved_view, opts)}
       end
@@ -131,9 +144,28 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
   end
 
+  # --- select options ---
+
+  # Options for relationship selects are loaded by the caller
+  # (`AshA2ui.Info`) and passed via `opts[:options]` as
+  # `%{field_name => [%{"label" => _, "value" => _}]}`. Direct encoder calls
+  # without the option fall back to empty option lists per resolved select.
+  defp select_options(view, opts) do
+    defaults = Map.new(view.selects, fn {name, _select} -> {name, []} end)
+    Map.merge(defaults, Keyword.get(opts, :options) || %{})
+  end
+
+  # The `/options/<field>` data-model mirror of the inline ChoicePicker
+  # options (string keys, same list shape).
+  defp options_data(view, opts) do
+    view
+    |> select_options(opts)
+    |> Map.new(fn {name, options} -> {to_string(name), options} end)
+  end
+
   # --- component tree ---
 
-  defp components(view) do
+  defp components(view, options) do
     table = Enum.find(view.components, &(&1.name == :table))
     form = Enum.find(view.components, &(&1.name == :form))
     query = (table && view.query) || nil
@@ -155,11 +187,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
 
     [root | table_components ++ query_components ++ form_components] ++
-      table_descendants(view, table) ++ form_descendants(view, form) ++ [status]
+      table_descendants(view, table) ++
+      form_descendants(view, form, options) ++ [status | action_result_components()]
   end
 
-  # Root order: heading, query controls, the list, pagination, form, status —
-  # each section present only when declared.
+  # Root order: heading, query controls, the list, pagination, form, status,
+  # action-result panel — each section present only when declared.
   defp root_children(table, query, form) do
     sections = [
       {"table_heading", table},
@@ -167,10 +200,29 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       {"records_list", table},
       {"query_pagination", query},
       {"form", form},
-      {"status_text", true}
+      {"status_text", true},
+      {"action_result_panel", true}
     ]
 
     for {id, present} <- sections, present, do: id
+  end
+
+  # The result panel displays map-returning generic action results: a Column
+  # wrapping a Text bound to the reserved /ui/action_result_text path (see
+  # topics/data-model-conventions). Empty text renders nothing.
+  defp action_result_components do
+    [
+      %{
+        "id" => "action_result_panel",
+        "component" => "Column",
+        "children" => ["action_result_text"]
+      },
+      %{
+        "id" => "action_result_text",
+        "component" => "Text",
+        "text" => %{"path" => "/ui/action_result_text"}
+      }
+    ]
   end
 
   defp table_components(view, _table) do
@@ -369,10 +421,10 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     [%{"id" => "form", "component" => "Column", "children" => children}]
   end
 
-  defp form_descendants(_view, nil), do: []
+  defp form_descendants(_view, nil, _options), do: []
 
-  defp form_descendants(view, form) do
-    inputs = Enum.map(form.fields, &form_input(view, &1))
+  defp form_descendants(view, form, options) do
+    inputs = Enum.map(form.fields, &form_input(view, &1, options))
     errors = Enum.map(form.fields, &form_error/1)
 
     submit = [
@@ -401,7 +453,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     inputs ++ errors ++ submit
   end
 
-  defp form_input(view, field_name) do
+  defp form_input(view, field_name, options) do
     field = view.fields[field_name]
     binding = %{"path" => "/form/#{field_name}"}
 
@@ -415,7 +467,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         base
         |> Map.put("component", "ChoicePicker")
         |> Map.put("variant", "mutuallyExclusive")
-        |> Map.put("options", choice_options(view.resource, field_name))
+        |> Map.put("options", picker_options(view, field_name, options))
 
       :date_time_input ->
         base
@@ -441,6 +493,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "text" => %{"path" => "/errors/#{field_name}"},
       "variant" => "caption"
     }
+  end
+
+  # Relationship selects use the loaded option list; enum-constrained
+  # attributes keep their static `one_of` options. The v0.9.1 basic-catalog
+  # ChoicePicker only accepts a literal options array (each option's `value`
+  # is a plain string, no data binding), so loaded options are emitted inline
+  # here and mirrored at /options/<field> in the data model.
+  defp picker_options(view, field_name, options) do
+    if Map.has_key?(view.selects, field_name) do
+      Map.fetch!(options, field_name)
+    else
+      choice_options(view.resource, field_name)
+    end
   end
 
   defp choice_options(resource, field_name) do
@@ -504,8 +569,31 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     [:id | field_names]
     |> Enum.uniq()
-    |> Map.new(fn name -> {to_string(name), record |> Map.get(name) |> json_safe()} end)
+    |> Map.new(fn name -> {to_string(name), field_value(view, record, name)} end)
   end
+
+  # `source` columns read through the loaded relationship path (nil-safe: a
+  # nil or unloaded relationship serializes to ""); plain fields read the
+  # record key directly.
+  defp field_value(view, record, name) do
+    case view.fields[name] do
+      %{source: [_ | _] = source} -> record |> walk_source(source) |> source_safe()
+      _plain -> record |> Map.get(name) |> json_safe()
+    end
+  end
+
+  defp walk_source(record, [attribute]), do: Map.get(record, attribute)
+
+  defp walk_source(record, [relationship | rest]) do
+    case Map.get(record, relationship) do
+      %Ash.NotLoaded{} -> nil
+      nil -> nil
+      related -> walk_source(related, rest)
+    end
+  end
+
+  defp source_safe(nil), do: ""
+  defp source_safe(value), do: json_safe(value)
 
   defp json_safe(%Decimal{} = decimal), do: Decimal.to_string(decimal)
   defp json_safe(%Date{} = date), do: Date.to_iso8601(date)

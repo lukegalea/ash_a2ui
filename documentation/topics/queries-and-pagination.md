@@ -28,10 +28,12 @@ a2ui do
 end
 ```
 
-All referenced fields must be **public attributes** (and `search_fields`
-must be string-typed) — verified at compile time, like every other DSL
-reference. A table without a `query` behaves exactly as before: all records,
-no query controls.
+All referenced fields must be **plain public attributes** (and
+`search_fields` must be string-typed) — verified at compile time, like every
+other DSL reference. Relationship-sourced `source` columns (see
+[Relationship Rendering](relationships.md)) are render-only and rejected in
+query allowlists. A table without a `query` behaves exactly as before: all
+records, no query controls.
 
 ## What gets emitted
 

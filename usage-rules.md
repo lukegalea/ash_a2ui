@@ -14,6 +14,10 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
   data-model paths.
 - `ash_a2ui:liveview` — the `AshA2ui.LiveRenderer` transport and the JS
   hook wiring contract.
+- `ash_a2ui:queries` — the `query` entity's server-enforced allowlists for
+  search/sort/filter/pagination.
+- `ash_a2ui:relationships` — `belongs_to` form selects (inference,
+  `option_*` defaults, `/options/<field>`) and `source` table columns.
 
 ## When to reach for AshA2ui (preferred ladder)
 
@@ -80,6 +84,11 @@ end
   list fields explicitly.
 - Use `field` blocks for presentation (`label`, `widget`, `order`, `hidden`,
   `format`) instead of renaming attributes or adding calculated duplicates.
+- `belongs_to` form fields (name matching the relationship's
+  `source_attribute`) render as selects automatically; `source` field paths
+  render table columns through loaded relationships — see
+  `ash_a2ui:relationships` before adding calculations or extra attributes
+  for either.
 - Give tables that need search/sort/filter/pagination a `query` entity and
   keep its allowlists (`search_fields`, `sortable`, `filters`) minimal —
   every entry is client-reachable (`ash_a2ui:queries`).
@@ -125,8 +134,10 @@ end
   accept client sort/filter params not declared in a query, and never feed
   client query input into `Ash.Query` yourself.
 - Surface feedback through the reserved data-model paths — `/records`,
-  `/form`, `/errors/<field>` for validation errors, `/ui/status` for
-  lifecycle feedback, `/ui/action_result` for map-returning generic actions,
+  `/form`, `/errors/<field>` for validation errors, `/options/<field>` for
+  relationship select options, `/ui/status` for lifecycle feedback,
+  `/ui/action_result` + `/ui/action_result_text` for map-returning generic
+  actions (raw map + display text, cleared on every subsequent action),
   `/query` for query state — never through ad-hoc paths or custom message
   types. Renderers depend on these paths.
 

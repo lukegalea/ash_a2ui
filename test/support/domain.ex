@@ -12,5 +12,7 @@ defmodule AshA2ui.Test.Domain do
     resource AshA2ui.Test.KitchenSink
     resource AshA2ui.Test.Minimal
     resource AshA2ui.Test.Paginated
+    resource AshA2ui.Test.Author
+    resource AshA2ui.Test.Post
   end
 end

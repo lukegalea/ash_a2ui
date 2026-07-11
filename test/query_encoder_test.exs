@@ -37,7 +37,8 @@ defmodule AshA2ui.QueryEncoderTest do
                "records_list",
                "query_pagination",
                "form",
-               "status_text"
+               "status_text",
+               "action_result_panel"
              ]
     end
 
@@ -158,7 +159,8 @@ defmodule AshA2ui.QueryEncoderTest do
                "table_heading",
                "records_list",
                "form",
-               "status_text"
+               "status_text",
+               "action_result_panel"
              ]
 
       refute Map.has_key?(components, "query_controls")

@@ -14,8 +14,10 @@ custom hooks, and tests can rely on them.
 | `/records` | The list of records backing the table component | Initial render; every refresh (action follow-ups, PubSub) |
 | `/form` | The form component's current field values | Initial render; row selection (edit); after submit |
 | `/errors/<field>` | Human-readable validation error text for `<field>` | A submitted action fails validation |
+| `/options/<field>` | The option list of a relationship-backed form select | Initial render; full data-model refreshes |
 | `/ui/status` | Operation feedback text (the flash-equivalent) | After every handled action (success/error) |
-| `/ui/action_result` | The map returned by a map-returning generic action | An `invoke`d generic action returns a plain map |
+| `/ui/action_result` | The raw map returned by a map-returning generic action | An `invoke`d generic action returns a plain map (cleared by every subsequent successful action) |
+| `/ui/action_result_text` | The human-readable rendering of `/ui/action_result` | Same as `/ui/action_result` |
 | `/query` | The current search/filter/sort/pagination state of a query-enabled table | Initial render; after every `query` action; alongside query-aware success refreshes |
 
 Everything under these paths uses camelCase string keys, matching the rest of
@@ -105,10 +107,10 @@ text when errors can't be attributed to a field. The emitted surface includes
 a `Text` component bound to `/ui/status`, so it behaves like a flash bar out
 of the box.
 
-## `/ui/action_result` — generic action results
+## `/ui/action_result` and `/ui/action_result_text` — generic action results
 
 Row actions (`invoke`) may target **generic actions** — think "generate an
-API secret" or "recompute stats". Two handler conventions apply (both are
+API secret" or "recompute stats". Three handler conventions apply (all are
 AshA2ui conventions layered on the protocol, not part of the A2UI spec):
 
 - **`:record_id` pass-through** — if the generic action declares a
@@ -116,7 +118,8 @@ AshA2ui conventions layered on the protocol, not part of the A2UI spec):
   so row-scoped generic actions know which record they were invoked on.
 - **`/ui/action_result`** — when the action returns a plain map, the handler
   serializes it (JSON-safe values, string keys) and writes it to
-  `/ui/action_result` alongside the usual success follow-ups:
+  `/ui/action_result` alongside the usual success follow-ups. This is the
+  raw result, for programmatic consumers:
 
 ```json
 {
@@ -129,8 +132,69 @@ AshA2ui conventions layered on the protocol, not part of the A2UI spec):
 }
 ```
 
-Surfaces that want to display the result bind components to paths under
-`/ui/action_result`. Non-map results (`:ok`, records) emit no extra message.
+- **`/ui/action_result_text`** — the same result rendered as display-ready,
+  selectable text: one `Humanized key: value` line per key, sorted by key
+  (non-string values are JSON-encoded). The emitted surface always includes
+  an `action_result_panel` (a `Column` wrapping a `Text` bound to this
+  path), so a generic action returning `%{secret: "abc"}` produces visible,
+  selectable `Secret: abc` text with no custom renderer work:
+
+```json
+{
+  "version": "v0.9.1",
+  "updateDataModel": {
+    "surfaceId": "tickets",
+    "path": "/ui/action_result_text",
+    "value": "Record id: …\nSecret: s3cr3t"
+  }
+}
+```
+
+Both paths are **cleared** (`{}` / `""`) at the start of every subsequent
+successful action's follow-up batch, so a stale result never outlives the
+action that produced it (a map-returning action clears and then sets them in
+the same batch — apply messages in order). Non-map results (`:ok`, records)
+emit no extra message beyond the clears.
+
+## `/options/<field>` — relationship select options
+
+When a form field is backed by a `belongs_to` relationship (inferred from the
+field name matching the relationship's `source_attribute`, or declared with
+the `relationship` field option — see
+[Relationship Rendering](relationships.md)), the surface loads the
+destination's records and exposes them as an option list:
+
+```json
+{
+  "version": "v0.9.1",
+  "updateDataModel": {
+    "surfaceId": "posts",
+    "path": "/options/author_id",
+    "value": [
+      { "label": "Ada Lovelace", "value": "018f…" },
+      { "label": "Alan Turing", "value": "018f…" }
+    ]
+  }
+}
+```
+
+Conventions:
+
+- The value is always a list of `{"label": string, "value": string}` objects
+  — `value` is the stringified `option_value` attribute (a UUID by default),
+  `label` the stringified `option_label` attribute (falling back to the
+  value when the label attribute is nil).
+- The list is written on the initial render and on full data-model refreshes
+  (`build_data_model/2`, PubSub pushes). Action follow-ups do **not**
+  refresh options.
+- Because the v0.9.1 basic-catalog `ChoicePicker` only accepts a literal
+  inline options array (each option's `value` is a plain string — no data
+  binding), the emitted picker carries the same list **inline** in
+  `updateComponents`; `/options/<field>` is the stable, programmatic mirror
+  of what was rendered. Renderers with dynamic-options support can bind to
+  it directly.
+- Selected values travel back through `/form/<field>` as strings (see
+  `AshA2ui.ActionHandler` for the cast rules).
 
 ## `/query` — search/filter/sort/pagination state
 
@@ -172,7 +236,7 @@ it is validated against the DSL-declared allowlist and rejected via
 The A2UI protocol keeps its message vocabulary tiny on purpose — data and
 lifecycle signals all travel as `updateDataModel`. Encoding lifecycle state
 *into the data model at known paths* means any conforming renderer displays
-it with plain bindings, nothing custom to implement. These four paths are
+it with plain bindings, nothing custom to implement. These reserved paths are
 part of AshA2ui's public contract: additions may come (they'll be documented
 here), but existing paths won't change meaning within a major version.
 

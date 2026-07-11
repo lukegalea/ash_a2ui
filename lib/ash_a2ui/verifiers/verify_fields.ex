@@ -8,6 +8,10 @@ defmodule AshA2ui.Verifiers.VerifyFields do
     * `:form` component fields are a subset of the accepts + argument names of
       the form's create/update action(s).
 
+  Fields declared with a `source` or `relationship` option are exempt from
+  both checks here — `AshA2ui.Verifiers.VerifyRelationships` validates them
+  against the relationship graph instead.
+
   Raises `Spark.Error.DslError` (surfaced by Spark as a compile-time
   diagnostic) on failure. Skipped when no resource can be resolved (standalone
   UI module without `for_resource`) — `AshA2ui.Info.resource!/1` reports that
@@ -29,32 +33,43 @@ defmodule AshA2ui.Verifiers.VerifyFields do
       target ->
         module = Verifier.get_persisted(dsl_state, :module)
         known = known_field_names(target)
+        exempt = relationship_field_names(dsl_state)
 
-        with :ok <- verify_components(dsl_state, target, module, known) do
-          verify_field_overrides(dsl_state, module, known)
+        with :ok <- verify_components(dsl_state, target, module, known, exempt) do
+          verify_field_overrides(dsl_state, module, known, exempt)
         end
     end
   end
 
-  defp verify_components(dsl_state, target, module, known) do
+  # Field entities carrying a `source` or `relationship` option name virtual
+  # columns / relationship selects rather than resource fields; they are
+  # validated by VerifyRelationships.
+  defp relationship_field_names(dsl_state) do
+    dsl_state
+    |> Verifier.get_entities([:a2ui])
+    |> Enum.filter(&(is_struct(&1, AshA2ui.Field) and (&1.source || &1.relationship)))
+    |> MapSet.new(& &1.name)
+  end
+
+  defp verify_components(dsl_state, target, module, known, exempt) do
     dsl_state
     |> components()
     |> Enum.reduce_while(:ok, fn component, :ok ->
-      case verify_component(component, target, module, known) do
+      case verify_component(component, target, module, known, exempt) do
         :ok -> {:cont, :ok}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
   end
 
-  defp verify_component(component, target, module, known) do
-    with :ok <- verify_known_fields(component, module, known) do
-      verify_form_fields(component, target, module)
+  defp verify_component(component, target, module, known, exempt) do
+    with :ok <- verify_known_fields(component, module, known, exempt) do
+      verify_form_fields(component, target, module, exempt)
     end
   end
 
-  defp verify_known_fields(component, module, known) do
-    case Enum.find(component.fields || [], &(&1 not in known)) do
+  defp verify_known_fields(component, module, known, exempt) do
+    case Enum.find(component.fields || [], &(&1 not in known and &1 not in exempt)) do
       nil ->
         :ok
 
@@ -73,13 +88,13 @@ defmodule AshA2ui.Verifiers.VerifyFields do
     end
   end
 
-  defp verify_form_fields(%AshA2ui.Component{name: :form} = component, target, module) do
+  defp verify_form_fields(%AshA2ui.Component{name: :form} = component, target, module, exempt) do
     case form_inputs(target, component) do
       nil ->
         :ok
 
       allowed ->
-        case Enum.find(component.fields || [], &(&1 not in allowed)) do
+        case Enum.find(component.fields || [], &(&1 not in allowed and &1 not in exempt)) do
           nil ->
             :ok
 
@@ -99,14 +114,14 @@ defmodule AshA2ui.Verifiers.VerifyFields do
     end
   end
 
-  defp verify_form_fields(_component, _target, _module), do: :ok
+  defp verify_form_fields(_component, _target, _module, _exempt), do: :ok
 
-  defp verify_field_overrides(dsl_state, module, known) do
+  defp verify_field_overrides(dsl_state, module, known, exempt) do
     dsl_state
     |> Verifier.get_entities([:a2ui])
     |> Enum.filter(&is_struct(&1, AshA2ui.Field))
     |> Enum.reduce_while(:ok, fn field, :ok ->
-      if field.name in known do
+      if field.name in known or field.name in exempt do
         {:cont, :ok}
       else
         {:halt,

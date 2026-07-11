@@ -92,6 +92,7 @@ defmodule AshA2ui.MixProject do
         "documentation/topics/rendering-clients.md",
         "documentation/topics/actions-and-authorization.md",
         "documentation/topics/queries-and-pagination.md",
+        "documentation/topics/relationships.md",
         "documentation/topics/data-model-conventions.md",
         {"documentation/dsls/DSL-AshA2ui.md", search_data: Spark.Docs.search_data_for(AshA2ui)},
         "CHANGELOG.md"

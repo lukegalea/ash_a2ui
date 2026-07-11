@@ -129,6 +129,10 @@ defmodule AshA2ui.ActionHandlerTest do
     end)
   end
 
+  defp last_value_at(messages, path) do
+    messages |> Enum.reverse() |> value_at(path)
+  end
+
   defp paths(messages) do
     Enum.map(messages, & &1["updateDataModel"]["path"])
   end
@@ -252,13 +256,53 @@ defmodule AshA2ui.ActionHandlerTest do
       assert {:ok, messages} = ActionHandler.handle(Gadget, env)
       assert_all_valid(messages)
 
-      result = value_at(messages, "/ui/action_result")
+      # the batch clears /ui/action_result before setting it; last write wins
+      result = last_value_at(messages, "/ui/action_result")
       assert result["secret"] == "s3cr3t"
       assert result["record_id"] == record.id
 
       # the regular refresh messages still accompany the action result
       assert "/records" in paths(messages)
       assert value_at(messages, "/ui/status") =~ "generate_secret"
+    end
+
+    test "serializes a map result to display text at /ui/action_result_text" do
+      record = Ash.create!(Gadget, %{name: "G"}, authorize?: false)
+
+      env =
+        envelope("invoke", "gadget", %{
+          "action" => "generate_secret",
+          "recordId" => record.id
+        })
+
+      assert {:ok, messages} = ActionHandler.handle(Gadget, env)
+      assert_all_valid(messages)
+
+      # the clear precedes the set, so the last write at the path wins
+      text = last_value_at(messages, "/ui/action_result_text")
+      assert text =~ "Secret: s3cr3t"
+      assert text =~ "Record id: #{record.id}"
+    end
+
+    test "subsequent actions clear /ui/action_result and /ui/action_result_text" do
+      record = Ash.create!(Gadget, %{name: "G"}, authorize?: false)
+
+      secret_env =
+        envelope("invoke", "gadget", %{
+          "action" => "generate_secret",
+          "recordId" => record.id
+        })
+
+      assert {:ok, _messages} = ActionHandler.handle(Gadget, secret_env)
+
+      destroy_env =
+        envelope("invoke", "gadget", %{"action" => "destroy", "recordId" => record.id})
+
+      assert {:ok, messages} = ActionHandler.handle(Gadget, destroy_env)
+      assert_all_valid(messages)
+
+      assert value_at(messages, "/ui/action_result") == %{}
+      assert value_at(messages, "/ui/action_result_text") == ""
     end
   end
 

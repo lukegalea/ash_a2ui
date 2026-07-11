@@ -35,7 +35,10 @@ defmodule AshA2ui.ActionHandler do
       `"recordId"` the view's create action runs; with it, the update action.
       `values` keys are strings and are cast to the target action's accepted
       attributes and arguments by comparing against their known names (no
-      dynamic atom creation); unknown keys are silently dropped.
+      dynamic atom creation); unknown keys are silently dropped. Values from
+      single-select ChoicePickers (relationship selects, enums) may arrive as
+      one-element string lists — they are unwrapped before Ash casts them to
+      the attribute/argument type.
 
     * `"invoke"` — context `%{"action" => name, "recordId" => id | nil}`.
       Invokes a destroy/update/generic action by name. The action **must be
@@ -43,9 +46,11 @@ defmodule AshA2ui.ActionHandler do
       authorization surface for client-triggered actions; anything else is
       rejected with a `/ui/status` error before touching Ash. For generic
       actions that define a `:record_id` argument, the context's `"recordId"`
-      is passed through. A generic action returning a map has its result
-      placed at `/ui/action_result` (handler-defined convention, not part of
-      the A2UI spec).
+      is passed through. A generic action returning a map has its raw result
+      placed at `/ui/action_result` and a human-readable rendering (one
+      "Humanized key: value" line per key) at `/ui/action_result_text`
+      (handler-defined conventions, not part of the A2UI spec). Both paths
+      are cleared by every subsequent successful action.
 
     * `"select_row"` — context `%{"recordId" => id}`. Returns a single
       `updateDataModel` populating `/form` with the record's field values
@@ -68,10 +73,12 @@ defmodule AshA2ui.ActionHandler do
   All returned messages are A2UI v0.9.1 `updateDataModel` server messages
   using the reserved data-model paths (see `topics/data-model-conventions`):
 
-    * on success: `/records` (re-read row maps, each including `"id"`),
-      `/form` cleared to `%{}`, `/errors` cleared to `%{}`, and `/ui/status`
-      set to a success text — plus `/ui/action_result` for map-returning
-      generic actions. On query-enabled surfaces the re-read runs through
+    * on success: `/records` (re-read row maps, each including `"id"`;
+      `source` columns are re-loaded and walked), `/form` cleared to `%{}`,
+      `/errors` cleared to `%{}`, `/ui/status` set to a success text, and
+      `/ui/action_result` + `/ui/action_result_text` cleared — then set for
+      map-returning generic actions. On query-enabled surfaces the re-read
+      runs through
       the query (`submit_form`/`invoke` contexts may carry the current
       `/query` map under `"query"`; missing or invalid state falls back to
       the query's defaults) and a `/query` state message is included;
@@ -204,7 +211,7 @@ defmodule AshA2ui.ActionHandler do
     with {:parse, {:ok, params}} <- {:parse, QueryRunner.parse(view, context)},
          {:run, {:ok, records, query_state}} <-
            {:run, QueryRunner.run(view, params, ash_opts)} do
-      rows = Enum.map(records, &record_values(&1, table_fields(view)))
+      rows = Enum.map(records, &record_values(view, &1, table_fields(view)))
 
       {:ok,
        [
@@ -284,7 +291,11 @@ defmodule AshA2ui.ActionHandler do
 
   defp generic_result({:ok, result}, %{view: view} = env, status_text)
        when is_map(result) and not is_struct(result) do
-    extra = [update_data_model(view, "/ui/action_result", json_map(result))]
+    extra = [
+      update_data_model(view, "/ui/action_result", json_map(result)),
+      update_data_model(view, "/ui/action_result_text", action_result_text(result))
+    ]
+
     success(env, status_text, extra)
   end
 
@@ -311,7 +322,7 @@ defmodule AshA2ui.ActionHandler do
   defp select_row(view, record_id, ash_opts) do
     case fetch_record(view, record_id, ash_opts) do
       {:ok, record} ->
-        {:ok, [update_data_model(view, "/form", record_values(record, form_fields(view)))]}
+        {:ok, [update_data_model(view, "/form", record_values(view, record, form_fields(view)))]}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
@@ -352,16 +363,42 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  # /ui/action_result and /ui/action_result_text are cleared on every
+  # successful action before any `extra` writes, so a stale result never
+  # outlives the action that produced it (a map-returning generic action
+  # clears and then sets them in the same batch).
   defp success_messages(view, records, query_message, status_text, extra) do
-    rows = Enum.map(records, &record_values(&1, table_fields(view)))
+    rows = Enum.map(records, &record_values(view, &1, table_fields(view)))
 
     [update_data_model(view, "/records", rows)] ++
       query_message ++
       [
         update_data_model(view, "/form", %{}),
         update_data_model(view, "/errors", %{}),
-        update_data_model(view, "/ui/status", status_text)
+        update_data_model(view, "/ui/status", status_text),
+        update_data_model(view, "/ui/action_result", %{}),
+        update_data_model(view, "/ui/action_result_text", "")
       ] ++ extra
+  end
+
+  # Human-readable, selectable text for a map-returning generic action:
+  # one "Humanized key: value" line per key, sorted by key.
+  defp action_result_text(result) do
+    result
+    |> Enum.map(fn {key, value} -> {to_string(key), json_value(value)} end)
+    |> Enum.sort_by(fn {key, _value} -> key end)
+    |> Enum.map_join("\n", fn {key, value} ->
+      "#{humanize(key)}: #{display_value(value)}"
+    end)
+  end
+
+  defp display_value(value) when is_binary(value), do: value
+  defp display_value(value), do: Jason.encode!(value)
+
+  defp humanize(key) do
+    key
+    |> String.replace("_", " ")
+    |> String.capitalize()
   end
 
   # --- Ash invocation helpers ------------------------------------------------
@@ -369,6 +406,7 @@ defmodule AshA2ui.ActionHandler do
   defp read_records(view, ash_opts) do
     view.resource
     |> Ash.Query.for_read(read_action(view), %{}, ash_opts)
+    |> Ash.Query.load(view.loads)
     |> Ash.read()
   end
 
@@ -384,7 +422,9 @@ defmodule AshA2ui.ActionHandler do
 
   # Cast string-keyed client values to the action's accepted attributes and
   # arguments by matching against their known names — never creating atoms
-  # from client input. Unknown keys are dropped.
+  # from client input. Unknown keys are dropped. Single-select ChoicePickers
+  # bind string lists, so a list value targeting a non-array attribute or
+  # argument is unwrapped ([v] -> v, [] -> nil) before Ash casts it.
   defp cast_values(resource, action_name, values) do
     action = ResourceInfo.action(resource, action_name)
 
@@ -397,7 +437,7 @@ defmodule AshA2ui.ActionHandler do
     values
     |> Enum.flat_map(fn {key, value} ->
       case Map.fetch(known, normalize_key(key)) do
-        {:ok, name} -> [{name, value}]
+        {:ok, name} -> [{name, unwrap_single(value, target_type(resource, action, name))}]
         :error -> []
       end
     end)
@@ -406,6 +446,18 @@ defmodule AshA2ui.ActionHandler do
 
   defp normalize_key(key) when is_atom(key), do: Atom.to_string(key)
   defp normalize_key(key), do: key
+
+  defp target_type(resource, action, name) do
+    case Enum.find(action.arguments, &(&1.name == name)) do
+      %{type: type} -> type
+      nil -> ResourceInfo.attribute(resource, name).type
+    end
+  end
+
+  defp unwrap_single(value, {:array, _type}), do: value
+  defp unwrap_single([], _type), do: nil
+  defp unwrap_single([value], _type), do: value
+  defp unwrap_single(value, _type), do: value
 
   # --- field selection -------------------------------------------------------
 
@@ -525,10 +577,36 @@ defmodule AshA2ui.ActionHandler do
     }
   end
 
-  defp record_values(record, fields) do
+  defp record_values(view, record, fields) do
     fields
-    |> Map.new(fn field -> {Atom.to_string(field), json_value(Map.get(record, field))} end)
+    |> Map.new(fn field -> {Atom.to_string(field), field_value(view, record, field)} end)
     |> Map.put("id", json_value(Map.get(record, :id)))
+  end
+
+  # `source` columns read through the loaded relationship path (nil-safe: a
+  # nil or unloaded relationship serializes to ""); plain fields read the
+  # record key directly.
+  defp field_value(view, record, field) do
+    case view.fields[field] do
+      %{source: [_ | _] = source} ->
+        case walk_source(record, source) do
+          nil -> ""
+          value -> json_value(value)
+        end
+
+      _plain ->
+        json_value(Map.get(record, field))
+    end
+  end
+
+  defp walk_source(record, [attribute]), do: Map.get(record, attribute)
+
+  defp walk_source(record, [relationship | rest]) do
+    case Map.get(record, relationship) do
+      %Ash.NotLoaded{} -> nil
+      nil -> nil
+      related -> walk_source(related, rest)
+    end
   end
 
   defp json_map(map) do

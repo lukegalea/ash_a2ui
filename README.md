@@ -213,6 +213,43 @@ the `"query"` action validates every request against the allowlist and
 answers with `/records` + `/query` data-model updates. See
 [Queries and Pagination](documentation/topics/queries-and-pagination.md).
 
+### Relationships
+
+`belongs_to` form fields render as selects automatically — a form field whose
+name matches the relationship's `source_attribute` becomes a `ChoicePicker`
+with options loaded from the destination (actor/tenant-scoped, policies
+apply). Table columns can read through loaded relationships with `source`:
+
+```elixir
+relationships do
+  belongs_to :author, MyApp.Blog.Author, public?: true
+end
+
+a2ui do
+  component :table do
+    fields [:title, :author_email]
+  end
+
+  component :form do
+    fields [:title, :author_id]       # author_id -> ChoicePicker, no DSL needed
+    create_action :create
+    update_action :update
+  end
+
+  field :author_email do
+    label "Author email"
+    source [:author, :email]          # column read through the loaded relationship
+  end
+end
+```
+
+Option labels default to the first existing public attribute of
+`[:name, :title, :label, :username, :email]` on the destination (else its
+primary key); `option_label` / `option_value` / `option_sort` /
+`option_limit` override the defaults, and `relationship` handles
+action-argument fields. Everything is verified at compile time. See
+[Relationship Rendering](documentation/topics/relationships.md).
+
 ### Building the surface
 
 ```elixir
@@ -329,10 +366,17 @@ Shipped beyond the v0 core:
   server-side (see
   [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
 - ✅ **`usage_rules` support** — the package ships `usage-rules.md` plus
-  `usage-rules/actions.md`, `usage-rules/liveview.md`, and
-  `usage-rules/queries.md` sub-rules, syncable into a consumer's AGENTS.md via
-  [`mix usage_rules.sync`](https://hexdocs.pm/usage_rules) (see
+  `usage-rules/actions.md`, `usage-rules/liveview.md`, `usage-rules/queries.md`,
+  and `usage-rules/relationships.md` sub-rules, syncable into a consumer's
+  AGENTS.md via [`mix usage_rules.sync`](https://hexdocs.pm/usage_rules) (see
   [Agent usage rules](#agent-usage-rules)).
+- ✅ **Relationship rendering** — `belongs_to` form selects inferred from
+  `source_attribute` (option-label fallback chain
+  `[:name, :title, :label, :username, :email]`, actor/tenant-scoped option
+  reads, the `/options/<field>` convention) and `source` table columns read
+  through loaded relationships (see
+  [Relationship Rendering](documentation/topics/relationships.md) and the
+  [Relationships](#relationships) example above).
 
 Documented as roadmap (not built):
 
@@ -344,11 +388,13 @@ Documented as roadmap (not built):
 - **`refreshes` metadata on actions** — after a successful action, push
   `updateDataModel` only for the named data regions it affects (v0 refreshes
   the whole surface data model).
-- **Relationship rendering** — `belongs_to` inference from
-  `source_attribute`, option-label fallback chain
-  (`[:name, :title, :label, :username, :email]`), destination reads with
-  `actor:`/`tenant:`, and nested-form interaction modes driven by
-  `Ash.Changeset.ManagedRelationshipHelpers`.
+- **Searchable/paginated relationship selects** — for option sets beyond
+  `option_limit`; today's selects load a capped, sorted option list.
+- **Nested forms** — interaction modes driven by
+  `Ash.Changeset.ManagedRelationshipHelpers` (create/edit related records
+  inline).
+- **Sorting on relationship-sourced columns** — `source` table columns are
+  render-only; `ui_query` sorting stays restricted to plain attributes.
 - **`overrides:` option on `build_surface/2`** — per-request title/label/
   empty-state tweaks: the middle rung between the DSL and forking the encoder.
 - **Context struct** (`actor`, `tenant`, `locale`, `audience`, `device`) with

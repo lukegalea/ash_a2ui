@@ -141,6 +141,7 @@ defmodule AshA2ui.QueryRunner do
     paged =
       filtered
       |> Ash.Query.sort(effective_sort ++ tiebreaker(view.resource, effective_sort))
+      |> Ash.Query.load(view.loads)
       |> Ash.Query.limit(params.page_size + 1)
       |> Ash.Query.offset((params.page - 1) * params.page_size)
 

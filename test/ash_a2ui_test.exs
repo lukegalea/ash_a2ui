@@ -57,7 +57,9 @@ defmodule AshA2uiTest do
              %{"updateDataModel" => %{"path" => "/records", "value" => [row]}},
              %{"updateDataModel" => %{"path" => "/form", "value" => %{}}},
              %{"updateDataModel" => %{"path" => "/errors", "value" => %{}}},
-             %{"updateDataModel" => %{"path" => "/ui/status", "value" => status}}
+             %{"updateDataModel" => %{"path" => "/ui/status", "value" => status}},
+             %{"updateDataModel" => %{"path" => "/ui/action_result", "value" => %{}}},
+             %{"updateDataModel" => %{"path" => "/ui/action_result_text", "value" => ""}}
            ] = follow_ups
 
     assert row["name"] == "E2E Provider"

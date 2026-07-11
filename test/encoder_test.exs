@@ -76,7 +76,9 @@ defmodule AshA2ui.EncoderTest do
 
       assert %{"component" => "Column", "children" => children} = components["root"]
 
-      assert children == ["table_heading", "records_list", "form", "status_text"]
+      assert children ==
+               ["table_heading", "records_list", "form", "status_text", "action_result_panel"]
+
       assert Enum.all?(children, &Map.has_key?(components, &1))
     end
 
@@ -85,7 +87,10 @@ defmodule AshA2ui.EncoderTest do
       Enum.each(messages, &assert_valid_server_message/1)
 
       components = components_by_id(messages)
-      assert components["root"]["children"] == ["table_heading", "records_list", "status_text"]
+
+      assert components["root"]["children"] ==
+               ["table_heading", "records_list", "status_text", "action_result_panel"]
+
       refute Map.has_key?(components, "form")
     end
   end
@@ -179,6 +184,17 @@ defmodule AshA2ui.EncoderTest do
 
       assert %{"component" => "Text", "text" => "Kitchen sink", "variant" => "h2"} =
                components["table_heading"]
+    end
+
+    test "headings use the Text variant hint, never literal markdown prefixes" do
+      components = encode_kitchen_sink() |> components_by_id()
+
+      literal_texts =
+        for {_id, %{"component" => "Text", "text" => text}} <- components,
+            is_binary(text),
+            do: text
+
+      refute Enum.any?(literal_texts, &String.starts_with?(&1, "#"))
     end
   end
 
@@ -288,6 +304,18 @@ defmodule AshA2ui.EncoderTest do
     end
   end
 
+  describe "action result panel" do
+    test "a Column wrapping a Text bound to /ui/action_result_text is always present" do
+      components = encode_kitchen_sink() |> components_by_id()
+
+      assert %{"component" => "Column", "children" => ["action_result_text"]} =
+               components["action_result_panel"]
+
+      assert %{"component" => "Text", "text" => %{"path" => "/ui/action_result_text"}} =
+               components["action_result_text"]
+    end
+  end
+
   describe "data model + record serialization" do
     test "the bootstrap updateDataModel carries the full reserved-path value shape" do
       assert [_, _, message] = encode_kitchen_sink()
@@ -300,7 +328,12 @@ defmodule AshA2ui.EncoderTest do
                    "records" => [],
                    "form" => %{},
                    "errors" => %{},
-                   "ui" => %{"status" => ""}
+                   "options" => %{},
+                   "ui" => %{
+                     "status" => "",
+                     "action_result" => %{},
+                     "action_result_text" => ""
+                   }
                  }
                }
              } = message
