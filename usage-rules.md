@@ -1,11 +1,11 @@
 # Rules for working with AshA2ui
 
-AshA2ui is an Ash extension that generates A2UI (Agent to UI) v0.9.1 protocol
-payloads from Ash resources. You declare a surface (table + form + actions)
-in an `a2ui` DSL block; the extension emits the wire messages, routes client
-`action` envelopes back into Ash actions, and enforces authorization. Read
-the docs before assuming prior knowledge — the DSL is small and these rules
-cover most decisions.
+AshA2ui is an Ash extension that generates A2UI (Agent to UI) protocol
+payloads (v0.9.1 or v1.0) from Ash resources. You declare a surface (table +
+form + actions) in an `a2ui` DSL block; the extension emits the wire
+messages, routes client `action` envelopes back into Ash actions, and
+enforces authorization. Read the docs before assuming prior knowledge — the
+DSL is small and these rules cover most decisions.
 
 Sub-rules (addressable as `ash_a2ui:<name>`):
 
@@ -26,6 +26,29 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
 - `ash_a2ui:dynamic` — agent-composed surfaces (`AshA2ui.Dynamic`): the
   runtime JSON surface spec, the resource allowlist, the server-held
   surface contract, and LLM tool integration.
+
+## Protocol versions
+
+- Each surface declares its wire version with the `spec_version` section
+  option (`"0.9.1"` default for compatibility; `"1.0"` recommended for new
+  surfaces). `AshA2ui.Dynamic.resolve/2` takes the same value as a
+  `:spec_version` option. Everything else in these rules is
+  version-agnostic; the DSL does not change.
+- What changes on `"1.0"` (full rationale in the `a2ui-1-0` doc topic):
+  - Bootstrap is a **single `createSurface`** carrying inline `components` +
+    `dataModel` (no `updateComponents`/`updateDataModel` follow-ups, no
+    two-phase render flash).
+  - Client action envelopes carry a unique `actionId` + `wantResponse: true`
+    and the server replies with an **`actionResponse`** — per-action
+    success/error feedback instead of only global status paths.
+  - Lifecycle + generic-action results consolidate on **`/ui/response`**
+    (`{status, message, result, resultText}`) replacing `/ui/status` +
+    `/ui/action_result`; the v0.9.1 paths remain only on v0.9.1 surfaces.
+  - `theme` becomes `surfaceProperties`; heading Texts are emitted as
+    Markdown (`### Title`) instead of `variant` values.
+- Both encoders validate against vendored spec schemas
+  (`priv/a2ui/v0_9_1/`, `priv/a2ui/v1_0/` — v1.0 is pinned to a spec
+  Release Candidate commit; see its NOTES.md).
 
 ## When to reach for AshA2ui (preferred ladder)
 
@@ -181,9 +204,11 @@ end
   for validation errors (nested rows:
   `/errors/<argument>/<index>/<field>`), `/options/<name>` for
   relationship select and picker options, `/select/<name>` for
-  searchable-select/picker state, `/ui/status` for lifecycle feedback,
+  searchable-select/picker state,   `/ui/status` for lifecycle feedback,
   `/ui/action_result` + `/ui/action_result_text` for map-returning generic
-  actions (raw map + display text, cleared on every subsequent action),
+  actions (raw map + display text, cleared on every subsequent action) —
+  on `spec_version "1.0"` surfaces these three consolidate into
+  `/ui/response`,
   `/query` for query state (multi-table surfaces scope records and query
   state per table: `/records/<component_name>`, `/query/<component_name>`),
   `/prompt/values/<action>` for prompt Modal state,
