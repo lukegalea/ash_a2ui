@@ -180,7 +180,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
            |> put_query_state(resolved_view, opts)
            |> put_prompt_state(resolved_view)
            |> put_select_state(resolved_view)
-           |> put_context_data(resolved_view, opts)}
+           |> put_context_data(resolved_view, opts)
+           |> put_report_state(resolved_view)}
       end
 
     %{
@@ -231,6 +232,15 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       |> Map.merge(context_defaults)
 
     Map.merge(defaults, Keyword.get(opts, :options) || %{})
+  end
+
+  # The reserved /report state (per-report params + rows). Omitted entirely
+  # on surfaces without :report components (frozen shape unchanged).
+  defp put_report_state(value, view) do
+    case ResolvedView.report_state(view) do
+      state when state == %{} -> value
+      state -> Map.put(value, "report", state)
+    end
   end
 
   # The reserved /select state (searchable-select search text + selected
@@ -308,6 +318,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       end)
 
     detail_sections = Enum.flat_map(view.details, &detail_components(view, &1))
+    report_sections = Enum.flat_map(view.reports, &report_components(view, &1))
 
     form_components = (form && form_components(view, form)) || []
 
@@ -323,7 +334,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "text" => %{"path" => "/ui/status"}
     }
 
-    [root | context_sections ++ table_sections ++ detail_sections ++ form_components] ++
+    [
+      root
+      | context_sections ++
+          table_sections ++ detail_sections ++ report_sections ++ form_components
+    ] ++
       form_descendants(view, form, options) ++ [status | action_result_components()]
   end
 
@@ -359,6 +374,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   defp component_root_children(_view, %{name: :detail} = component),
     do: ["detail_#{AshA2ui.Component.key(component)}"]
+
+  defp component_root_children(_view, %{name: :report} = component),
+    do: ["report_#{AshA2ui.Component.key(component)}"]
 
   defp component_root_children(_view, _form), do: []
 
@@ -1518,6 +1536,107 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   defp detail_field_label(view, field) do
+    case view.fields[field] do
+      %{label: label} when is_binary(label) -> label
+      _undeclared -> humanize(field)
+    end
+  end
+
+  # --- reports ---
+
+  # A :report component renders as a Card (`report_<name>`, the root child)
+  # over a Column: a heading, one TextField per param (bound to the reserved
+  # /report/<name>/params/<param> path), a Run Button dispatching the
+  # `"report"` action with the current params, and a result List templated
+  # over /report/<name>/rows — each row a Row of caption-labeled cells, one
+  # per declared field, bound template-relative to the row map's keys.
+  defp report_components(view, report) do
+    base = "report_#{report.name}"
+
+    param_inputs =
+      Enum.map(report.params, fn param ->
+        %{
+          "id" => "#{base}_param_#{param}",
+          "component" => "TextField",
+          "label" => report_field_label(view, param),
+          "value" => %{"path" => "#{report.path}/params/#{param}"}
+        }
+      end)
+
+    cells =
+      Enum.flat_map(report.fields, fn field ->
+        cell_base = "#{base}_cell_#{field}"
+
+        [
+          %{
+            "id" => cell_base,
+            "component" => "Row",
+            "children" => ["#{cell_base}_label", "#{cell_base}_value"]
+          },
+          %{
+            "id" => "#{cell_base}_label",
+            "component" => "Text",
+            "text" => report_field_label(view, field),
+            "variant" => "caption"
+          },
+          %{
+            "id" => "#{cell_base}_value",
+            "component" => "Text",
+            "text" => %{"path" => to_string(field)}
+          }
+        ]
+      end)
+
+    [
+      %{"id" => base, "component" => "Card", "child" => "#{base}_body"},
+      %{
+        "id" => "#{base}_body",
+        "component" => "Column",
+        "children" =>
+          ["#{base}_heading"] ++
+            Enum.map(report.params, &"#{base}_param_#{&1}") ++
+            ["#{base}_run_button", "#{base}_list"]
+      },
+      %{
+        "id" => "#{base}_heading",
+        "component" => "Text",
+        "text" => humanize(report.name),
+        "variant" => "h3"
+      },
+      %{
+        "id" => "#{base}_run_button",
+        "component" => "Button",
+        "child" => "#{base}_run_text",
+        "action" => %{
+          "event" => %{
+            "name" => "report",
+            "context" => %{
+              "component" => to_string(report.name),
+              "params" => %{"path" => "#{report.path}/params"}
+            }
+          }
+        }
+      },
+      %{"id" => "#{base}_run_text", "component" => "Text", "text" => "Run"},
+      %{
+        "id" => "#{base}_list",
+        "component" => "List",
+        "children" => %{"componentId" => "#{base}_row", "path" => "#{report.path}/rows"}
+      },
+      %{
+        "id" => "#{base}_row",
+        "component" => "Card",
+        "child" => "#{base}_row_content"
+      },
+      %{
+        "id" => "#{base}_row_content",
+        "component" => "Row",
+        "children" => Enum.map(report.fields, &"#{base}_cell_#{&1}")
+      }
+    ] ++ param_inputs ++ cells
+  end
+
+  defp report_field_label(view, field) do
     case view.fields[field] do
       %{label: label} when is_binary(label) -> label
       _undeclared -> humanize(field)

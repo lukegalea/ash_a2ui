@@ -699,8 +699,10 @@ defmodule AshA2ui do
     describe: """
     A UI component of the surface. `:table` renders records from a read action;
     `:form` renders create/update forms; `:detail` renders the record selected
-    into a `context` as a read-only field grid. A surface may declare several
-    `:table` (or `:detail`) components (sections) by giving each one a
+    into a `context` as a read-only field grid; `:report` renders the computed
+    rows of a declared generic action (aggregate/report queries — see the
+    `action` and `params` options). A surface may declare several `:table`,
+    `:detail` or `:report` components (sections) by giving each one a
     distinguishing name via the optional second argument, e.g.
     `component :table, :new_items do ... end`.
     """,
@@ -732,15 +734,15 @@ defmodule AshA2ui do
     singleton_entity_keys: [:row_layout, :sections, :editable],
     schema: [
       name: [
-        type: {:one_of, [:table, :form, :detail]},
+        type: {:one_of, [:table, :form, :detail, :report]},
         required: true,
-        doc: "The kind of component. One of `:table`, `:form` or `:detail`."
+        doc: "The kind of component. One of `:table`, `:form`, `:detail` or `:report`."
       ],
       as: [
         type: :atom,
         doc: """
         The distinguishing name of this component on surfaces with several
-        `:table` (or `:detail`) components (e.g.
+        `:table` (or `:detail` / `:report`) components (e.g.
         `component :table, :new_items`). Optional — an unnamed component is
         named by its kind. Names must be unique across the surface's
         components; `:form` components cannot be named.
@@ -749,11 +751,29 @@ defmodule AshA2ui do
       fields: [
         type: {:list, :atom},
         doc:
-          "Fields shown by this component. Omit to infer (public attributes for tables, action accepts for forms)."
+          "Fields shown by this component. Omit to infer (public attributes for tables, action accepts for forms). On `:report` components: the column allowlist, required — each entry is a key of the returned row maps, rendered in this order."
       ],
       read_action: [
         type: :atom,
         doc: "The read action used to load records (tables). Defaults to the primary read."
+      ],
+      action: [
+        type: :atom,
+        doc: """
+        The generic Ash action a `:report` component runs (actor-scoped,
+        authorized like any other invocation). Must return a list of row
+        maps; the declared `fields` select and order the rendered columns.
+        Required on `:report` components.
+        """
+      ],
+      params: [
+        type: {:list, :atom},
+        doc: """
+        The arguments of a `:report` component's `action` rendered as inputs
+        (bound to the reserved `/report/<name>/params/<param>` paths and
+        submitted by the Run button). Defaults to all of the action's
+        arguments, in declaration order.
+        """
       ],
       create_action: [
         type: :atom,
@@ -961,6 +981,7 @@ defmodule AshA2ui do
     AshA2ui.Verifiers.VerifyQueries,
     AshA2ui.Verifiers.VerifySections,
     AshA2ui.Verifiers.VerifyEditable,
+    AshA2ui.Verifiers.VerifyReports,
     AshA2ui.Verifiers.VerifyRelationships,
     AshA2ui.Verifiers.VerifyNestedForms
   ]

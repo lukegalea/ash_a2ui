@@ -69,6 +69,12 @@ defmodule AshA2ui.Verifiers.VerifyFields do
   defp verify_component(%AshA2ui.Component{name: :detail}, _target, _module, _known, _exempt),
     do: :ok
 
+  # :report fields are keys of the generic action's returned row maps, not
+  # resource fields — AshA2ui.Verifiers.VerifyReports validates the report
+  # shape instead.
+  defp verify_component(%AshA2ui.Component{name: :report}, _target, _module, _known, _exempt),
+    do: :ok
+
   defp verify_component(component, target, module, known, exempt) do
     with :ok <- verify_known_fields(component, module, known, exempt) do
       verify_form_fields(component, target, module, exempt)

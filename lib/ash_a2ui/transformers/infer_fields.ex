@@ -94,6 +94,10 @@ defmodule AshA2ui.Transformers.InferFields do
 
   defp infer_fields(nil, _component), do: nil
 
+  # :report fields are row-map keys, not resource fields — they cannot be
+  # inferred (VerifyReports requires them explicitly).
+  defp infer_fields(_target, %AshA2ui.Component{name: :report}), do: nil
+
   defp infer_fields(target, %AshA2ui.Component{name: :detail}) do
     infer_fields(target, %AshA2ui.Component{name: :table})
   end

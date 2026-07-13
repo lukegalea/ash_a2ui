@@ -13,6 +13,8 @@ defmodule AshA2ui.Component do
     :read_action,
     :create_action,
     :update_action,
+    :action,
+    :params,
     :query,
     :row_layout,
     :sections,
@@ -30,12 +32,14 @@ defmodule AshA2ui.Component do
   # `as` is an atom in the DSL; the per-section component copies
   # `AshA2ui.Sections.expand/2` produces carry their runtime string name.
   @type t :: %__MODULE__{
-          name: :table | :form | :detail,
+          name: :table | :form | :detail | :report,
           as: atom | String.t() | nil,
           fields: [atom] | nil,
           read_action: atom | nil,
           create_action: atom | nil,
           update_action: atom | nil,
+          action: atom | nil,
+          params: [atom] | nil,
           query: atom | nil,
           row_layout: AshA2ui.RowLayout.t() | nil,
           sections: AshA2ui.Sections.t() | nil,

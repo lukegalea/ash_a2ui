@@ -43,7 +43,10 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
   end
 
   defp verify_named_tables_only(components, module) do
-    case Enum.find(components, &(&1.name not in [:table, :detail] and not is_nil(&1.as))) do
+    case Enum.find(
+           components,
+           &(&1.name not in [:table, :detail, :report] and not is_nil(&1.as))
+         ) do
       nil ->
         :ok
 
@@ -54,7 +57,7 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
            path: [:a2ui, :component, component.name],
            message:
              "component #{inspect(component.name)} cannot be named #{inspect(component.as)}: " <>
-               "only :table and :detail components may carry a distinguishing name"
+               "only :table, :detail and :report components may carry a distinguishing name"
          )}
     end
   end

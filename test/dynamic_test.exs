@@ -333,7 +333,7 @@ defmodule AshA2ui.DynamicTest do
                error_texts(%{"resource" => "Minimal", "components" => [%{"kind" => "chart"}]})
 
       assert text =~ "components[0].name"
-      assert text =~ "expected one of [:table, :form, :detail]"
+      assert text =~ "expected one of [:table, :form, :detail, :report]"
     end
 
     test "rejects malformed names with the format rule" do

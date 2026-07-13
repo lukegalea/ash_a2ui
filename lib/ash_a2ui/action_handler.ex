@@ -364,6 +364,12 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  defp dispatch("report", context, %{view: view, ash_opts: ash_opts}) do
+    with {:ok, report} <- report_target(view, context) do
+      run_report(view, report, Map.get(context, "params"), ash_opts)
+    end
+  end
+
   defp dispatch("edit_cell", context, %{view: view} = env) do
     with {:ok, table} <- edit_table(view, context),
          {:ok, field} <- edit_field(view, table, context) do
@@ -1247,6 +1253,113 @@ defmodule AshA2ui.ActionHandler do
       related -> AshA2ui.Info.option_entry(related, select)["label"]
     end
   end
+
+  # --- report (aggregate/report queries) ---------------------------------------
+
+  # The report a "report" action targets: the only report on single-report
+  # surfaces; otherwise the context must carry the source "component" (the
+  # emitted Run buttons always do).
+  defp report_target(%ResolvedView{reports: [report]}, _context), do: {:ok, report}
+
+  defp report_target(%ResolvedView{reports: []} = view, _context) do
+    {:error, [status(view, "This surface declares no :report components.")]}
+  end
+
+  defp report_target(view, context) do
+    case Map.get(context, "component") do
+      component when is_binary(component) ->
+        case Enum.find(view.reports, &(to_string(&1.name) == component)) do
+          nil -> {:error, [status(view, "Unknown report component #{inspect(component)}.")]}
+          report -> {:ok, report}
+        end
+
+      _missing ->
+        {:error,
+         [
+           status(
+             view,
+             ~s(Malformed report action: multi-report surfaces require "component" in the context.)
+           )
+         ]}
+    end
+  end
+
+  # Runs the report's declared generic action (actor-scoped, authorized like
+  # any invocation) with the client params filtered to the declared `params`
+  # allowlist (blank inputs are unset — a "" never reaches the argument
+  # cast) and cast against the action's arguments. The action must return a
+  # list of row maps; rows are serialized down to the declared `fields`
+  # (atom or string keys accepted) and written wholesale to the reserved
+  # /report/<name>/rows path.
+  defp run_report(view, report, params, ash_opts) do
+    allowed = MapSet.new(report.params, &Atom.to_string/1)
+
+    filtered =
+      ((is_map(params) && params) || %{})
+      |> Map.filter(fn {key, value} -> normalize_key(key) in allowed and value != "" end)
+
+    view.resource
+    |> Ash.ActionInput.for_action(
+      report.action,
+      cast_values(view.resource, report.action, filtered),
+      ash_opts
+    )
+    |> Ash.run_action()
+    |> case do
+      {:ok, rows} when is_list(rows) ->
+        serialized = Enum.map(rows, &report_row(report, &1))
+
+        {:ok,
+         [
+           update_data_model(view, "#{report.path}/rows", serialized),
+           report_status(view, length(serialized))
+         ]}
+
+      {:ok, _not_a_list} ->
+        {:error,
+         [
+           status(
+             view,
+             "Report #{inspect(to_string(report.name))} did not return a list of rows."
+           )
+         ]}
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  defp report_row(report, row) when is_map(row) and not is_struct(row) do
+    Map.new(report.fields, fn field ->
+      value =
+        case Map.fetch(row, field) do
+          {:ok, value} -> value
+          :error -> Map.get(row, Atom.to_string(field))
+        end
+
+      {Atom.to_string(field), json_value(value)}
+    end)
+  end
+
+  defp report_row(report, _not_a_map) do
+    Map.new(report.fields, &{Atom.to_string(&1), ""})
+  end
+
+  defp report_status(%{spec_version: :v1_0} = view, count) do
+    update_data_model(view, "/ui/response", %{
+      "status" => "ok",
+      "message" => report_status_text(count),
+      "result" => %{"count" => count},
+      "resultText" => ""
+    })
+  end
+
+  defp report_status(view, count) do
+    update_data_model(view, "/ui/status", report_status_text(count))
+  end
+
+  defp report_status_text(1), do: "Report complete: 1 row."
+  defp report_status_text(count), do: "Report complete: #{count} rows."
 
   # --- edit_cell (inline cell editing) ----------------------------------------
 

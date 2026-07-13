@@ -70,7 +70,8 @@ defmodule AshA2ui.ResolvedView do
     nested_forms: %{},
     contexts: %{},
     context_order: [],
-    details: []
+    details: [],
+    reports: []
   ]
 
   @typedoc """
@@ -186,6 +187,22 @@ defmodule AshA2ui.ResolvedView do
           detail_path: String.t()
         }
 
+  @typedoc """
+  A resolved `:report` component (aggregate/report queries): the generic Ash
+  `action` it invokes, the `params` (argument names rendered as inputs, bound
+  under `<path>/params`), the `fields` column allowlist (keys of the
+  returned row maps, in render order), and the reserved `/report/<name>`
+  data-model path its params/rows live under.
+  """
+  @type report :: %{
+          name: atom,
+          component: AshA2ui.Component.t(),
+          action: atom,
+          params: [atom],
+          fields: [atom],
+          path: String.t()
+        }
+
   @type t :: %__MODULE__{
           resource: module,
           surface_id: String.t(),
@@ -206,7 +223,8 @@ defmodule AshA2ui.ResolvedView do
           nested_forms: %{atom => nested_form},
           contexts: %{atom => context},
           context_order: [atom],
-          details: [detail]
+          details: [detail],
+          reports: [report]
         }
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
@@ -284,7 +302,8 @@ defmodule AshA2ui.ResolvedView do
       nested_forms: resolve_nested_forms(resource, form, create_action || update_action),
       contexts: Map.new(contexts, &{&1.name, &1}),
       context_order: Enum.map(contexts, & &1.name),
-      details: resolve_details(components, contexts, fields)
+      details: resolve_details(components, contexts, fields),
+      reports: resolve_reports(resource, components)
     }
   end
 
@@ -615,6 +634,49 @@ defmodule AshA2ui.ResolvedView do
                 "#{inspect(sections.source)} has a composite primary key " <>
                 "#{inspect(composite)} — set value explicitly"
     end
+  end
+
+  # --- reports --------------------------------------------------------------------
+
+  # One resolved report per `:report` component: the generic action, the
+  # rendered params (defaulting to all of the action's arguments) and the
+  # frozen /report/<name> data-model path.
+  defp resolve_reports(resource, components) do
+    components
+    |> Enum.filter(&(&1.name == :report))
+    |> Enum.map(fn component ->
+      name = AshA2ui.Component.key(component)
+
+      %{
+        name: name,
+        component: component,
+        action: component.action,
+        params: component.params || default_report_params(resource, component),
+        fields: component.fields || [],
+        path: "/report/#{name}"
+      }
+    end)
+  end
+
+  defp default_report_params(resource, component) do
+    case component.action && ResourceInfo.action(resource, component.action) do
+      %{arguments: arguments} -> Enum.map(arguments, & &1.name)
+      _missing -> []
+    end
+  end
+
+  @doc """
+  The initial `/report` state: one `%{"params" => %{<param> => ""}, "rows"
+  => []}` entry per `:report` component. Empty on surfaces without reports
+  (which carry no `"report"` key at all — the frozen data-model shape is
+  unchanged).
+  """
+  @spec report_state(t()) :: %{String.t() => map}
+  def report_state(%__MODULE__{reports: reports}) do
+    Map.new(reports, fn report ->
+      {to_string(report.name),
+       %{"params" => Map.new(report.params, &{to_string(&1), ""}), "rows" => []}}
+    end)
   end
 
   # --- contexts and details -----------------------------------------------------
