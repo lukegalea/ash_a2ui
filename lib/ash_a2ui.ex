@@ -796,6 +796,14 @@ defmodule AshA2ui do
         doc:
           "Unique id of the A2UI surface. Defaults to the underscored short name of the resource."
       ],
+      spec_version: [
+        type: {:in, ["0.9.1", "1.0"]},
+        default: "0.9.1",
+        doc:
+          ~S(The A2UI protocol version the surface speaks: "0.9.1" - the default - or "1.0" ) <>
+            ~S(recommended for new surfaces — inline createSurface, per-action actionResponse ) <>
+            ~S(feedback; requires a v1.0-capable renderer or the shipped hook. See the A2UI 1.0 topic.)
+      ],
       for_resource: [
         type: {:behaviour, Ash.Resource},
         doc:

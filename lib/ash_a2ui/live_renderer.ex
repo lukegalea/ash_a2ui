@@ -128,6 +128,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         end
 
         @impl true
+        def handle_event("a2ui:function_response", payload, socket) do
+          AshA2ui.LiveRenderer.handle_function_response(__ash_a2ui_config__(), payload, socket)
+        end
+
+        @impl true
         def handle_info(message, socket) do
           AshA2ui.LiveRenderer.handle_notification(__ash_a2ui_config__(), message, socket)
         end
@@ -205,6 +210,17 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       {:noreply, socket}
     end
 
+    @doc """
+    Default handler for the `"a2ui:function_response"` event the shipped JS
+    hook pushes when a v1.0 `callFunction` message asked for a response
+    (`wantResponse: true`). The default is a no-op acknowledgment — a
+    LiveView that pushes `callFunction` messages and cares about the return
+    values overrides `handle_event("a2ui:function_response", payload, socket)`.
+    """
+    def handle_function_response(_config, _payload, socket) do
+      {:noreply, socket}
+    end
+
     @doc false
     def handle_notification(config, message, socket)
 
@@ -252,9 +268,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     end
 
     # Remembers the last /query state pushed to the client (from the full
-    # data model on mount/refresh or a /query update in an action follow-up)
-    # so PubSub refreshes can re-run the user's current query instead of the
-    # declared defaults.
+    # data model on mount/refresh — v0.9.1's root updateDataModel or v1.0's
+    # inline createSurface.dataModel — or a /query update in an action
+    # follow-up) so PubSub refreshes can re-run the user's current query
+    # instead of the declared defaults.
     defp track_query_state(socket, messages) do
       state =
         Enum.reduce(messages, socket.assigns.ash_a2ui_query_state, fn
@@ -263,6 +280,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
             value
 
           %{"updateDataModel" => %{"path" => "/", "value" => %{"query" => value}}}, _acc
+          when is_map(value) ->
+            value
+
+          %{"createSurface" => %{"dataModel" => %{"query" => value}}}, _acc
           when is_map(value) ->
             value
 
@@ -290,6 +311,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
             value
 
           %{"updateDataModel" => %{"path" => "/", "value" => %{"context" => value}}}, _acc
+          when is_map(value) ->
+            value
+
+          %{"createSurface" => %{"dataModel" => %{"context" => value}}}, _acc
           when is_map(value) ->
             value
 

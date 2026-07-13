@@ -3,9 +3,13 @@
 AshA2ui is an [Ash](https://hexdocs.pm/ash) extension that turns the
 declarative knowledge already inside your Ash resources — attributes, types,
 actions, policies — into
-[A2UI (Agent to UI)](https://github.com/a2ui-project/a2ui) **v0.9.1** protocol
-payloads: a standard, JSON-based description of a user interface that a
-remote renderer turns into live, interactive UI.
+[A2UI (Agent to UI)](https://github.com/a2ui-project/a2ui) protocol
+payloads — **v0.9.1** by default, **v1.0 (RC)** per surface — a standard,
+JSON-based description of a user interface that a remote renderer turns
+into live, interactive UI. To our knowledge it is the first framework with
+an executable A2UI 1.0 conformance suite: the spec's own schemas and test
+cases are vendored at a pinned RC commit and run in CI against every
+message the framework can emit (see [A2UI 1.0](a2ui-1-0.md)).
 
 You write a small `a2ui` block describing *what* a surface shows; AshA2ui
 generates the wire messages, routes user interactions back into Ash actions,
@@ -31,9 +35,9 @@ Ash resource (+ a2ui DSL block)
       │  AshA2ui.ResolvedView.resolve/2   (normalization seam)
       ▼
 ResolvedView struct
-      │  AshA2ui.Encoder.V0_9_1           (versioned encoder)
+      │  AshA2ui.Encoder.V0_9_1 / .V1_0   (versioned encoders, per spec_version)
       ▼
-A2UI v0.9.1 messages  ──► any transport ──► any A2UI renderer
+A2UI messages  ──► any transport ──► any A2UI renderer
       ▲
       │  AshA2ui.ActionHandler.handle/3   (action envelope → Ash action)
       └────────────────  client `action` envelopes
@@ -73,9 +77,12 @@ See [Rendering Clients](rendering-clients.md) for both in detail.
   allowlists; see [Queries and Pagination](queries-and-pagination.md).
 - **Relationship rendering** — `belongs_to` form selects and `source` table
   columns; see [Relationship Rendering](relationships.md).
+- **A2UI v1.0 (RC)** — per-surface `spec_version "1.0"`: single-message
+  surfaces, the `actionResponse` per-action feedback contract, and an
+  executable conformance suite; see [A2UI 1.0](a2ui-1-0.md).
 
-Everything else (nested forms, searchable selects, overrides, custom
-catalogs, v1.0 spec…) is deliberately roadmap — see the
+Everything else (overrides, custom catalogs, non-LiveView streaming
+transports…) is deliberately roadmap — see the
 [README](../../README.md) for the list.
 
 ## When it pays off — and when it doesn't

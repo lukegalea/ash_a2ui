@@ -15,16 +15,26 @@ standards-based, agent-ready UI over the wire — no templates, no components,
 no hand-written JSON.
 
 AshA2ui is an Ash extension that generates
-[A2UI (Agent to UI)](https://github.com/a2ui-project/a2ui) **v0.9.1** protocol
-payloads directly from your Ash resources. You describe *what* the surface
+[A2UI (Agent to UI)](https://github.com/a2ui-project/a2ui) protocol
+payloads — **v0.9.1** (the default) or **v1.0 (RC)** per surface — directly
+from your Ash resources. You describe *what* the surface
 shows (a table, a form, per-row actions) in a small `a2ui` DSL block; AshA2ui
 derives the rest from what your resource already knows — attributes, types,
-actions, policies — and emits the `createSurface` / `updateComponents` /
-`updateDataModel` message stream that any A2UI renderer (such as
-[`@a2ui/lit`](https://www.npmjs.com/package/@a2ui/lit) or
+actions, policies — and emits the A2UI message stream that any A2UI renderer
+(such as [`@a2ui/lit`](https://www.npmjs.com/package/@a2ui/lit) or
 [`@a2ui/react`](https://www.npmjs.com/package/@a2ui/react)) turns into a live
 UI. Client interactions come back as A2UI `action` envelopes and are routed
 into your Ash actions with full actor/authorization support.
+
+To our knowledge AshA2ui is the **first framework with an executable A2UI
+1.0 conformance suite**: the v1.0(-RC) schemas, basic catalog, and the
+spec's own test cases are vendored at a pinned commit and run in CI, and
+every v1.0 message the encoders and action handler emit is validated
+against them — plus targeted tests for the semantic rules schemas can't
+express. Opt in per surface with `spec_version "1.0"` and get v1.0's UX
+upgrades — single-message surfaces, per-action `actionResponse` feedback,
+`callFunction` — with v0.9.1 output staying byte-identical. See
+[A2UI 1.0](documentation/topics/a2ui-1-0.md).
 
 Why this exists: in the agent era, "the UI" is increasingly something a server
 (or an agent) *describes* and a remote canvas renders — chat surfaces, agent
@@ -632,11 +642,22 @@ Shipped beyond the v0 core:
   structured self-correction errors (see
   [Agent-Composed Surfaces](documentation/topics/agent-composed-surfaces.md)).
 
+- ✅ **A2UI v1.0 (RC) support** — per-surface `spec_version "1.0"` with a
+  versioned encoder (`AshA2ui.Encoder.V1_0`): single inline `createSurface`,
+  the `actionResponse` contract with the structured `/ui/response` path and
+  stable error codes, `surfaceProperties`, `call_function/3`, Markdown
+  headings, and a vendored executable conformance suite pinned to the RC
+  commit (see [A2UI 1.0](documentation/topics/a2ui-1-0.md)).
+
 Documented as roadmap (not built):
 
-- **A2UI v1.0 spec support** once it leaves RC — the payload builder is
-  isolated behind a versioned encoder (`AshA2ui.Encoder.V0_9_1`) so a new spec
-  version is a new encoder module.
+- **A2UI v1.0 final re-pin** — v1.0 is vendored at a pinned RC commit
+  (`priv/a2ui/v1_0/NOTES.md`); when the spec leaves RC, re-vendor and rerun
+  the conformance suite to surface any drift.
+- **Upstream v1.0 renderer adoption** — no published `@a2ui/lit` /
+  `@a2ui/web_core` release ships a v1.0 runtime yet; the shipped hook
+  adapts v1.0 messages for the v0_9 renderer, and the adapter seam is
+  removed once upstream ships a v1_0 entry point.
 - **Richer client-driven `query` filters** — custom filter shapes beyond
   the shipped equality filters, range filters, and named presets, and
   multiple queries per table.
@@ -664,6 +685,8 @@ Documented as roadmap (not built):
 - [Getting Started tutorial](documentation/tutorials/getting-started-with-ash-a2ui.md)
 - [What is AshA2ui?](documentation/topics/what-is-ash-a2ui.md) — concept and
   the honest "when it pays off" boundary
+- [A2UI 1.0](documentation/topics/a2ui-1-0.md) — the v1.0 wire contract,
+  per-feature UX rationale, and the executable conformance suite
 - [Rendering Clients](documentation/topics/rendering-clients.md) — transports,
   hook contract, `@a2ui/lit` / `@a2ui/react`
 - [Actions and Authorization](documentation/topics/actions-and-authorization.md)
@@ -682,5 +705,5 @@ Documented as roadmap (not built):
 Issues and PRs welcome at
 [github.com/lukegalea/ash_a2ui](https://github.com/lukegalea/ash_a2ui).
 Every payload-producing change must keep the schema-validation test suite
-green (`mix test`) — the vendored A2UI v0.9.1 JSON Schemas in
-`priv/a2ui/v0_9_1/` are the executable spec.
+green (`mix test`) — the vendored A2UI JSON Schemas in `priv/a2ui/v0_9_1/`
+and `priv/a2ui/v1_0/` are the executable spec.

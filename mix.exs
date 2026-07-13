@@ -89,6 +89,7 @@ defmodule AshA2ui.MixProject do
         {"README.md", title: "Home"},
         "documentation/tutorials/getting-started-with-ash-a2ui.md",
         "documentation/topics/what-is-ash-a2ui.md",
+        "documentation/topics/a2ui-1-0.md",
         "documentation/topics/rendering-clients.md",
         "documentation/topics/theming.md",
         "documentation/topics/actions-and-authorization.md",
@@ -127,6 +128,7 @@ defmodule AshA2ui.MixProject do
         Encoding: [
           AshA2ui.Encoder,
           AshA2ui.Encoder.V0_9_1,
+          AshA2ui.Encoder.V1_0,
           AshA2ui.TypeMapper
         ],
         Actions: [

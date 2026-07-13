@@ -28,7 +28,7 @@ defmodule AshA2ui.Dynamic do
   The returned surface then flows through the exact machinery declared
   surfaces use:
 
-    * `build_surface/2` → `AshA2ui.Info.build_surface/2` → the v0.9.1
+    * `build_surface/2` → `AshA2ui.Info.build_surface/2` → the versioned
       encoder (authorized reads, query allowlists, context scoping),
     * `handle_action/3` → `AshA2ui.ActionHandler.handle/3` (row-action
       allowlist, `visible_when` enforcement, actor-based authorization with
@@ -90,7 +90,7 @@ defmodule AshA2ui.Dynamic do
   alias AshA2ui.Dynamic.Surface
   alias AshA2ui.Transformers.InferFields
 
-  @resolve_opts [:allowlist, :surface_id]
+  @resolve_opts [:allowlist, :surface_id, :spec_version]
 
   @doc """
   Resolves and validates a surface `spec` (a JSON-decoded, string-keyed map)
@@ -103,6 +103,12 @@ defmodule AshA2ui.Dynamic do
     * `:surface_id` — the A2UI surface id. Defaults to a generated
       `"dyn_<resource>_<hex>"` id, unique per resolve, so a newly composed
       surface always replaces a previous one client-side.
+    * `:spec_version` — the A2UI protocol version the surface speaks:
+      `"0.9.1"` (the default) or `"1.0"`. Host configuration (matched to the
+      renderer's capability), not part of the LLM-facing spec. A v1.0
+      dynamic surface bootstraps as a *single* inline `createSurface`
+      message — exactly what agent-panel transports want (see the A2UI 1.0
+      topic).
 
   Returns `{:ok, surface}` or `{:error, [%AshA2ui.Dynamic.Error{}]}`.
   """
@@ -110,13 +116,20 @@ defmodule AshA2ui.Dynamic do
   def resolve(spec, opts) do
     Keyword.validate!(opts, @resolve_opts)
     allowlist = Keyword.fetch!(opts, :allowlist)
+    spec_version = Keyword.get(opts, :spec_version, "0.9.1")
+
+    unless spec_version in ["0.9.1", "1.0"] do
+      raise ArgumentError,
+            "spec_version must be \"0.9.1\" or \"1.0\", got: #{inspect(spec_version)}"
+    end
 
     with {:ok, resource} <- spec_resource(spec, allowlist),
          {:ok, title} <- spec_title(spec),
          {:ok, entities} <- Parser.parse(Map.drop(spec, ["resource", "title"]), allowlist),
          :ok <- require_component(entities),
          surface_id = Keyword.get_lazy(opts, :surface_id, fn -> generate_surface_id(resource) end),
-         {:ok, dsl_state} <- infer_fields(synthetic_dsl_state(resource, surface_id, entities)),
+         {:ok, dsl_state} <-
+           infer_fields(synthetic_dsl_state(resource, surface_id, spec_version, entities)),
          :ok <- run_verifiers(dsl_state) do
       {:ok,
        %Surface{
@@ -130,8 +143,10 @@ defmodule AshA2ui.Dynamic do
   end
 
   @doc """
-  Builds the surface's A2UI message list (`createSurface` →
-  `updateComponents` → `updateDataModel`) through `AshA2ui.Info.build_surface/2`.
+  Builds the surface's A2UI message list through
+  `AshA2ui.Info.build_surface/2`: the v0.9.1 `createSurface` →
+  `updateComponents` → `updateDataModel` triple, or (for surfaces resolved
+  with `spec_version: "1.0"`) a single inline `createSurface` message.
 
   Takes the same options (`:actor`, `:tenant`, `:authorize?`, `:domain`,
   `:query_state`, `:context_state`); reads are authorized by default.
@@ -667,11 +682,11 @@ defmodule AshA2ui.Dynamic do
   # The synthetic standalone-style DSL state the shared transformers,
   # verifiers, ResolvedView, Info, and ActionHandler all consume — the same
   # map shape Spark hands them at compile time, minus a real module.
-  defp synthetic_dsl_state(resource, surface_id, entities) do
+  defp synthetic_dsl_state(resource, surface_id, spec_version, entities) do
     %{
       [:a2ui] => %{
         entities: entities,
-        opts: [for_resource: resource, surface_id: surface_id]
+        opts: [for_resource: resource, surface_id: surface_id, spec_version: spec_version]
       },
       :persist => %{module: __MODULE__, extensions: []}
     }

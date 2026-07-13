@@ -10,6 +10,45 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- **A2UI v1.0 (RC) support** — to our knowledge the first framework
+  shipping a v1.0 conformance suite. `spec_version "1.0"` (DSL) /
+  `spec_version: "1.0"` (`AshA2ui.Dynamic.resolve/2`) opts a surface into
+  the v1.0 wire contract; v0.9.1 stays the default and its output is
+  byte-identical. See the new [A2UI 1.0](documentation/topics/a2ui-1-0.md)
+  topic for the full contract and UX rationale.
+  - `AshA2ui.Encoder.V1_0`: single inline `createSurface` (components +
+    initial data model in one message — no create-then-update flash, one
+    payload for HTTP/agent-tool transports), `wantResponse: true` on every
+    action event, v1.0 catalog/envelope, `surface_properties` option
+    (v1.0's rename of `theme`; `primaryColor` is gone and was never our
+    seam), automatic Markdown headings (the v1.0 basic catalog dropped the
+    `h1`–`h5` Text variants; literal headings become `"## …"`, data-bound
+    ones interpolate via `formatString`), wire `returnType`/`callableFrom`
+    stripped from function calls, and `call_function/3` for judicious
+    server→client RPC.
+  - `AshA2ui.ActionHandler`: the v1.0 **actionResponse contract** — actions
+    carrying an `actionId` are answered first with an `actionResponse`
+    echoing the id (`{"value": …}` / `{"error": {code, message}}` with
+    stable codes: `VALIDATION_FAILED`, `UNAUTHORIZED`, `INVALID_ACTION`,
+    `ACTION_FAILED`); the v0.9.1 status trio (`/ui/status`,
+    `/ui/action_result`, `/ui/action_result_text`) collapses into one
+    structured `/ui/response` object mirrored by the response.
+  - The shipped JS hook is the v1.0-capable client layer (no published
+    `@a2ui/lit`/`@a2ui/web_core` release ships a v1.0 runtime yet): it
+    expands inline `createSurface` for the v0_9 renderer, generates the
+    `actionId` handshake with **0-RTT optimistic pending state** on
+    `/ui/response` plus a timeout watchdog, dispatches
+    `"ash-a2ui:action-response"` DOM events, and executes `callFunction`
+    against a host-registered function table (`openUrl` built in;
+    responses return via the `"a2ui:function_response"` LiveView event).
+  - The executable spec: vendored v1.0 schemas/catalog/conformance cases
+    (pinned commit in `priv/a2ui/v1_0/NOTES.md`), the upstream schema
+    suites running in `test/v1_0_conformance_test.exs` (draft-7-invisible
+    `unevaluatedProperties` cases pinned explicitly), and encoder/handler
+    conformance suites asserting the semantic rules schemas can't express
+    (explicit `value` on every `updateDataModel` — v1.0 deletes on omitted
+    value; UAX #31 identifier rules on all generated names; actionId echo).
+
 - Agent-composed surfaces: `AshA2ui.Dynamic` resolves a runtime,
   JSON-serializable surface spec — a declarative mirror of the DSL
   vocabulary an LLM can emit as structured tool output, never raw A2UI —

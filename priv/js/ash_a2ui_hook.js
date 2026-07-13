@@ -5,7 +5,39 @@
  * container, feeds it the A2UI server->client messages pushed by
  * `AshA2ui.LiveRenderer` as the "a2ui:messages" event, and forwards the
  * renderer's client `action` payloads back to the server as the
- * "a2ui:action" LiveView event (wrapped in the A2UI v0.9.1 client envelope).
+ * "a2ui:action" LiveView event (wrapped in the A2UI client envelope of the
+ * surface's protocol version).
+ *
+ * ## A2UI v1.0 support
+ *
+ * No published `@a2ui/lit` / `@a2ui/web_core` release ships a v1.0 runtime
+ * (0.10.x exposes only v0_8/v0_9 entry points; the v1_0 directory carries
+ * schemas alone) — so this hook is the v1.0-capable client layer on top of
+ * the v0_9 renderer. Per-message (`message.version === "v1.0"`) it:
+ *
+ *   - **expands inline `createSurface`** (v1.0's single-message bootstrap
+ *     carrying `components` + `dataModel`) into the v0.9 triple the
+ *     renderer understands, mapping the v1.0 basic-catalog id onto a
+ *     registered catalog and carrying `surfaceProperties` through as the
+ *     surface theme metadata;
+ *   - **generates the `actionResponse` handshake**: outgoing actions from a
+ *     v1.0 surface carry a unique `actionId` + `wantResponse: true` in a
+ *     v1.0 envelope, and — the UX point — the hook optimistically writes
+ *     `{status: "pending", ...}` to the surface's reserved `/ui/response`
+ *     path the moment the action fires, so bound status components show
+ *     feedback at 0 RTT. The server's `actionResponse` (echoing the
+ *     `actionId`) resolves the pending entry; a watchdog timeout writes a
+ *     timeout error into `/ui/response` if no response ever arrives. Every
+ *     response also dispatches a bubbling `"ash-a2ui:action-response"`
+ *     CustomEvent on the container for host-level integration.
+ *   - **executes `callFunction`** server->client calls against the
+ *     host-registered function table (`configureAshA2ui({functions})`;
+ *     `openUrl` ships as a built-in) and pushes the `functionResponse`
+ *     back as the "a2ui:function_response" LiveView event when
+ *     `wantResponse` is set.
+ *
+ * v0.9.1 surfaces are untouched: their messages pass straight through and
+ * their actions keep the v0.9.1 envelope.
  *
  * ## Contract with the host bundle
  *
@@ -91,7 +123,16 @@ let hookDeps = null;
  *   MessageProcessor: Function,
  *   catalogs: Array<object>,
  *   markdown?: {ContextProvider: Function, context: object, render: Function},
+ *   functions?: Object<string, Function>,
+ *   pendingMessage?: string,
+ *   actionTimeoutMs?: number,
  * }} deps
+ *   `functions` — client-side functions the server may invoke via v1.0
+ *   `callFunction` messages, keyed by name (`(args) => value | Promise`);
+ *   merged over the built-in `openUrl`. `pendingMessage` — the optimistic
+ *   `/ui/response` message shown while a v1.0 action is in flight (default
+ *   "Working…"). `actionTimeoutMs` — v1.0 actionResponse watchdog (default
+ *   10000; 0 disables).
  */
 export function configureAshA2ui(deps) {
   hookDeps = deps;
@@ -114,12 +155,40 @@ function resolveDeps() {
     MessageProcessor: deps.MessageProcessor,
     catalogs: deps.catalogs || [],
     markdown: deps.markdown || null,
+    functions: {...BUILTIN_FUNCTIONS, ...(deps.functions || {})},
+    pendingMessage: deps.pendingMessage || "Working…",
+    actionTimeoutMs: deps.actionTimeoutMs === undefined ? 10000 : deps.actionTimeoutMs,
   };
+}
+
+const V1_VERSION = "v1.0";
+const V1_BASIC_CATALOG_ID = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json";
+const V0_BASIC_CATALOG_ID = "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json";
+
+const BUILTIN_FUNCTIONS = {
+  openUrl: (args) => {
+    if (args && typeof args.url === "string") window.open(args.url, "_blank", "noopener");
+    return null;
+  },
+};
+
+function randomActionId() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `a2ui-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export const AshA2ui = {
   mounted() {
-    const {MessageProcessor, catalogs, markdown} = resolveDeps();
+    const deps = resolveDeps();
+    const {MessageProcessor, catalogs, markdown} = deps;
+    this.deps = deps;
+
+    // v1.0 state: which surfaces speak v1.0, and the in-flight
+    // actionId -> {surfaceId, timer} entries awaiting an actionResponse.
+    this.v1Surfaces = new Set();
+    this.pendingActions = new Map();
 
     // Provide the markdown renderer to Text components (which consume the
     // `Context.markdown` Lit context) from the hook container, an ancestor
@@ -158,6 +227,11 @@ export const AshA2ui = {
   },
 
   destroyed() {
+    for (const pending of this.pendingActions.values()) {
+      if (pending.timer) clearTimeout(pending.timer);
+    }
+    this.pendingActions.clear();
+
     if (this.surfaceSubscription && typeof this.surfaceSubscription.unsubscribe === "function") {
       this.surfaceSubscription.unsubscribe();
     }
@@ -177,9 +251,23 @@ export const AshA2ui = {
     this.markdownProvider = null;
   },
 
-  /** Feeds pushed server->client messages into the renderer. */
+  /**
+   * Feeds pushed server->client messages into the renderer, adapting v1.0
+   * messages for the v0_9 MessageProcessor (see "A2UI v1.0 support" above).
+   */
   processMessages(messages) {
     if (!this.processor) return;
+
+    const adapted = [];
+    for (const message of messages) {
+      adapted.push(...this.adaptMessage(message));
+    }
+
+    this.feedProcessor(adapted);
+  },
+
+  feedProcessor(messages) {
+    if (messages.length === 0) return;
 
     if (typeof this.processor.processMessages === "function") {
       this.processor.processMessages(messages);
@@ -194,24 +282,197 @@ export const AshA2ui = {
   },
 
   /**
+   * Maps one server->client message to the list of messages handed to the
+   * v0_9 renderer. v0.9.1 messages pass through untouched; v1.0 messages
+   * are expanded/consumed per the header comment.
+   */
+  adaptMessage(message) {
+    if (!message || message.version !== V1_VERSION) return [message];
+
+    if (message.createSurface) return this.adaptV1CreateSurface(message.createSurface);
+
+    if (message.actionResponse) {
+      this.resolveActionResponse(message);
+      return [];
+    }
+
+    if (message.callFunction) {
+      this.executeFunctionCall(message);
+      return [];
+    }
+
+    if (message.deleteSurface && message.deleteSurface.surfaceId) {
+      this.v1Surfaces.delete(message.deleteSurface.surfaceId);
+    }
+
+    // updateComponents / updateDataModel / deleteSurface payloads are
+    // shape-compatible with v0.9; the processor does not inspect `version`.
+    return [message];
+  },
+
+  /**
+   * Expands v1.0's inline createSurface (surface + components + dataModel
+   * in one message) into the v0.9 triple the published renderer
+   * understands, mapping the v1.0 basic-catalog id onto a registered
+   * catalog and passing surfaceProperties through as the surface's theme
+   * metadata slot.
+   */
+  adaptV1CreateSurface(payload) {
+    const {surfaceId, catalogId, surfaceProperties, sendDataModel, components, dataModel} = payload;
+
+    this.v1Surfaces.add(surfaceId);
+
+    const registered = (this.deps.catalogs || []).some((catalog) => catalog.id === catalogId);
+    const mappedCatalogId =
+      !registered && catalogId === V1_BASIC_CATALOG_ID ? V0_BASIC_CATALOG_ID : catalogId;
+
+    const create = {surfaceId, catalogId: mappedCatalogId};
+    if (surfaceProperties) create.theme = surfaceProperties;
+    if (sendDataModel !== undefined) create.sendDataModel = sendDataModel;
+
+    const expanded = [{createSurface: create}];
+
+    if (components && components.length > 0) {
+      expanded.push({updateComponents: {surfaceId, components}});
+    }
+
+    if (dataModel !== undefined) {
+      expanded.push({updateDataModel: {surfaceId, path: "/", value: dataModel}});
+    }
+
+    return expanded;
+  },
+
+  /**
+   * Resolves a server actionResponse: clears the pending entry (and its
+   * watchdog) and re-dispatches the response as a bubbling DOM event so
+   * host code can react per action.
+   */
+  resolveActionResponse(message) {
+    const pending = this.pendingActions.get(message.actionId);
+
+    if (pending) {
+      if (pending.timer) clearTimeout(pending.timer);
+      this.pendingActions.delete(message.actionId);
+    }
+
+    this.el.dispatchEvent(
+      new CustomEvent("ash-a2ui:action-response", {
+        bubbles: true,
+        detail: {
+          actionId: message.actionId,
+          surfaceId: pending ? pending.surfaceId : undefined,
+          response: message.actionResponse,
+        },
+      }),
+    );
+  },
+
+  /**
+   * Executes a v1.0 server->client callFunction against the registered
+   * function table and, when `wantResponse` is set, pushes the
+   * functionResponse (or error) back as the "a2ui:function_response"
+   * LiveView event.
+   */
+  executeFunctionCall(message) {
+    const {functionCallId, wantResponse, callFunction} = message;
+    const name = callFunction && callFunction.call;
+    const fn = this.deps.functions[name];
+
+    const reply = (payload) => {
+      if (wantResponse) this.pushEvent("a2ui:function_response", payload);
+    };
+
+    if (typeof fn !== "function") {
+      console.warn(`AshA2ui hook: no client function registered for callFunction "${name}"`);
+      reply({
+        version: V1_VERSION,
+        error: {code: "UNSUPPORTED_FUNCTION", message: `Unknown function: ${name}`, functionCallId},
+      });
+      return;
+    }
+
+    Promise.resolve()
+      .then(() => fn(callFunction.args || {}))
+      .then((value) =>
+        reply({
+          version: V1_VERSION,
+          functionResponse: {functionCallId, call: name, value: value === undefined ? null : value},
+        }),
+      )
+      .catch((error) =>
+        reply({
+          version: V1_VERSION,
+          error: {code: "FUNCTION_FAILED", message: String(error), functionCallId},
+        }),
+      );
+  },
+
+  /**
+   * Writes the surface's reserved /ui/response object locally (through the
+   * renderer's own data model) — the 0-RTT pending/timeout feedback path.
+   */
+  writeUiResponse(surfaceId, value) {
+    this.feedProcessor([
+      {updateDataModel: {surfaceId, path: "/ui/response", value}},
+    ]);
+  },
+
+  /**
    * Wraps a renderer action (A2uiClientAction or a DOM event detail) in the
-   * A2UI v0.9.1 client->server envelope and pushes it to the LiveView.
+   * A2UI client->server envelope of the surface's protocol version and
+   * pushes it to the LiveView.
+   *
+   * For v1.0 surfaces the action carries a generated `actionId` +
+   * `wantResponse: true`, an optimistic `{status: "pending"}` is written to
+   * `/ui/response` (instant feedback on the bound status components), and a
+   * watchdog turns a never-answered action into a visible timeout error.
    */
   forwardAction(action) {
     if (!action || !action.name) return;
 
-    const envelope = {
-      version: "v0.9.1",
-      action: {
-        name: action.name,
-        surfaceId: action.surfaceId,
-        sourceComponentId: action.sourceComponentId,
-        timestamp: action.timestamp || new Date().toISOString(),
-        context: action.context || {},
-      },
+    const inner = {
+      name: action.name,
+      surfaceId: action.surfaceId,
+      sourceComponentId: action.sourceComponentId,
+      timestamp: action.timestamp || new Date().toISOString(),
+      context: action.context || {},
     };
 
-    this.pushEvent("a2ui:action", envelope);
+    if (!this.v1Surfaces.has(action.surfaceId)) {
+      this.pushEvent("a2ui:action", {version: "v0.9.1", action: inner});
+      return;
+    }
+
+    const actionId = randomActionId();
+    inner.actionId = actionId;
+    inner.wantResponse = true;
+
+    let timer = null;
+    if (this.deps.actionTimeoutMs > 0) {
+      timer = setTimeout(() => {
+        if (!this.pendingActions.has(actionId)) return;
+        this.pendingActions.delete(actionId);
+        this.writeUiResponse(action.surfaceId, {
+          status: "error",
+          code: "TIMEOUT",
+          message: "The server did not respond in time. Please try again.",
+          result: {},
+          resultText: "",
+        });
+      }, this.deps.actionTimeoutMs);
+    }
+
+    this.pendingActions.set(actionId, {surfaceId: action.surfaceId, timer});
+
+    this.writeUiResponse(action.surfaceId, {
+      status: "pending",
+      message: this.deps.pendingMessage,
+      result: {},
+      resultText: "",
+    });
+
+    this.pushEvent("a2ui:action", {version: V1_VERSION, action: inner});
   },
 };
 

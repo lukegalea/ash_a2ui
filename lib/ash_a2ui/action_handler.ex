@@ -169,7 +169,7 @@ defmodule AshA2ui.ActionHandler do
     ash_opts = ash_opts(view, opts)
 
     case parse(action_message) do
-      {:ok, name, context} ->
+      {:ok, name, context, action_id} ->
         env = %{
           view: view,
           ash_opts: ash_opts,
@@ -177,11 +177,56 @@ defmodule AshA2ui.ActionHandler do
           selected: AshA2ui.ContextRunner.selected(view, Map.get(context, "contexts"))
         }
 
-        dispatch(name, context, env)
+        name
+        |> dispatch(context, env)
+        |> attach_action_response(view, action_id)
 
-      :error ->
+      {:error, action_id} ->
         {:error, [status(view, "Malformed action message: expected an A2UI action envelope.")]}
+        |> attach_action_response(view, action_id)
     end
+  end
+
+  # --- v1.0 actionResponse ----------------------------------------------------
+
+  # On a v1.0 surface, an action that carried an `actionId` (the client set
+  # `wantResponse: true` — every action event the v1.0 encoder emits does)
+  # gets a synchronous `actionResponse` message prepended to the follow-ups:
+  # `{"value": <the /ui/response object>}` on success, `{"error": {code,
+  # message}}` on failure. The response mirrors the reserved `/ui/response`
+  # data-model write when the batch contains one (see the moduledoc), so
+  # programmatic consumers get the exact per-action result without scraping
+  # the data model. v0.9.1 surfaces (and v1.0 actions without an actionId)
+  # are byte-identical to before.
+  defp attach_action_response({tag, messages}, %{spec_version: :v1_0}, action_id)
+       when is_binary(action_id) and action_id != "" do
+    response =
+      case {tag, find_response_write(messages)} do
+        {:ok, nil} ->
+          %{"value" => %{"status" => "ok", "message" => ""}}
+
+        {:ok, response} ->
+          %{"value" => response}
+
+        {:error, %{"code" => code, "message" => message}} ->
+          %{"error" => %{"code" => code, "message" => message}}
+
+        {:error, _no_structured_write} ->
+          %{"error" => %{"code" => "ACTION_FAILED", "message" => "The action failed."}}
+      end
+
+    message = %{"version" => "v1.0", "actionId" => action_id, "actionResponse" => response}
+
+    {tag, [message | messages]}
+  end
+
+  defp attach_action_response(result, _view, _action_id), do: result
+
+  defp find_response_write(messages) do
+    Enum.find_value(messages, fn
+      %{"updateDataModel" => %{"path" => "/ui/response", "value" => value}} -> value
+      _other -> nil
+    end)
   end
 
   # Success refreshes respect the client's current query state when a table
@@ -215,13 +260,27 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  # Parses the envelope into {:ok, name, context, action_id} (action_id is
+  # the v1.0 per-call response correlation id, nil when absent) or
+  # {:error, action_id} for malformed messages — the id is still extracted
+  # best-effort so a v1.0 client's pending action can be answered with an
+  # error response instead of hanging.
   defp parse(%{"action" => %{"name" => name} = action}) when is_binary(name),
-    do: {:ok, name, Map.get(action, "context") || %{}}
+    do: {:ok, name, Map.get(action, "context") || %{}, action_id(action)}
 
   defp parse(%{"name" => name} = action) when is_binary(name),
-    do: {:ok, name, Map.get(action, "context") || %{}}
+    do: {:ok, name, Map.get(action, "context") || %{}, action_id(action)}
 
-  defp parse(_action_message), do: :error
+  defp parse(%{"action" => %{} = action}), do: {:error, action_id(action)}
+  defp parse(%{} = action), do: {:error, action_id(action)}
+  defp parse(_action_message), do: {:error, nil}
+
+  defp action_id(action) do
+    case Map.get(action, "actionId") do
+      id when is_binary(id) -> id
+      _absent_or_invalid -> nil
+    end
+  end
 
   defp ash_opts(view, opts) do
     [
@@ -1045,6 +1104,14 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  defp generic_result({:ok, result}, %{view: %{spec_version: :v1_0}} = env, status_text)
+       when is_map(result) and not is_struct(result) do
+    success(env, status_text, %{
+      "result" => json_map(result),
+      "resultText" => action_result_text(result)
+    })
+  end
+
   defp generic_result({:ok, result}, %{view: view} = env, status_text)
        when is_map(result) and not is_struct(result) do
     extra = [
@@ -1181,6 +1248,32 @@ defmodule AshA2ui.ActionHandler do
   # stale result never outlives the action that produced it (a map-returning
   # generic action clears and then sets them in the same batch).
   defp success(env, status_text, extra \\ [])
+
+  # v1.0 success: the status trio collapses into one structured
+  # `/ui/response` write ({"status": "ok", "message": ..., "result": ...,
+  # "resultText": ...}); `extra` is the response-object override a
+  # map-returning generic action merges in (a map instead of a message
+  # list — see generic_result/3). Everything else (refreshes, /form and
+  # /errors clears, /select and /prompt resets) is identical to v0.9.1.
+  defp success(%{view: %{spec_version: :v1_0} = view} = env, status_text, extra) do
+    response =
+      %{"status" => "ok", "message" => status_text, "result" => %{}, "resultText" => ""}
+      |> Map.merge((is_map(extra) && extra) || %{})
+
+    case refresh_messages(env) do
+      {:ok, refresh} ->
+        {:ok,
+         refresh ++
+           [
+             update_data_model(view, "/form", ResolvedView.initial_form(view)),
+             update_data_model(view, "/errors", %{}),
+             update_data_model(view, "/ui/response", response)
+           ] ++ select_clear(view) ++ prompt_clear(env)}
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
 
   defp success(%{view: view} = env, status_text, extra) do
     case refresh_messages(env) do
@@ -1416,7 +1509,7 @@ defmodule AshA2ui.ActionHandler do
   # --- error mapping ---------------------------------------------------------
 
   defp error_messages(view, %Ash.Error.Forbidden{}) do
-    [status(view, "You are not authorized to perform this action.")]
+    [status(view, "You are not authorized to perform this action.", "UNAUTHORIZED")]
   end
 
   defp error_messages(view, error) do
@@ -1425,7 +1518,9 @@ defmodule AshA2ui.ActionHandler do
         update_data_model(view, "/errors/" <> Enum.map_join(segments, "/", &to_string/1), text)
       end
 
-    field_messages ++ [status(view, error_status(field_messages, error))]
+    code = if field_messages == [], do: "ACTION_FAILED", else: "VALIDATION_FAILED"
+
+    field_messages ++ [status(view, error_status(field_messages, error), code)]
   end
 
   # Validation errors on create_inline rows are additionally mirrored INTO
@@ -1555,11 +1650,31 @@ defmodule AshA2ui.ActionHandler do
 
   # --- message + value construction ------------------------------------------
 
-  defp status(view, text), do: update_data_model(view, "/ui/status", text)
+  # An error/rejection status: the v0.9.1 `/ui/status` text, or (v1.0) the
+  # structured `/ui/response` object whose `code` also drives the
+  # actionResponse error (see attach_action_response/3). Dispatch rejections
+  # default to "INVALID_ACTION"; error_messages/2 passes the mapped code.
+  defp status(view, text, code \\ "INVALID_ACTION")
+
+  defp status(%{spec_version: :v1_0} = view, text, code) do
+    update_data_model(
+      view,
+      "/ui/response",
+      %{
+        "status" => "error",
+        "code" => code,
+        "message" => text,
+        "result" => %{},
+        "resultText" => ""
+      }
+    )
+  end
+
+  defp status(view, text, _code), do: update_data_model(view, "/ui/status", text)
 
   defp update_data_model(view, path, value) do
     %{
-      "version" => @version,
+      "version" => version_string(view),
       "updateDataModel" => %{
         "surfaceId" => view.surface_id,
         "path" => path,
@@ -1567,6 +1682,9 @@ defmodule AshA2ui.ActionHandler do
       }
     }
   end
+
+  defp version_string(%{spec_version: :v1_0}), do: "v1.0"
+  defp version_string(_view), do: @version
 
   defp record_values(view, record, fields) do
     fields

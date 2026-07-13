@@ -57,6 +57,7 @@ defmodule AshA2ui.ResolvedView do
     :create_action,
     :update_action,
     :query,
+    spec_version: :v0_9_1,
     components: [],
     fields: %{},
     row_actions: [],
@@ -178,6 +179,7 @@ defmodule AshA2ui.ResolvedView do
   @type t :: %__MODULE__{
           resource: module,
           surface_id: String.t(),
+          spec_version: :v0_9_1 | :v1_0,
           components: [AshA2ui.Component.t()],
           fields: %{atom => AshA2ui.Field.t()},
           read_action: atom | nil,
@@ -198,7 +200,15 @@ defmodule AshA2ui.ResolvedView do
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
 
-  @resolve_opts [:actor, :tenant, :domain, :authorize?, :query_state, :context_state]
+  @resolve_opts [
+    :actor,
+    :tenant,
+    :domain,
+    :authorize?,
+    :query_state,
+    :context_state,
+    :surface_properties
+  ]
 
   @doc """
   Resolves the `a2ui` DSL of `resource_or_ui_module` (an `Ash.Resource` using
@@ -240,6 +250,7 @@ defmodule AshA2ui.ResolvedView do
     %__MODULE__{
       resource: resource,
       surface_id: surface_id(resource_or_ui_module, resource),
+      spec_version: spec_version(resource_or_ui_module),
       components: components,
       fields: fields,
       read_action: single && single.read_action,
@@ -739,6 +750,16 @@ defmodule AshA2ui.ResolvedView do
     case AshA2ui.Info.a2ui_surface_id(resource_or_ui_module) do
       {:ok, surface_id} -> surface_id
       :error -> default_surface_id(resource)
+    end
+  end
+
+  # The declared `spec_version` DSL option, normalized to the version atom
+  # the encoders and handler dispatch on. Defaults to :v0_9_1 (the DSL
+  # default), so pre-1.0 surfaces are untouched.
+  defp spec_version(resource_or_ui_module) do
+    case AshA2ui.Info.a2ui_spec_version(resource_or_ui_module) do
+      {:ok, "1.0"} -> :v1_0
+      _default -> :v0_9_1
     end
   end
 

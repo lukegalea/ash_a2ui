@@ -62,6 +62,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`surface_id`](#a2ui-surface_id){: #a2ui-surface_id } | `String.t` |  | Unique id of the A2UI surface. Defaults to the underscored short name of the resource. |
+| [`spec_version`](#a2ui-spec_version){: #a2ui-spec_version } | `"0.9.1" \| "1.0"` | `"0.9.1"` | The A2UI protocol version the surface speaks: "0.9.1" - the default - or "1.0" recommended for new surfaces — inline createSurface, per-action actionResponse feedback; requires a v1.0-capable renderer or the shipped hook. See the A2UI 1.0 topic. |
 | [`for_resource`](#a2ui-for_resource){: #a2ui-for_resource } | `module` |  | The Ash resource this surface renders. Only used (and required) in standalone UI modules (`use AshA2ui.Standalone`). |
 | [`add_render_action?`](#a2ui-add_render_action?){: #a2ui-add_render_action? } | `boolean` | `true` | Whether to automatically add a generic `render_a2ui` action returning the surface's A2UI messages. Ignored in standalone UI modules. |
 
