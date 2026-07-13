@@ -15,6 +15,7 @@ defmodule AshA2ui.Component do
     :update_action,
     :query,
     :row_layout,
+    :sections,
     :select_context,
     :context,
     context_filter: [],
@@ -25,15 +26,18 @@ defmodule AshA2ui.Component do
     __spark_metadata__: nil
   ]
 
+  # `as` is an atom in the DSL; the per-section component copies
+  # `AshA2ui.Sections.expand/2` produces carry their runtime string name.
   @type t :: %__MODULE__{
           name: :table | :form | :detail,
-          as: atom | nil,
+          as: atom | String.t() | nil,
           fields: [atom] | nil,
           read_action: atom | nil,
           create_action: atom | nil,
           update_action: atom | nil,
           query: atom | nil,
           row_layout: AshA2ui.RowLayout.t() | nil,
+          sections: AshA2ui.Sections.t() | nil,
           select_context: atom | nil,
           context: atom | nil,
           context_filter: [{atom, atom}],
@@ -50,9 +54,11 @@ defmodule AshA2ui.Component do
 
   Component keys are unique per surface (verified at compile time) and are
   the `<component_name>` segment of multi-table data-model paths
-  (`/records/<component_name>`, `/query/<component_name>`).
+  (`/records/<component_name>`, `/query/<component_name>`). On the
+  per-section component copies `AshA2ui.Sections.expand/2` produces, the
+  key is the runtime string name.
   """
-  @spec key(t()) :: atom
+  @spec key(t()) :: atom | String.t()
   def key(%__MODULE__{as: nil, name: name}), do: name
   def key(%__MODULE__{as: as}), do: as
 end

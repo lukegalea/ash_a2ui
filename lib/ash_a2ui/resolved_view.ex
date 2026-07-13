@@ -58,6 +58,7 @@ defmodule AshA2ui.ResolvedView do
     :update_action,
     :query,
     spec_version: :v0_9_1,
+    sectioned?: false,
     components: [],
     fields: %{},
     row_actions: [],
@@ -121,9 +122,16 @@ defmodule AshA2ui.ResolvedView do
 
   The `resource`/`read_action`/`query`/`loads` keys make a table scope a
   drop-in read scope for `AshA2ui.QueryRunner`.
+
+  A table whose component declares a `sections` block is a **template**: its
+  `sections` key carries the resolved dynamic-section config, and
+  `AshA2ui.Sections.expand/2` replaces it with one concrete table per
+  section record before encoding/dispatch — each with a runtime string
+  `name`, runtime-scoped paths, and a `section` key
+  (`%{value:, label:, filter: {attribute, value}}`) its reads AND on.
   """
   @type table :: %{
-          name: atom,
+          name: atom | String.t(),
           component: AshA2ui.Component.t(),
           resource: module,
           read_action: atom | nil,
@@ -134,7 +142,8 @@ defmodule AshA2ui.ResolvedView do
           query_path: String.t() | nil,
           context_filter: [{atom, atom}],
           require_context: [atom],
-          select_context: atom | nil
+          select_context: atom | nil,
+          sections: map | nil
         }
 
   @typedoc """
@@ -180,6 +189,7 @@ defmodule AshA2ui.ResolvedView do
           resource: module,
           surface_id: String.t(),
           spec_version: :v0_9_1 | :v1_0,
+          sectioned?: boolean,
           components: [AshA2ui.Component.t()],
           fields: %{atom => AshA2ui.Field.t()},
           read_action: atom | nil,
@@ -246,7 +256,8 @@ defmodule AshA2ui.ResolvedView do
       Map.new(AshA2ui.Info.action_settings(resource_or_ui_module), &{&1.name, &1})
 
     tables = resolve_tables(resource_or_ui_module, resource, components, fields, actions)
-    single = if match?([_only], tables), do: hd(tables)
+    sectioned? = Enum.any?(tables, & &1.sections)
+    single = if match?([_only], tables) and not sectioned?, do: hd(tables)
 
     create_action = component_action(form, :create_action, resource, :create)
     update_action = component_action(form, :update_action, resource, :update)
@@ -256,6 +267,7 @@ defmodule AshA2ui.ResolvedView do
       resource: resource,
       surface_id: surface_id(resource_or_ui_module, resource),
       spec_version: spec_version(resource_or_ui_module, opts[:spec_version]),
+      sectioned?: sectioned?,
       components: components,
       fields: fields,
       read_action: single && single.read_action,
@@ -365,10 +377,13 @@ defmodule AshA2ui.ResolvedView do
 
   @doc """
   Whether the view is a multi-table surface (two or more `:table`
-  components), switching the data model to the scoped
-  `/records/<component_name>` / `/query/<component_name>` paths.
+  components, or any table with a `sections` block — the runtime table
+  count of a dynamic set must not change the data-model shape), switching
+  the data model to the scoped `/records/<component_name>` /
+  `/query/<component_name>` paths.
   """
   @spec multi_table?(t()) :: boolean
+  def multi_table?(%__MODULE__{sectioned?: true}), do: true
   def multi_table?(%__MODULE__{tables: tables}), do: match?([_, _ | _], tables)
 
   @doc """
@@ -527,7 +542,9 @@ defmodule AshA2ui.ResolvedView do
 
   defp resolve_tables(resource_or_ui_module, resource, components, fields, actions) do
     table_components = Enum.filter(components, &(&1.name == :table))
-    multi? = match?([_, _ | _], table_components)
+
+    multi? =
+      match?([_, _ | _], table_components) or Enum.any?(table_components, & &1.sections)
 
     Enum.map(table_components, fn component ->
       name = AshA2ui.Component.key(component)
@@ -548,9 +565,43 @@ defmodule AshA2ui.ResolvedView do
         query_path: query && ((multi? && "/query/#{name}") || "/query"),
         context_filter: component.context_filter,
         require_context: component.require_context,
-        select_context: component.select_context
+        select_context: component.select_context,
+        sections: resolve_sections(component.sections)
       }
     end)
+  end
+
+  # The resolved dynamic-section config of a sectioned table template, with
+  # the label/value/sort/read_action defaults applied (like an option
+  # source's). Consumed by `AshA2ui.Sections.expand/2`.
+  defp resolve_sections(nil), do: nil
+
+  defp resolve_sections(sections) do
+    value = sections.value || sections_single_primary_key!(sections)
+    label = sections.label || default_option_label(sections.source, value)
+
+    %{
+      source: sections.source,
+      scope_by: sections.scope_by,
+      label: label,
+      value: value,
+      read_action: sections.read_action || primary_action_name(sections.source, :read),
+      sort: sections.sort || label,
+      limit: sections.limit
+    }
+  end
+
+  defp sections_single_primary_key!(sections) do
+    case ResourceInfo.primary_key(sections.source) do
+      [key] ->
+        key
+
+      composite ->
+        raise ArgumentError,
+              "cannot infer the section value for a sections block: " <>
+                "#{inspect(sections.source)} has a composite primary key " <>
+                "#{inspect(composite)} — set value explicitly"
+    end
   end
 
   # --- contexts and details -----------------------------------------------------

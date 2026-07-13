@@ -381,12 +381,20 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   # Single-table headings show the humanized resource name (frozen); each
-  # multi-table section is headed by its humanized component name.
+  # multi-table section is headed by its humanized component name — except
+  # the expanded tables of a dynamic table set, which are headed by their
+  # section record's label (see AshA2ui.Sections).
   defp table_components(view, table, sfx) do
     heading =
-      if ResolvedView.multi_table?(view),
-        do: humanize(table.name),
-        else: humanize_resource(view.resource)
+      case Map.get(table, :section) do
+        %{label: label} ->
+          label
+
+        _not_a_section ->
+          if ResolvedView.multi_table?(view),
+            do: humanize(table.name),
+            else: humanize_resource(view.resource)
+      end
 
     [
       %{

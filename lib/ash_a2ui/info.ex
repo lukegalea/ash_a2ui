@@ -119,7 +119,11 @@ defmodule AshA2ui.Info do
   """
   @spec build_surface(module | Spark.Dsl.t(), keyword) :: [map]
   def build_surface(resource_or_ui_module, opts \\ []) do
-    resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
+    resolved_view =
+      resource_or_ui_module
+      |> ResolvedView.resolve(opts)
+      |> AshA2ui.Sections.expand!(opts)
+
     {records, opts} = load_and_put_state!(resolved_view, opts)
 
     encoder(resolved_view).encode_surface(resolved_view, records, opts)
@@ -134,7 +138,11 @@ defmodule AshA2ui.Info do
   """
   @spec build_data_model(module | Spark.Dsl.t(), keyword) :: map
   def build_data_model(resource_or_ui_module, opts \\ []) do
-    resolved_view = ResolvedView.resolve(resource_or_ui_module, opts)
+    resolved_view =
+      resource_or_ui_module
+      |> ResolvedView.resolve(opts)
+      |> AshA2ui.Sections.expand!(opts)
+
     {records, opts} = load_and_put_state!(resolved_view, opts)
 
     encoder(resolved_view).encode_data_model(resolved_view, records, opts)
@@ -184,16 +192,13 @@ defmodule AshA2ui.Info do
   # multi-table surfaces) is handed to the encoder via the `:query_state`
   # option.
   defp load_records!(resolved_view, selected, opts) do
-    case resolved_view.tables do
-      [] ->
-        {[], opts}
-
-      [single] ->
-        {records, query_state} = load_table!(resolved_view, single, selected, opts)
-        {records, (query_state && Keyword.put(opts, :query_state, query_state)) || opts}
-
-      tables ->
-        loaded = Enum.map(tables, &{&1.name, load_table!(resolved_view, &1, selected, opts)})
+    cond do
+      ResolvedView.multi_table?(resolved_view) ->
+        loaded =
+          Enum.map(
+            resolved_view.tables,
+            &{&1.name, load_table!(resolved_view, &1, selected, opts)}
+          )
 
         records = Map.new(loaded, fn {name, {records, _state}} -> {name, records} end)
 
@@ -201,6 +206,14 @@ defmodule AshA2ui.Info do
           for {name, {_records, state}} <- loaded, not is_nil(state), into: %{}, do: {name, state}
 
         {records, (states != %{} && Keyword.put(opts, :query_state, states)) || opts}
+
+      resolved_view.tables == [] ->
+        {[], opts}
+
+      true ->
+        [single] = resolved_view.tables
+        {records, query_state} = load_table!(resolved_view, single, selected, opts)
+        {records, (query_state && Keyword.put(opts, :query_state, query_state)) || opts}
     end
   end
 

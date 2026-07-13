@@ -27,5 +27,7 @@ defmodule AshA2ui.Test.Domain do
     resource AshA2ui.Test.Clinic
     resource AshA2ui.Test.ClinicMembership
     resource AshA2ui.Test.Appointment
+    resource AshA2ui.Test.Bucket
+    resource AshA2ui.Test.BucketWord
   end
 end

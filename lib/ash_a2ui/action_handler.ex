@@ -170,16 +170,23 @@ defmodule AshA2ui.ActionHandler do
 
     case parse(action_message) do
       {:ok, name, context, action_id} ->
-        env = %{
-          view: view,
-          ash_opts: ash_opts,
-          refresh: refresh_params(view, context),
-          selected: AshA2ui.ContextRunner.selected(view, Map.get(context, "contexts"))
-        }
+        case AshA2ui.Sections.expand(view, ash_opts) do
+          {:ok, view} ->
+            env = %{
+              view: view,
+              ash_opts: ash_opts,
+              refresh: refresh_params(view, context),
+              selected: AshA2ui.ContextRunner.selected(view, Map.get(context, "contexts"))
+            }
 
-        name
-        |> dispatch(context, env)
-        |> attach_action_response(view, action_id)
+            name
+            |> dispatch(context, env)
+            |> attach_action_response(view, action_id)
+
+          {:error, error} ->
+            {:error, error_messages(view, error)}
+            |> attach_action_response(view, action_id)
+        end
 
       {:error, action_id} ->
         {:error, [status(view, "Malformed action message: expected an A2UI action envelope.")]}

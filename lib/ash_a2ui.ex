@@ -580,6 +580,79 @@ defmodule AshA2ui do
     ]
   }
 
+  @table_sections %Spark.Dsl.Entity{
+    name: :sections,
+    describe: """
+    Dynamic table sets: declares this `:table` component as a **template**
+    expanded at runtime into one concrete table per record of a `source`
+    resource. Each section's table reads the surface resource scoped by
+    `scope_by == <section record's value>`, is headed by the section
+    record's `label`, and follows the multi-table data-model contract under
+    its runtime name `<component_key>_<sanitized value>`
+    (`/records/<runtime name>`, `/query/<runtime name>`). The source read is
+    actor-scoped and authorized like any other read. A surface with a
+    sectioned table is always a multi-table surface, regardless of how many
+    sections the source yields at runtime.
+    """,
+    examples: [
+      """
+      sections do
+        source MyApp.Dictionary.Bucket
+        scope_by :bucket_id
+        label :name
+      end
+      """
+    ],
+    target: AshA2ui.Sections,
+    schema: [
+      source: [
+        type: {:behaviour, Ash.Resource},
+        required: true,
+        doc: "The Ash resource whose records enumerate the sections at render time."
+      ],
+      scope_by: [
+        type: :atom,
+        required: true,
+        doc: """
+        The public attribute of the **table's** resource each section's reads
+        filter on (`scope_by == <section record's value attribute>`).
+        """
+      ],
+      label: [
+        type: :atom,
+        doc: """
+        The source attribute shown as each section's table heading. Defaults
+        like an option label (first existing public attribute of `[:name,
+        :title, :label, :username, :email]`, else the section value).
+        """
+      ],
+      value: [
+        type: :atom,
+        doc: """
+        The source attribute providing each section's scope value (matched
+        against `scope_by`) and its runtime name. Defaults to the source's
+        primary key (required explicitly when composite).
+        """
+      ],
+      read_action: [
+        type: :atom,
+        doc: "The source read action enumerating the sections. Defaults to the primary read."
+      ],
+      sort: [
+        type: :atom,
+        doc: """
+        The source attribute sections are ordered by (ascending). Defaults to
+        the resolved `label`.
+        """
+      ],
+      limit: [
+        type: :pos_integer,
+        default: 50,
+        doc: "Maximum number of sections rendered (the source read's limit)."
+      ]
+    ]
+  }
+
   @component %Spark.Dsl.Entity{
     name: :component,
     describe: """
@@ -608,8 +681,13 @@ defmodule AshA2ui do
     ],
     target: AshA2ui.Component,
     args: [:name, {:optional, :as}],
-    entities: [nested_forms: [@nested_form], groups: [@group], row_layout: [@row_layout]],
-    singleton_entity_keys: [:row_layout],
+    entities: [
+      nested_forms: [@nested_form],
+      groups: [@group],
+      row_layout: [@row_layout],
+      sections: [@table_sections]
+    ],
+    singleton_entity_keys: [:row_layout, :sections],
     schema: [
       name: [
         type: {:one_of, [:table, :form, :detail]},
@@ -839,6 +917,7 @@ defmodule AshA2ui do
     AshA2ui.Verifiers.VerifyFields,
     AshA2ui.Verifiers.VerifyActions,
     AshA2ui.Verifiers.VerifyQueries,
+    AshA2ui.Verifiers.VerifySections,
     AshA2ui.Verifiers.VerifyRelationships,
     AshA2ui.Verifiers.VerifyNestedForms
   ]

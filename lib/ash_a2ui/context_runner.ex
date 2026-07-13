@@ -97,9 +97,11 @@ defmodule AshA2ui.ContextRunner do
   @doc """
   The scope filters a table's reads must AND on: one `{attribute, cast
   value}` per `context_filter` entry whose context is selected (values that
-  don't cast are treated as unselected). Returns `:require_unmet` when the
-  table declares `require_context` and none of those contexts are selected —
-  the table must render no records and execute no read.
+  don't cast are treated as unselected), plus — on the expanded tables of a
+  dynamic table set (see `AshA2ui.Sections`) — the table's section filter.
+  Returns `:require_unmet` when the table declares `require_context` and
+  none of those contexts are selected — the table must render no records
+  and execute no read.
   """
   @spec table_scope(ResolvedView.t(), ResolvedView.table() | map, selected) ::
           {:ok, [{atom, term}]} | :require_unmet
@@ -122,9 +124,18 @@ defmodule AshA2ui.ContextRunner do
         Enum.any?(scope, fn {_attribute, _cast, name} -> name in require_context end)
 
     if require_met? do
-      {:ok, Enum.map(scope, fn {attribute, cast, _name} -> {attribute, cast} end)}
+      {:ok,
+       section_scope(table) ++
+         Enum.map(scope, fn {attribute, cast, _name} -> {attribute, cast} end)}
     else
       :require_unmet
+    end
+  end
+
+  defp section_scope(table) do
+    case Map.get(table, :section) do
+      %{filter: {attribute, value}} -> [{attribute, value}]
+      _not_a_section -> []
     end
   end
 
