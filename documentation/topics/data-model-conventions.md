@@ -27,6 +27,8 @@ custom hooks, and tests can rely on them.
 | `/context/<name>` | One surface context's selection state (`{"search", "value", "label"}`) — only on surfaces with `context` entities | Initial render; every `context_select`/`context_clear` (the whole `/context` map is rewritten) |
 | `/options/<context>` | A picker context's option list (same `{"label","value"}` shape; shares the `/options` namespace) | Initial render; `context_search`; cascades that re-derive a dependent context's options |
 | `/detail/<context>` | The selected record of a context rendered by `:detail` components (`{}` while unselected) | Initial render; every selection change of that context |
+| `/report/<name>` | One `:report` component's state: `{"params" => %{<param> => ""}, "rows" => []}` — only on surfaces with `:report` components | Initial render (empty params, no rows); every `report` action rewrites `/report/<name>/rows` |
+| `/export/<name>/columns` | The column-selection booleans of a `column_select` export (`%{<column> => true}`, all checked initially) — only on surfaces with column-selectable `export` blocks | Initial render; toggled client-side by the checkboxes (never rewritten by the server) |
 
 Everything under these paths uses camelCase string keys, matching the rest of
 the wire format.
@@ -414,6 +416,16 @@ actions carry two extra keys (server-computed; see
 
 Rows of tables without conditional actions are unchanged (no underscore
 keys).
+
+## Per-row error mirrors: `"_error_<field>"`
+
+When an inline cell edit (`editable` — see
+[Reports, Exports, and Editable Tables](reports-and-exports.md)) fails
+validation, the failing row of the refreshed `/records` write carries the
+submitted value (so the user can correct it in place) and the error text at
+its reserved `"_error_<field>"` key — the only template-relative place a
+per-row error Text can bind. Rows of untouched records, and all rows after
+a subsequent successful commit, carry no underscore error keys.
 
 ## Why conventions instead of message types
 

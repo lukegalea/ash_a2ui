@@ -96,6 +96,7 @@ defmodule AshA2ui.MixProject do
         "documentation/topics/actions-and-authorization.md",
         "documentation/topics/queries-and-pagination.md",
         "documentation/topics/multi-section-surfaces.md",
+        "documentation/topics/reports-and-exports.md",
         "documentation/topics/contexts-and-details.md",
         "documentation/topics/agent-composed-surfaces.md",
         "documentation/topics/relationships.md",
@@ -124,7 +125,10 @@ defmodule AshA2ui.MixProject do
           AshA2ui.Component,
           AshA2ui.Field,
           AshA2ui.Query,
-          AshA2ui.Action
+          AshA2ui.Action,
+          AshA2ui.Sections,
+          AshA2ui.Editable,
+          AshA2ui.Export
         ],
         Encoding: [
           AshA2ui.Encoder,
@@ -134,7 +138,8 @@ defmodule AshA2ui.MixProject do
         ],
         Actions: [
           AshA2ui.ActionHandler,
-          AshA2ui.QueryRunner
+          AshA2ui.QueryRunner,
+          AshA2ui.Csv
         ],
         "LiveView Transport": [
           AshA2ui.LiveRenderer

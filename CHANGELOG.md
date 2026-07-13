@@ -42,6 +42,55 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   Transports pin the wire version to what their renderer actually speaks
   (CopilotKit's shipped A2UI renderer processes v0.9 messages only)
   without touching surface DSLs.
+- **Dynamic table sets** — a `sections` block on a `:table` component turns
+  it into a template expanded at render time into one concrete table per
+  record of a `source` resource (`scope_by` filters each section's reads,
+  `label` heads it). Runtime tables follow the frozen multi-table contract
+  under `<template_key>_<sanitized value>` names (`/records/<name>`,
+  `/query/<name>`, `"component"` action contexts, per-section
+  search/pagination); a sectioned surface is always multi-table so path
+  shapes never change between renders; `refreshes` naming the template key
+  fans out to the whole set. Source reads are actor-scoped and authorized;
+  `AshA2ui.Verifiers.VerifySections` checks the block at compile time. See
+  the multi-section-surfaces topic.
+- **Inline cell editing** — an `editable` block on a `:table` component
+  renders allowlisted fields as in-row TextField + Save cells committing
+  per cell through the new `"edit_cell"` client action (context: `recordId`,
+  `component`, `field`, `value`); the server runs the declared
+  `update_action` with just that field's value. Validation errors keep the
+  submitted value in the row and mirror the message into the failing row's
+  reserved `_error_<field>` key (the only template-relative place a per-row
+  error Text can bind) alongside the standard `/errors/<field>` write; on
+  v1.0 surfaces the actionResponse handshake drives per-cell
+  pending→settled feedback. `AshA2ui.Verifiers.VerifyEditable` checks the
+  block at compile time (table-only, no `row_layout`, fields accepted by
+  the action).
+- **Aggregate/report surfaces** — the new `:report` component kind renders
+  the computed rows of a declared generic (`:action`-type) Ash action:
+  param TextFields bound under the reserved `/report/<name>/params` paths,
+  a Run button dispatching the new `"report"` client action, and a result
+  list templated over `/report/<name>/rows`. Params are filtered to the
+  declared allowlist and cast against the action's arguments; the action
+  runs actor-scoped/authorized; returned row maps are trimmed to the
+  declared `fields` column allowlist. `AshA2ui.Verifiers.VerifyReports`
+  checks reports at compile time (generic action, argument params, explicit
+  fields, no table/form options). See the new reports-and-exports topic and
+  the `ash_a2ui:reports` usage rules.
+- **CSV file export (v1.0-only)** — an `export` block on a `:table` or
+  `:report` component renders an Export CSV button; the server re-runs the
+  component's data (tables honor search/filters/preset + context scope but
+  ignore pagination, up to `limit`; reports re-run with the carried params)
+  and answers with the frozen **`downloadFile`** callFunction contract
+  (`{"filename", "mimeType", "dataUrl"}`, `url` variant for signed-URL
+  hosts) — the first shipped use of the v1.0 server→client RPC channel.
+  `column_select true` adds per-column checkboxes bound under the reserved
+  `/export/<name>/columns` paths. The shipped hook implements
+  `downloadFile` as a built-in; the new AshA2ui extension catalog
+  (`priv/a2ui/v1_0/catalogs/ash_a2ui/catalog.json`) declares it for
+  validating renderers; `AshA2ui.Csv` does RFC-4180 encoding.
+  Declaring `export` on a 0.9.1 surface is a compile-time error
+  (`AshA2ui.Verifiers.VerifyExport`) — 0.9.1 has no RPC channel to carry a
+  download.
 
 - **A2UI v1.0 (RC) support** — to our knowledge the first framework
   shipping a v1.0 conformance suite. `spec_version "1.0"` (DSL) /

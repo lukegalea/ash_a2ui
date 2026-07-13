@@ -27,6 +27,9 @@ for the resource named by `for_resource`).
    * nested_form
    * group
    * row_layout
+   * sections
+   * editable
+   * export
  * [field](#a2ui-field)
  * [action](#a2ui-action)
 
@@ -261,8 +264,10 @@ component name, as \\ nil
 
 A UI component of the surface. `:table` renders records from a read action;
 `:form` renders create/update forms; `:detail` renders the record selected
-into a `context` as a read-only field grid. A surface may declare several
-`:table` (or `:detail`) components (sections) by giving each one a
+into a `context` as a read-only field grid; `:report` renders the computed
+rows of a declared generic action (aggregate/report queries — see the
+`action` and `params` options). A surface may declare several `:table`,
+`:detail` or `:report` components (sections) by giving each one a
 distinguishing name via the optional second argument, e.g.
 `component :table, :new_items do ... end`.
 
@@ -271,6 +276,9 @@ distinguishing name via the optional second argument, e.g.
  * [nested_form](#a2ui-component-nested_form)
  * [group](#a2ui-component-group)
  * [row_layout](#a2ui-component-row_layout)
+ * [sections](#a2ui-component-sections)
+ * [editable](#a2ui-component-editable)
+ * [export](#a2ui-component-export)
 
 
 ### Examples
@@ -298,14 +306,16 @@ end
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`name`](#a2ui-component-name){: #a2ui-component-name .spark-required} | `:table \| :form \| :detail` |  | The kind of component. One of `:table`, `:form` or `:detail`. |
-| [`as`](#a2ui-component-as){: #a2ui-component-as } | `atom` |  | The distinguishing name of this component on surfaces with several `:table` (or `:detail`) components (e.g. `component :table, :new_items`). Optional — an unnamed component is named by its kind. Names must be unique across the surface's components; `:form` components cannot be named. |
+| [`name`](#a2ui-component-name){: #a2ui-component-name .spark-required} | `:table \| :form \| :detail \| :report` |  | The kind of component. One of `:table`, `:form`, `:detail` or `:report`. |
+| [`as`](#a2ui-component-as){: #a2ui-component-as } | `atom` |  | The distinguishing name of this component on surfaces with several `:table` (or `:detail` / `:report`) components (e.g. `component :table, :new_items`). Optional — an unnamed component is named by its kind. Names must be unique across the surface's components; `:form` components cannot be named. |
 ### Options
 
 | Name | Type | Default | Docs |
 |------|------|---------|------|
-| [`fields`](#a2ui-component-fields){: #a2ui-component-fields } | `list(atom)` |  | Fields shown by this component. Omit to infer (public attributes for tables, action accepts for forms). |
+| [`fields`](#a2ui-component-fields){: #a2ui-component-fields } | `list(atom)` |  | Fields shown by this component. Omit to infer (public attributes for tables, action accepts for forms). On `:report` components: the column allowlist, required — each entry is a key of the returned row maps, rendered in this order. |
 | [`read_action`](#a2ui-component-read_action){: #a2ui-component-read_action } | `atom` |  | The read action used to load records (tables). Defaults to the primary read. |
+| [`action`](#a2ui-component-action){: #a2ui-component-action } | `atom` |  | The generic Ash action a `:report` component runs (actor-scoped, authorized like any other invocation). Must return a list of row maps; the declared `fields` select and order the rendered columns. Required on `:report` components. |
+| [`params`](#a2ui-component-params){: #a2ui-component-params } | `list(atom)` |  | The arguments of a `:report` component's `action` rendered as inputs (bound to the reserved `/report/<name>/params/<param>` paths and submitted by the Run button). Defaults to all of the action's arguments, in declaration order. |
 | [`create_action`](#a2ui-component-create_action){: #a2ui-component-create_action } | `atom` |  | The create action submitted by the form. |
 | [`update_action`](#a2ui-component-update_action){: #a2ui-component-update_action } | `atom` |  | The update action submitted by the form. |
 | [`row_actions`](#a2ui-component-row_actions){: #a2ui-component-row_actions } | `list(atom)` | `[]` | Actions rendered as per-row buttons (tables). |
@@ -469,6 +479,144 @@ end
 ### Introspection
 
 Target: `AshA2ui.RowLayout`
+
+### a2ui.component.sections
+
+
+Dynamic table sets: declares this `:table` component as a **template**
+expanded at runtime into one concrete table per record of a `source`
+resource. Each section's table reads the surface resource scoped by
+`scope_by == <section record's value>`, is headed by the section
+record's `label`, and follows the multi-table data-model contract under
+its runtime name `<component_key>_<sanitized value>`
+(`/records/<runtime name>`, `/query/<runtime name>`). The source read is
+actor-scoped and authorized like any other read. A surface with a
+sectioned table is always a multi-table surface, regardless of how many
+sections the source yields at runtime.
+
+
+
+
+### Examples
+```
+sections do
+  source MyApp.Dictionary.Bucket
+  scope_by :bucket_id
+  label :name
+end
+
+```
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`source`](#a2ui-component-sections-source){: #a2ui-component-sections-source .spark-required} | `module` |  | The Ash resource whose records enumerate the sections at render time. |
+| [`scope_by`](#a2ui-component-sections-scope_by){: #a2ui-component-sections-scope_by .spark-required} | `atom` |  | The public attribute of the **table's** resource each section's reads filter on (`scope_by == <section record's value attribute>`). |
+| [`label`](#a2ui-component-sections-label){: #a2ui-component-sections-label } | `atom` |  | The source attribute shown as each section's table heading. Defaults like an option label (first existing public attribute of `[:name, :title, :label, :username, :email]`, else the section value). |
+| [`value`](#a2ui-component-sections-value){: #a2ui-component-sections-value } | `atom` |  | The source attribute providing each section's scope value (matched against `scope_by`) and its runtime name. Defaults to the source's primary key (required explicitly when composite). |
+| [`read_action`](#a2ui-component-sections-read_action){: #a2ui-component-sections-read_action } | `atom` |  | The source read action enumerating the sections. Defaults to the primary read. |
+| [`sort`](#a2ui-component-sections-sort){: #a2ui-component-sections-sort } | `atom` |  | The source attribute sections are ordered by (ascending). Defaults to the resolved `label`. |
+| [`limit`](#a2ui-component-sections-limit){: #a2ui-component-sections-limit } | `pos_integer` | `50` | Maximum number of sections rendered (the source read's limit). |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Sections`
+
+### a2ui.component.editable
+
+
+Inline cell editing for a `:table` component: the listed fields render as
+in-row inputs with a per-cell Save button dispatching the `"edit_cell"`
+client action — the server runs `update_action` on the identified record
+with just that field's value (cast against the action like any client
+input). On v1.0 surfaces the per-action `actionResponse` handshake gives
+each cell pending→settled feedback; validation errors are mirrored into
+the failing row's reserved `_error_<field>` key (rendered next to the
+cell) alongside the standard `/errors/<field>` write. Not supported
+together with a `row_layout` (card rows render read-only meta values).
+
+
+
+
+### Examples
+```
+editable do
+  fields [:replacement]
+  update_action :update_replacement
+end
+
+```
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`fields`](#a2ui-component-editable-fields){: #a2ui-component-editable-fields .spark-required} | `list(atom)` |  | The table fields rendered as editable cells. Each must be one of the table's fields and accepted by the resolved `update_action`. |
+| [`update_action`](#a2ui-component-editable-update_action){: #a2ui-component-editable-update_action } | `atom` |  | The update action a cell commit runs (with only the edited field's value). Defaults to the resource's primary update. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Editable`
+
+### a2ui.component.export
+
+
+CSV file export for a `:table` or `:report` component (**v1.0-only** —
+delivery rides the `callFunction` channel): renders an "Export CSV"
+button dispatching the `"export"` client action; the server re-runs the
+component's data (a table honors its current query state and context
+scope; a report its current params) and answers with a `downloadFile`
+callFunction carrying a base64 `text/csv` data URL (frozen contract —
+see `AshA2ui.Export`). With `column_select`, per-column checkboxes bound
+under the reserved `/export/<name>/columns/<field>` paths let the user
+pick the exported columns.
+
+
+
+
+### Examples
+```
+export do
+  filename "misspellings.csv"
+  column_select true
+end
+
+```
+
+
+
+
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`filename`](#a2ui-component-export-filename){: #a2ui-component-export-filename } | `String.t` |  | The downloaded file's name. Defaults to "<component name>.csv". |
+| [`columns`](#a2ui-component-export-columns){: #a2ui-component-export-columns } | `list(atom)` |  | The exportable columns (header order). Each must be one of the component's fields. Defaults to all of the component's fields. |
+| [`column_select`](#a2ui-component-export-column_select){: #a2ui-component-export-column_select } | `boolean` | `false` | Render one checkbox per exportable column (bound to the reserved `/export/<name>/columns/<field>` paths); the export includes only the checked columns. |
+| [`limit`](#a2ui-component-export-limit){: #a2ui-component-export-limit } | `pos_integer` | `10000` | Row cap of a table export (the export read's page size — a table export ignores the on-screen pagination but keeps search, filters and preset). Ignored on reports. |
+
+
+
+
+
+### Introspection
+
+Target: `AshA2ui.Export`
 
 
 

@@ -27,11 +27,19 @@ AshA2ui.ActionHandler.handle(resource_or_ui_module, envelope,
   `{:error, _}`** — error messages carry the validation feedback the
   renderer must display.
 
-## The five action names
+## The core action names
 
-Only `"submit_form"`, `"invoke"`, `"prompt"`, `"select_row"` and `"query"`
-exist. Don't invent new `action.name` values; add a proper Ash action and
-expose it via `row_actions` instead.
+The core envelope names are `"submit_form"`, `"invoke"`, `"prompt"`,
+`"select_row"` and `"query"`. Feature-specific names exist only when the
+surface declares the feature: the context actions (`ash_a2ui:contexts`),
+the relationship-picker actions (`ash_a2ui:relationships`), `"edit_cell"`
+(tables with an `editable` block — commits one field of one record through
+the declared update action, with validation errors mirrored into the
+failing row's `_error_<field>` key), `"report"` (`:report` components —
+runs the declared generic action; `ash_a2ui:reports`) and `"export"`
+(components with an `export` block — answers with the `downloadFile`
+callFunction; `ash_a2ui:reports`). Don't invent new `action.name` values;
+add a proper Ash action and expose it via `row_actions` instead.
 
 - `"submit_form"` — context `%{"values" => %{...}, "recordId" => id | nil}`.
   No `recordId` runs the form's create action; with one, the update action.

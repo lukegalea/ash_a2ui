@@ -30,6 +30,9 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
   runtime JSON surface spec, the resource allowlist, the server-held
   surface contract, LLM tool integration, and the spec lifecycle
   (serialize/deserialize, diff, promote to a DSL module).
+- `ash_a2ui:reports` — `:report` components (aggregate/report queries over
+  generic actions) and `export` blocks (CSV file export via the v1.0
+  `downloadFile` callFunction).
 
 ## Protocol versions
 
@@ -112,14 +115,27 @@ end
   generic `render_a2ui` action returning the surface's messages — set it to
   `false` if you don't want that action on the resource; it is ignored in
   standalone modules).
-- Component names are exactly `:table`, `:form`, and `:detail`. Multiple
-  `:table` components are allowed when each extra one carries a
+- Component names are exactly `:table`, `:form`, `:detail`, and `:report`.
+  Multiple `:table` components are allowed when each extra one carries a
   distinguishing name (`component :table, :new_items do ... end`); that
   turns the surface multi-table with a scoped data model
   (`/records/<name>`, `/query/<name>`) — see the multi-section-surfaces
   topic before designing one. At most one `:form` per surface. `:detail`
   components render a `context`'s selected record — see
-  `ash_a2ui:contexts`.
+  `ash_a2ui:contexts`. `:report` components render the computed rows of a
+  generic action — see `ash_a2ui:reports`.
+- When the *set of table sections* is data (one table per runtime bucket/
+  category), declare one `:table` template with a `sections` block
+  (`source`, `scope_by`, `label`) instead of hardcoding tables — it expands
+  at render time into one scoped table per source record, under runtime
+  names following the multi-table conventions. `refreshes` naming the
+  template key fans out to the whole set (multi-section-surfaces topic).
+- Per-cell editing (spreadsheet-style columns) is an `editable` block on
+  the table (`fields` allowlist + `update_action`), not a form: cells
+  commit through the `"edit_cell"` action, validation errors mirror into
+  the failing row's `_error_<field>` key, and v1.0 surfaces get per-cell
+  pending→settled feedback via the actionResponse handshake. The editable
+  `fields` list is a client-reachable allowlist — keep it minimal.
 - Selection-driven screens (pick a record → scope everything else) use
   `context` entities: server-validated pickers, dependent option lists
   (`depends_on`), context-scoped tables (`context_filter` /
