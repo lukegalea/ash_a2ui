@@ -112,9 +112,10 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
   end
 
   # An `action` entity is refresh metadata for a client-reachable action:
-  # a row action of some table, or the form's create/update action (including
-  # the primary-action defaults a form falls back to, when the resource is
-  # resolvable).
+  # a row action of some table, a table's editable update_action (inline
+  # cell editing), or the form's create/update action (including the
+  # primary-action defaults a form or editable block falls back to, when
+  # the resource is resolvable).
   defp verify_action_references(actions, components, dsl_state, module) do
     reachable = reachable_actions(components, dsl_state)
 
@@ -148,7 +149,30 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
         Enum.reject([component.create_action, component.update_action], &is_nil/1)
     end)
     |> Enum.concat(form_defaults(form, target))
+    |> Enum.concat(editable_actions(components, target))
     |> MapSet.new()
+  end
+
+  # The update actions editable blocks commit through (declared, or the
+  # primary update they fall back to when the resource is resolvable).
+  defp editable_actions(components, target) do
+    components
+    |> Enum.filter(& &1.editable)
+    |> Enum.flat_map(fn component ->
+      case {component.editable.update_action, target} do
+        {nil, nil} ->
+          []
+
+        {nil, target} ->
+          case ResourceInfo.primary_action(target, :update) do
+            %{name: name} -> [name]
+            nil -> []
+          end
+
+        {declared, _target} ->
+          [declared]
+      end
+    end)
   end
 
   # The primary create/update actions a form falls back to when it omits

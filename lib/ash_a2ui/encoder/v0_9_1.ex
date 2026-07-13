@@ -631,7 +631,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "children" => cell_ids ++ action_ids
     }
 
-    [card, row | Enum.flat_map(fields, &cell(view, &1, sfx))]
+    [card, row | Enum.flat_map(fields, &cell(view, table, &1, sfx))]
   end
 
   # Card-style rows (row_layout): the templated record_row becomes a Card
@@ -820,8 +820,53 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   # A cell is a labeled pair: a caption Text with the humanized field name
   # and a body Text bound to the field value — so generated rows read
-  # "Name: Fido" instead of a bare value soup.
-  defp cell(view, field_name, sfx) do
+  # "Name: Fido" instead of a bare value soup. Fields listed in the table's
+  # `editable` config render as editable cells instead (see
+  # editable_cell/4).
+  defp cell(view, table, field_name, sfx) do
+    if field_name in editable_fields(table) do
+      editable_cell(view, table, field_name, sfx)
+    else
+      field = view.fields[field_name]
+      base = "table_cell#{sfx}_#{field_name}"
+
+      [
+        %{
+          "id" => base,
+          "component" => "Row",
+          "children" => ["#{base}_label", "#{base}_value"]
+        },
+        %{
+          "id" => "#{base}_label",
+          "component" => "Text",
+          "text" => humanize(field_name),
+          "variant" => "caption"
+        },
+        %{
+          "id" => "#{base}_value",
+          "component" => "Text",
+          "text" => cell_text(field)
+        }
+      ]
+    end
+  end
+
+  defp editable_fields(table) do
+    case Map.get(table, :editable) do
+      %{fields: fields} -> fields
+      _not_editable -> []
+    end
+  end
+
+  # An editable cell (inline cell editing): a TextField bound to the
+  # template-relative field path — edits stay in the client row until
+  # committed — a Save Button dispatching `edit_cell` with the row's id and
+  # this field's current value, and an error Text bound to the row's
+  # reserved `_error_<field>` mirror (written by the handler when the
+  # commit's validation fails; empty otherwise). On v1.0 surfaces the
+  # Save button's actionResponse handshake drives per-cell pending→settled
+  # feedback.
+  defp editable_cell(view, table, field_name, sfx) do
     field = view.fields[field_name]
     base = "table_cell#{sfx}_#{field_name}"
 
@@ -829,18 +874,40 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => base,
         "component" => "Row",
-        "children" => ["#{base}_label", "#{base}_value"]
+        "align" => "center",
+        "children" => ["#{base}_input", "#{base}_save_button", "#{base}_error"]
       },
       %{
-        "id" => "#{base}_label",
+        "id" => "#{base}_input",
+        "component" => "TextField",
+        "label" => field.label,
+        "value" => %{"path" => to_string(field_name)}
+      },
+      %{
+        "id" => "#{base}_save_button",
+        "component" => "Button",
+        "child" => "#{base}_save_text",
+        "action" => %{
+          "event" => %{
+            "name" => "edit_cell",
+            "context" =>
+              %{
+                "recordId" => %{"path" => "id"},
+                "component" => to_string(table.name),
+                "field" => to_string(field_name),
+                "value" => %{"path" => to_string(field_name)}
+              }
+              |> put_query_binding(view)
+              |> put_contexts_binding(view)
+          }
+        }
+      },
+      %{"id" => "#{base}_save_text", "component" => "Text", "text" => "Save"},
+      %{
+        "id" => "#{base}_error",
         "component" => "Text",
-        "text" => humanize(field_name),
+        "text" => %{"path" => "_error_#{field_name}"},
         "variant" => "caption"
-      },
-      %{
-        "id" => "#{base}_value",
-        "component" => "Text",
-        "text" => cell_text(field)
       }
     ]
   end

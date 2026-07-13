@@ -36,6 +36,11 @@ defmodule AshA2ui.Test.BucketWordsUI do
         label :name
         sort :name
       end
+
+      editable do
+        fields [:replacement]
+        update_action :update_replacement
+      end
     end
 
     action :approve do
@@ -43,6 +48,10 @@ defmodule AshA2ui.Test.BucketWordsUI do
     end
 
     action :destroy do
+      refreshes [:per_bucket]
+    end
+
+    action :update_replacement do
       refreshes [:per_bucket]
     end
   end

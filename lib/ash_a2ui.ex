@@ -653,6 +653,47 @@ defmodule AshA2ui do
     ]
   }
 
+  @editable %Spark.Dsl.Entity{
+    name: :editable,
+    describe: """
+    Inline cell editing for a `:table` component: the listed fields render as
+    in-row inputs with a per-cell Save button dispatching the `"edit_cell"`
+    client action — the server runs `update_action` on the identified record
+    with just that field's value (cast against the action like any client
+    input). On v1.0 surfaces the per-action `actionResponse` handshake gives
+    each cell pending→settled feedback; validation errors are mirrored into
+    the failing row's reserved `_error_<field>` key (rendered next to the
+    cell) alongside the standard `/errors/<field>` write. Not supported
+    together with a `row_layout` (card rows render read-only meta values).
+    """,
+    examples: [
+      """
+      editable do
+        fields [:replacement]
+        update_action :update_replacement
+      end
+      """
+    ],
+    target: AshA2ui.Editable,
+    schema: [
+      fields: [
+        type: {:list, :atom},
+        required: true,
+        doc: """
+        The table fields rendered as editable cells. Each must be one of the
+        table's fields and accepted by the resolved `update_action`.
+        """
+      ],
+      update_action: [
+        type: :atom,
+        doc: """
+        The update action a cell commit runs (with only the edited field's
+        value). Defaults to the resource's primary update.
+        """
+      ]
+    ]
+  }
+
   @component %Spark.Dsl.Entity{
     name: :component,
     describe: """
@@ -685,9 +726,10 @@ defmodule AshA2ui do
       nested_forms: [@nested_form],
       groups: [@group],
       row_layout: [@row_layout],
-      sections: [@table_sections]
+      sections: [@table_sections],
+      editable: [@editable]
     ],
-    singleton_entity_keys: [:row_layout, :sections],
+    singleton_entity_keys: [:row_layout, :sections, :editable],
     schema: [
       name: [
         type: {:one_of, [:table, :form, :detail]},
@@ -918,6 +960,7 @@ defmodule AshA2ui do
     AshA2ui.Verifiers.VerifyActions,
     AshA2ui.Verifiers.VerifyQueries,
     AshA2ui.Verifiers.VerifySections,
+    AshA2ui.Verifiers.VerifyEditable,
     AshA2ui.Verifiers.VerifyRelationships,
     AshA2ui.Verifiers.VerifyNestedForms
   ]

@@ -364,6 +364,19 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  defp dispatch("edit_cell", context, %{view: view} = env) do
+    with {:ok, table} <- edit_table(view, context),
+         {:ok, field} <- edit_field(view, table, context) do
+      case Map.get(context, "recordId") do
+        record_id when is_binary(record_id) ->
+          edit_cell(table, field, record_id, Map.get(context, "value"), env)
+
+        _missing ->
+          {:error, [status(view, ~s(Malformed edit_cell action: context is missing "recordId".))]}
+      end
+    end
+  end
+
   defp dispatch("select_row", context, %{view: view, ash_opts: ash_opts}) do
     case Map.get(context, "recordId") do
       nil ->
@@ -1232,6 +1245,140 @@ defmodule AshA2ui.ActionHandler do
       %Ash.NotLoaded{} -> ""
       nil -> ""
       related -> AshA2ui.Info.option_entry(related, select)["label"]
+    end
+  end
+
+  # --- edit_cell (inline cell editing) ----------------------------------------
+
+  # The table an "edit_cell" action targets: the only table on single-table
+  # surfaces; otherwise the context must carry the source "component" (the
+  # emitted Save buttons always do).
+  defp edit_table(%ResolvedView{tables: [table]}, _context), do: {:ok, table}
+
+  defp edit_table(view, context) do
+    case Map.get(context, "component") do
+      component when is_binary(component) ->
+        case Enum.find(view.tables, &(to_string(&1.name) == component)) do
+          nil -> {:error, [status(view, "Unknown table component #{inspect(component)}.")]}
+          table -> {:ok, table}
+        end
+
+      _missing ->
+        {:error,
+         [
+           status(
+             view,
+             ~s(Malformed edit_cell action: multi-table surfaces require "component" in the context.)
+           )
+         ]}
+    end
+  end
+
+  # The edited field must be in the table's declared editable allowlist —
+  # like row_actions, that allowlist is the authorization surface for
+  # client-triggered cell commits.
+  defp edit_field(view, table, context) do
+    requested = Map.get(context, "field")
+    editable = Map.get(table, :editable)
+
+    allowed =
+      is_binary(requested) && editable &&
+        Enum.find(editable.fields, &(to_string(&1) == requested))
+
+    cond do
+      not is_binary(requested) ->
+        {:error, [status(view, ~s(Malformed edit_cell action: context is missing "field".))]}
+
+      is_nil(editable) ->
+        {:error,
+         [status(view, "Table #{inspect(to_string(table.name))} declares no editable fields.")]}
+
+      allowed in [nil, false] ->
+        {:error,
+         [
+           status(
+             view,
+             "Field #{inspect(requested)} is not editable: it is not listed in the table's " <>
+               "editable fields."
+           )
+         ]}
+
+      true ->
+        {:ok, allowed}
+    end
+  end
+
+  # Commits one cell: the table's editable update_action runs on the
+  # identified record with just the edited field's value (cast like any
+  # client input). Success follows the standard refresh conventions (the
+  # update_action's `refreshes` metadata applies). A validation error emits
+  # the standard /errors/<field> + status writes plus a row-scoped mirror:
+  # the table's records are re-read and the failing row gets the submitted
+  # value back and the message at its reserved `_error_<field>` key — the
+  # only template-relative place a per-row error Text can bind.
+  defp edit_cell(table, field, record_id, value, %{view: view, ash_opts: ash_opts} = env) do
+    action = table.editable.update_action
+    env = Map.put(env, :invoked, action)
+
+    result =
+      with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
+        params = cast_values(view.resource, action, %{to_string(field) => value})
+
+        record
+        |> Ash.Changeset.for_update(action, params, ash_opts)
+        |> Ash.update()
+      end
+
+    case result do
+      {:ok, _record} ->
+        success(env, "Updated #{humanize(to_string(field))}.")
+
+      {:error, error} ->
+        {:error,
+         error_messages(view, error) ++
+           cell_error_mirrors(view, table, field, record_id, value, error, env)}
+    end
+  end
+
+  defp cell_error_mirrors(view, table, field, record_id, value, error, env) do
+    text =
+      Enum.find_value(field_errors(error), fn
+        {[^field], text} -> text
+        _other_field -> nil
+      end)
+
+    with true <- is_binary(text),
+         {:ok, scope} <- ContextRunner.table_scope(view, table, env.selected),
+         {:ok, records} <- read_edited_table(table, scope, env) do
+      rows =
+        Enum.map(rows(view, table, records), fn row ->
+          if row["id"] == record_id do
+            row
+            |> Map.put(to_string(field), value)
+            |> Map.put("_error_#{field}", text)
+          else
+            row
+          end
+        end)
+
+      [update_data_model(view, table.records_path, rows)]
+    else
+      _no_field_error_or_unreadable -> []
+    end
+  end
+
+  # The mirror re-read honors the client's current query state (page,
+  # search, filters), like any refresh.
+  defp read_edited_table(%{query: nil} = table, scope, env) do
+    read_table(table, env.ash_opts, scope)
+  end
+
+  defp read_edited_table(table, scope, env) do
+    params = env.refresh[table.name] || QueryRunner.default_params(table.query)
+
+    case QueryRunner.run(table, params, env.ash_opts, scope) do
+      {:ok, records, _query_state} -> {:ok, records}
+      {:error, error} -> {:error, error}
     end
   end
 

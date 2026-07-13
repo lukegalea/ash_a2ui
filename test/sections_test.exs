@@ -146,7 +146,8 @@ defmodule AshA2ui.SectionsTest do
 
       assert expanded.refreshes == %{
                approve: [:new_words, runtime_name(bucket)],
-               destroy: [runtime_name(bucket)]
+               destroy: [runtime_name(bucket)],
+               update_replacement: [runtime_name(bucket)]
              }
     end
 

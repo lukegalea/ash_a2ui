@@ -143,7 +143,8 @@ defmodule AshA2ui.ResolvedView do
           context_filter: [{atom, atom}],
           require_context: [atom],
           select_context: atom | nil,
-          sections: map | nil
+          sections: map | nil,
+          editable: map | nil
         }
 
   @typedoc """
@@ -566,9 +567,21 @@ defmodule AshA2ui.ResolvedView do
         context_filter: component.context_filter,
         require_context: component.require_context,
         select_context: component.select_context,
-        sections: resolve_sections(component.sections)
+        sections: resolve_sections(component.sections),
+        editable: resolve_editable(resource, component.editable)
       }
     end)
+  end
+
+  # The resolved inline-cell-editing config of a table: the editable field
+  # allowlist and the effective update action a cell commit runs.
+  defp resolve_editable(_resource, nil), do: nil
+
+  defp resolve_editable(resource, editable) do
+    %{
+      fields: editable.fields,
+      update_action: editable.update_action || primary_action_name(resource, :update)
+    }
   end
 
   # The resolved dynamic-section config of a sectioned table template, with
