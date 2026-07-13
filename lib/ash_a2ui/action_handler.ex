@@ -370,6 +370,14 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  defp dispatch("export", context, %{view: view} = env) do
+    with {:ok, target} <- export_target(view, context),
+         {:ok, columns} <- export_columns(view, target, context),
+         {:ok, row_maps} <- export_row_maps(target, context, env) do
+      deliver_export(view, target, columns, row_maps)
+    end
+  end
+
   defp dispatch("edit_cell", context, %{view: view} = env) do
     with {:ok, table} <- edit_table(view, context),
          {:ok, field} <- edit_field(view, table, context) do
@@ -1292,6 +1300,25 @@ defmodule AshA2ui.ActionHandler do
   # (atom or string keys accepted) and written wholesale to the reserved
   # /report/<name>/rows path.
   defp run_report(view, report, params, ash_opts) do
+    case invoke_report(view, report, params, ash_opts) do
+      {:ok, serialized} ->
+        {:ok,
+         [
+           update_data_model(view, "#{report.path}/rows", serialized),
+           report_status(view, length(serialized))
+         ]}
+
+      {:error, messages} ->
+        {:error, messages}
+    end
+  end
+
+  # The shared report invocation ("report" runs + report exports): filters
+  # the client params to the declared allowlist (blank inputs are unset),
+  # casts them against the action's arguments, runs the action and
+  # serializes the returned row maps down to the declared fields. Errors
+  # come back as ready-made error messages.
+  defp invoke_report(view, report, params, ash_opts) do
     allowed = MapSet.new(report.params, &Atom.to_string/1)
 
     filtered =
@@ -1307,13 +1334,7 @@ defmodule AshA2ui.ActionHandler do
     |> Ash.run_action()
     |> case do
       {:ok, rows} when is_list(rows) ->
-        serialized = Enum.map(rows, &report_row(report, &1))
-
-        {:ok,
-         [
-           update_data_model(view, "#{report.path}/rows", serialized),
-           report_status(view, length(serialized))
-         ]}
+        {:ok, Enum.map(rows, &report_row(report, &1))}
 
       {:ok, _not_a_list} ->
         {:error,
@@ -1360,6 +1381,139 @@ defmodule AshA2ui.ActionHandler do
 
   defp report_status_text(1), do: "Report complete: 1 row."
   defp report_status_text(count), do: "Report complete: #{count} rows."
+
+  # --- export (CSV file export, v1.0-only — see AshA2ui.Export) ----------------
+
+  # The table or report an "export" action targets: the only exporting
+  # component when there is exactly one; otherwise the context must carry
+  # the source "component" (the emitted Export buttons always do).
+  defp export_target(view, context) do
+    exporting = Enum.filter(view.tables ++ view.reports, & &1.export)
+
+    case {exporting, Map.get(context, "component")} do
+      {[], _any} ->
+        {:error, [status(view, "This surface declares no exports.")]}
+
+      {[only], nil} ->
+        {:ok, only}
+
+      {_several, component} when is_binary(component) ->
+        case Enum.find(exporting, &(to_string(&1.name) == component)) do
+          nil -> {:error, [status(view, "Unknown export component #{inspect(component)}.")]}
+          target -> {:ok, target}
+        end
+
+      {_several, _missing} ->
+        {:error,
+         [
+           status(
+             view,
+             ~s(Malformed export action: surfaces with several exports require "component" ) <>
+               "in the context."
+           )
+         ]}
+    end
+  end
+
+  # The exported columns: the declared allowlist, narrowed by the carried
+  # column selection (`"columns"` — the /export/<name>/columns booleans)
+  # when the export declares column_select. Unknown keys are ignored (the
+  # allowlist is the declared columns, never client input); an
+  # every-column-unchecked selection is rejected.
+  defp export_columns(_view, %{export: %{column_select: false} = export}, _context) do
+    {:ok, export.columns}
+  end
+
+  defp export_columns(view, %{export: export}, context) do
+    selection = Map.get(context, "columns")
+
+    columns =
+      if is_map(selection) do
+        Enum.filter(export.columns, &(Map.get(selection, to_string(&1)) == true))
+      else
+        export.columns
+      end
+
+    case columns do
+      [] -> {:error, [status(view, "Select at least one column to export.")]}
+      columns -> {:ok, columns}
+    end
+  end
+
+  # A table export re-reads the table under its context scope and — when a
+  # query is configured — the carried query state's search/filters/preset,
+  # but always page 1 at the export row cap (an export is the filtered set,
+  # not the on-screen page). A report export re-runs the generic action
+  # with the carried params. Both serialize through the standard row
+  # serialization, so CSV cells match what the table/report renders.
+  defp export_row_maps(%{path: _report_path} = report, context, %{view: view, ash_opts: ash_opts}) do
+    invoke_report(view, report, Map.get(context, "params"), ash_opts)
+  end
+
+  defp export_row_maps(table, _context, %{view: view} = env) do
+    case ContextRunner.table_scope(view, table, env.selected) do
+      :require_unmet ->
+        {:ok, []}
+
+      {:ok, scope} ->
+        case read_export_table(table, scope, env) do
+          {:ok, records} -> {:ok, rows(view, table, records)}
+          {:error, error} -> {:error, error_messages(view, error)}
+        end
+    end
+  end
+
+  defp read_export_table(%{query: nil} = table, scope, env) do
+    case read_table(table, env.ash_opts, scope) do
+      {:ok, records} -> {:ok, Enum.take(records, table.export.limit)}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp read_export_table(table, scope, env) do
+    params =
+      (env.refresh[table.name] || QueryRunner.default_params(table.query))
+      |> Map.merge(%{page: 1, page_size: table.export.limit})
+
+    case QueryRunner.run(table, params, env.ash_opts, scope) do
+      {:ok, records, _query_state} -> {:ok, records}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  # The delivery: one `downloadFile` callFunction carrying the CSV as a
+  # base64 data URL (the frozen wire contract — see AshA2ui.Export), plus
+  # the structured success write (mirrored into the actionResponse).
+  defp deliver_export(view, target, columns, row_maps) do
+    headers = Enum.map(columns, &export_header(view, &1))
+    cells = Enum.map(row_maps, fn row -> Enum.map(columns, &Map.get(row, to_string(&1))) end)
+    csv = AshA2ui.Csv.encode(headers, cells)
+    filename = target.export.filename
+
+    call =
+      AshA2ui.Encoder.V1_0.call_function("downloadFile", %{
+        "filename" => filename,
+        "mimeType" => "text/csv",
+        "dataUrl" => AshA2ui.Csv.data_url(csv)
+      })
+
+    response =
+      update_data_model(view, "/ui/response", %{
+        "status" => "ok",
+        "message" => "Exported #{filename} (#{length(cells)} rows).",
+        "result" => %{"filename" => filename, "rows" => length(cells)},
+        "resultText" => ""
+      })
+
+    {:ok, [call, response]}
+  end
+
+  defp export_header(view, column) do
+    case view.fields[column] do
+      %{label: label} when is_binary(label) -> label
+      _undeclared -> humanize(to_string(column))
+    end
+  end
 
   # --- edit_cell (inline cell editing) ----------------------------------------
 

@@ -145,7 +145,8 @@ defmodule AshA2ui.ResolvedView do
           require_context: [atom],
           select_context: atom | nil,
           sections: map | nil,
-          editable: map | nil
+          editable: map | nil,
+          export: map | nil
         }
 
   @typedoc """
@@ -200,7 +201,8 @@ defmodule AshA2ui.ResolvedView do
           action: atom,
           params: [atom],
           fields: [atom],
-          path: String.t()
+          path: String.t(),
+          export: map | nil
         }
 
   @type t :: %__MODULE__{
@@ -587,9 +589,33 @@ defmodule AshA2ui.ResolvedView do
         require_context: component.require_context,
         select_context: component.select_context,
         sections: resolve_sections(component.sections),
-        editable: resolve_editable(resource, component.editable)
+        editable: resolve_editable(resource, component.editable),
+        export: resolve_export(component, component.fields || public_attribute_names(resource))
       }
     end)
+  end
+
+  # The resolved CSV-export config of a table or report: filename, the
+  # exportable columns (defaulting to the component's fields), column
+  # selection and the table row cap. Consumed by the encoder (the Export
+  # button + optional column checkboxes) and the "export" action handler.
+  defp resolve_export(%{export: nil}, _default_columns), do: nil
+
+  defp resolve_export(component, default_columns) do
+    export = component.export
+
+    %{
+      filename: export.filename || "#{AshA2ui.Component.key(component)}.csv",
+      columns: export.columns || default_columns,
+      column_select: export.column_select,
+      limit: export.limit
+    }
+  end
+
+  defp public_attribute_names(resource) do
+    resource
+    |> ResourceInfo.public_attributes()
+    |> Enum.map(& &1.name)
   end
 
   # The resolved inline-cell-editing config of a table: the editable field
@@ -653,7 +679,8 @@ defmodule AshA2ui.ResolvedView do
         action: component.action,
         params: component.params || default_report_params(resource, component),
         fields: component.fields || [],
-        path: "/report/#{name}"
+        path: "/report/#{name}",
+        export: resolve_export(component, component.fields || [])
       }
     end)
   end
@@ -676,6 +703,23 @@ defmodule AshA2ui.ResolvedView do
     Map.new(reports, fn report ->
       {to_string(report.name),
        %{"params" => Map.new(report.params, &{to_string(&1), ""}), "rows" => []}}
+    end)
+  end
+
+  @doc """
+  The initial `/export` state: one `%{"columns" => %{<column> => true}}`
+  entry per component whose `export` declares `column_select` (all columns
+  checked). Empty on surfaces without column-selectable exports (which
+  carry no `"export"` key at all — the frozen data-model shape is
+  unchanged).
+  """
+  @spec export_state(t()) :: %{String.t() => map}
+  def export_state(%__MODULE__{} = view) do
+    (view.tables ++ view.reports)
+    |> Enum.filter(&match?(%{export: %{column_select: true}}, &1))
+    |> Map.new(fn component ->
+      {to_string(component.name),
+       %{"columns" => Map.new(component.export.columns, &{to_string(&1), true})}}
     end)
   end
 

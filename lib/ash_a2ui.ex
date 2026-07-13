@@ -694,6 +694,61 @@ defmodule AshA2ui do
     ]
   }
 
+  @export %Spark.Dsl.Entity{
+    name: :export,
+    describe: """
+    CSV file export for a `:table` or `:report` component (**v1.0-only** —
+    delivery rides the `callFunction` channel): renders an "Export CSV"
+    button dispatching the `"export"` client action; the server re-runs the
+    component's data (a table honors its current query state and context
+    scope; a report its current params) and answers with a `downloadFile`
+    callFunction carrying a base64 `text/csv` data URL (frozen contract —
+    see `AshA2ui.Export`). With `column_select`, per-column checkboxes bound
+    under the reserved `/export/<name>/columns/<field>` paths let the user
+    pick the exported columns.
+    """,
+    examples: [
+      """
+      export do
+        filename "misspellings.csv"
+        column_select true
+      end
+      """
+    ],
+    target: AshA2ui.Export,
+    schema: [
+      filename: [
+        type: :string,
+        doc: ~s(The downloaded file's name. Defaults to "<component name>.csv".)
+      ],
+      columns: [
+        type: {:list, :atom},
+        doc: """
+        The exportable columns (header order). Each must be one of the
+        component's fields. Defaults to all of the component's fields.
+        """
+      ],
+      column_select: [
+        type: :boolean,
+        default: false,
+        doc: """
+        Render one checkbox per exportable column (bound to the reserved
+        `/export/<name>/columns/<field>` paths); the export includes only
+        the checked columns.
+        """
+      ],
+      limit: [
+        type: :pos_integer,
+        default: 10_000,
+        doc: """
+        Row cap of a table export (the export read's page size — a table
+        export ignores the on-screen pagination but keeps search, filters
+        and preset). Ignored on reports.
+        """
+      ]
+    ]
+  }
+
   @component %Spark.Dsl.Entity{
     name: :component,
     describe: """
@@ -729,9 +784,10 @@ defmodule AshA2ui do
       groups: [@group],
       row_layout: [@row_layout],
       sections: [@table_sections],
-      editable: [@editable]
+      editable: [@editable],
+      export: [@export]
     ],
-    singleton_entity_keys: [:row_layout, :sections, :editable],
+    singleton_entity_keys: [:row_layout, :sections, :editable, :export],
     schema: [
       name: [
         type: {:one_of, [:table, :form, :detail, :report]},
@@ -982,6 +1038,7 @@ defmodule AshA2ui do
     AshA2ui.Verifiers.VerifySections,
     AshA2ui.Verifiers.VerifyEditable,
     AshA2ui.Verifiers.VerifyReports,
+    AshA2ui.Verifiers.VerifyExport,
     AshA2ui.Verifiers.VerifyRelationships,
     AshA2ui.Verifiers.VerifyNestedForms
   ]

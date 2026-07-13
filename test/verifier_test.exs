@@ -351,7 +351,8 @@ defmodule AshA2ui.VerifierTest do
           end
         end)
 
-      assert result =~ ~r/only :table, :detail and :report components may carry a distinguishing name/
+      assert result =~
+               ~r/only :table, :detail and :report components may carry a distinguishing name/
     end
 
     test "action entity refreshing an unknown table does not compile cleanly" do

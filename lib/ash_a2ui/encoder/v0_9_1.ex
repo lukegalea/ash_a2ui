@@ -181,7 +181,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
            |> put_prompt_state(resolved_view)
            |> put_select_state(resolved_view)
            |> put_context_data(resolved_view, opts)
-           |> put_report_state(resolved_view)}
+           |> put_report_state(resolved_view)
+           |> put_export_state(resolved_view)}
       end
 
     %{
@@ -240,6 +241,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     case ResolvedView.report_state(view) do
       state when state == %{} -> value
       state -> Map.put(value, "report", state)
+    end
+  end
+
+  # The reserved /export state (per-component column selection, all checked
+  # initially). Omitted entirely on surfaces without column-selectable
+  # exports (frozen shape unchanged).
+  defp put_export_state(value, view) do
+    case ResolvedView.export_state(view) do
+      state when state == %{} -> value
+      state -> Map.put(value, "export", state)
     end
   end
 
@@ -314,6 +325,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
         table_components(view, table, sfx) ++
           query_components(view, table, sfx) ++
+          table_export_components(view, table, sfx) ++
           table_descendants(view, table, sfx)
       end)
 
@@ -369,7 +381,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     ["table_heading#{sfx}"] ++
       ((table.query && ["query#{sfx}_controls"]) || []) ++
       ["records_list#{sfx}"] ++
-      ((table.query && ["query#{sfx}_pagination"]) || [])
+      ((table.query && ["query#{sfx}_pagination"]) || []) ++
+      ((table.export && ["export#{sfx}_controls"]) || [])
   end
 
   defp component_root_children(_view, %{name: :detail} = component),
@@ -1587,6 +1600,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         ]
       end)
 
+    export_section =
+      if report.export do
+        export_components(view, report, "#{base}_export", %{
+          "component" => to_string(report.name),
+          "params" => %{"path" => "#{report.path}/params"}
+        })
+      else
+        []
+      end
+
     [
       %{"id" => base, "component" => "Card", "child" => "#{base}_body"},
       %{
@@ -1595,7 +1618,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "children" =>
           ["#{base}_heading"] ++
             Enum.map(report.params, &"#{base}_param_#{&1}") ++
-            ["#{base}_run_button", "#{base}_list"]
+            ["#{base}_run_button", "#{base}_list"] ++
+            ((report.export && ["#{base}_export_controls"]) || [])
       },
       %{
         "id" => "#{base}_heading",
@@ -1633,7 +1657,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "component" => "Row",
         "children" => Enum.map(report.fields, &"#{base}_cell_#{&1}")
       }
-    ] ++ param_inputs ++ cells
+    ] ++ param_inputs ++ cells ++ export_section
   end
 
   defp report_field_label(view, field) do
@@ -1641,6 +1665,69 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{label: label} when is_binary(label) -> label
       _undeclared -> humanize(field)
     end
+  end
+
+  # --- CSV export (v1.0-only; see AshA2ui.Export) ---
+
+  # A table's export controls: the section-level Row referenced from the
+  # root children ("export<sfx>_controls"). The action context carries the
+  # source component plus the table conventions (current query state,
+  # active contexts) so the export honors what the user sees.
+  defp table_export_components(_view, %{export: nil}, _sfx), do: []
+
+  defp table_export_components(view, table, sfx) do
+    context =
+      %{"component" => to_string(table.name)}
+      |> put_query_binding(view)
+      |> put_contexts_binding(view)
+
+    export_components(view, table, "export#{sfx}", context)
+  end
+
+  # The shared export chrome of a table or report: an optional CheckBox per
+  # exportable column (bound to the reserved /export/<name>/columns/<field>
+  # paths — the frozen column-selection state) and the Export CSV Button
+  # dispatching the "export" client action. A successful export answers
+  # with the frozen `downloadFile` callFunction (see AshA2ui.Export).
+  defp export_components(view, component, base, context) do
+    export = component.export
+
+    checkboxes =
+      if export.column_select do
+        Enum.map(export.columns, fn column ->
+          %{
+            "id" => "#{base}_column_#{column}",
+            "component" => "CheckBox",
+            "label" => report_field_label(view, column),
+            "value" => %{"path" => "/export/#{component.name}/columns/#{column}"}
+          }
+        end)
+      else
+        []
+      end
+
+    context =
+      if export.column_select do
+        Map.put(context, "columns", %{"path" => "/export/#{component.name}/columns"})
+      else
+        context
+      end
+
+    [
+      %{
+        "id" => "#{base}_controls",
+        "component" => "Row",
+        "align" => "center",
+        "children" => Enum.map(checkboxes, & &1["id"]) ++ ["#{base}_button"]
+      },
+      %{
+        "id" => "#{base}_button",
+        "component" => "Button",
+        "child" => "#{base}_button_text",
+        "action" => %{"event" => %{"name" => "export", "context" => context}}
+      },
+      %{"id" => "#{base}_button_text", "component" => "Text", "text" => "Export CSV"}
+    ] ++ checkboxes
   end
 
   # --- nested forms ---

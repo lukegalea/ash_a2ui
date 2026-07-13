@@ -126,6 +126,7 @@ defmodule AshA2ui.Sections do
     Enum.map(section_records, fn record ->
       value = Map.get(record, config.value)
       name = section_name(table.name, value)
+      label = section_string(Map.get(record, config.label))
 
       table
       |> Map.delete(:sections)
@@ -134,13 +135,35 @@ defmodule AshA2ui.Sections do
         component: %{table.component | as: name},
         records_path: "/records/#{name}",
         query_path: table.query && "/query/#{name}",
+        export: section_export(table, label),
         section: %{
           value: value,
-          label: section_string(Map.get(record, config.label)),
+          label: label,
           filter: {config.scope_by, value}
         }
       })
     end)
+  end
+
+  # Each expanded table's export downloads its own section: the template's
+  # declared filename gains a sanitized section-label suffix (or, when
+  # defaulted, becomes "<label>.csv").
+  defp section_export(%{export: nil}, _label), do: nil
+
+  defp section_export(%{export: export, name: template_key}, label) do
+    slug =
+      label
+      |> String.replace(~r/[^a-zA-Z0-9]+/, "_")
+      |> String.trim("_")
+
+    filename =
+      if export.filename == "#{template_key}.csv" do
+        "#{slug}.csv"
+      else
+        String.replace_suffix(export.filename, ".csv", "") <> "_#{slug}.csv"
+      end
+
+    %{export | filename: filename}
   end
 
   # Rebuilds the view around the expanded table set: `components` swaps each

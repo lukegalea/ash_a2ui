@@ -32,7 +32,7 @@
  *     CustomEvent on the container for host-level integration.
  *   - **executes `callFunction`** server->client calls against the
  *     host-registered function table (`configureAshA2ui({functions})`;
- *     `openUrl` ships as a built-in) and pushes the `functionResponse`
+ *     `openUrl` and `downloadFile` ship as built-ins) and pushes the `functionResponse`
  *     back as the "a2ui:function_response" LiveView event when
  *     `wantResponse` is set.
  *
@@ -129,7 +129,7 @@ let hookDeps = null;
  * }} deps
  *   `functions` — client-side functions the server may invoke via v1.0
  *   `callFunction` messages, keyed by name (`(args) => value | Promise`);
- *   merged over the built-in `openUrl`. `pendingMessage` — the optimistic
+ *   merged over the built-in `openUrl` / `downloadFile`. `pendingMessage` — the optimistic
  *   `/ui/response` message shown while a v1.0 action is in flight (default
  *   "Working…"). `actionTimeoutMs` — v1.0 actionResponse watchdog (default
  *   10000; 0 disables).
@@ -168,6 +168,22 @@ const V0_BASIC_CATALOG_ID = "https://a2ui.org/specification/v0_9/catalogs/basic/
 const BUILTIN_FUNCTIONS = {
   openUrl: (args) => {
     if (args && typeof args.url === "string") window.open(args.url, "_blank", "noopener");
+    return null;
+  },
+  // The frozen server-generated file-export contract (see AshA2ui.Export):
+  // `dataUrl` (a data: URL — how AshA2ui delivers CSV exports) or `url`
+  // (a signed download URL, for hosts that upload instead of inlining),
+  // downloaded under `filename` via a transient anchor click.
+  downloadFile: (args) => {
+    const href = args && (typeof args.dataUrl === "string" ? args.dataUrl : args.url);
+    if (typeof href !== "string") return null;
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = (args && args.filename) || "download";
+    anchor.rel = "noopener";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
     return null;
   },
 };
