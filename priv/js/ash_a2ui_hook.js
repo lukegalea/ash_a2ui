@@ -345,8 +345,9 @@ export const AshA2ui = {
 
   /**
    * Resolves a server actionResponse: clears the pending entry (and its
-   * watchdog) and re-dispatches the response as a bubbling DOM event so
-   * host code can react per action.
+   * watchdog), settles the optimistic /ui/response pending state with the
+   * response itself, and re-dispatches the response as a bubbling DOM event
+   * so host code can react per action.
    */
   resolveActionResponse(message) {
     const pending = this.pendingActions.get(message.actionId);
@@ -354,6 +355,30 @@ export const AshA2ui = {
     if (pending) {
       if (pending.timer) clearTimeout(pending.timer);
       this.pendingActions.delete(message.actionId);
+
+      // Settle the optimistic pending write with the response payload so
+      // "Working…" never outlives its action. The actionResponse is the
+      // FIRST message of the server's reply batch, so a server /ui/response
+      // write in the same batch (e.g. an invoke result) lands after this
+      // and wins — this is only the floor.
+      const response = message.actionResponse || {};
+      const settled = response.error
+        ? {
+            status: "error",
+            code: response.error.code || "",
+            message: response.error.message || "",
+            result: {},
+            resultText: "",
+          }
+        : {
+            status: "ok",
+            message: "",
+            result: {},
+            resultText: "",
+            ...(response.value || {}),
+          };
+
+      this.writeUiResponse(pending.surfaceId, settled);
     }
 
     this.el.dispatchEvent(
