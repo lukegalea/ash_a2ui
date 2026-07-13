@@ -252,6 +252,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                "child" => "record_row_content"
              }
 
+      # No row_select_button: the Referral surface declares no :form, so
+      # there is nothing for select_row to populate.
       assert components["record_row_content"]["children"] == [
                "table_cell_code",
                "table_cell_status",
@@ -259,8 +261,7 @@ defmodule AshA2ui.Wave4ReferralTest do
                "table_cell_contact_email",
                "row_action_approve_slot",
                "row_action_decline_slot",
-               "row_action_soft_delete_button",
-               "row_select_button"
+               "row_action_soft_delete_button"
              ]
 
       assert components["row_action_approve_slot"] == %{

@@ -264,6 +264,25 @@ defmodule AshA2ui.ContextTest do
                ]
     end
 
+    test "formless surfaces render no row Select button (nothing to populate)" do
+      seed()
+
+      [_create, %{"updateComponents" => %{"components" => components}}, _data] =
+        Info.build_surface(AppointmentsUI, authorize?: false)
+
+      ids = MapSet.new(components, & &1["id"])
+
+      # AppointmentsUI declares no :form — select_row's only effect is a
+      # /form write nothing binds to, so the dead button is omitted; the
+      # context-select button remains the row's selection affordance.
+      refute "row_select_button" in ids
+      refute "row_select_text" in ids
+      assert "row_context_button" in ids
+
+      row_content = Enum.find(components, &(&1["id"] == "record_row_content"))
+      refute "row_select_button" in row_content["children"]
+    end
+
     test "row select_context button dispatches context_select with bindings" do
       seed()
 

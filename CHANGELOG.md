@@ -8,6 +8,16 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ## Unreleased
 
+### Bug Fixes:
+
+- Formless surfaces no longer render a per-row **Select** button.
+  `select_row`'s only effect is populating `/form` for editing, so on
+  surfaces without a `:form` component the button succeeded silently with
+  no visible result (found on a formless v1.0 master/detail screen where
+  it sat next to the context-select button and read as broken). Row
+  selection on such surfaces is the `select_context` button; the
+  `select_row` handler itself is unchanged.
+
 ### Features:
 
 - **AG-UI transport** (`AshA2ui.AgUi`) — surfaces are now consumable by

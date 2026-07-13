@@ -33,9 +33,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       path `<field>`, `format: :date` rendered through `formatDate`) —
       one `Button` per row action
       (`row_action_<action>_button`: event `invoke`, context
-      `{"action": "<name>", "recordId": {"path": "id"}}`) and a
-      `row_select_button` (event `select_row`, context
-      `{"recordId": {"path": "id"}}`). Tables declaring a `row_layout`
+      `{"action": "<name>", "recordId": {"path": "id"}}`) and — only on
+      surfaces with a `:form` component — a `row_select_button` (event
+      `select_row`, context `{"recordId": {"path": "id"}}`; `select_row`
+      populates `/form`, so formless surfaces omit the button rather than
+      render a control with no visible effect). Tables declaring a `row_layout`
       swap the card's content for a header + metadata-grid structure —
       see the Layout topic and `card_row_components/4`
 
@@ -581,9 +583,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       |> Enum.unzip()
 
     # The context-select button (master/detail hook) rides along with the
-    # row-action anchors in either layout.
+    # row-action anchors in either layout, as does the row-select button —
+    # but the latter only on surfaces with a form: select_row exists solely
+    # to populate /form, so a formless surface would render a dead button.
     {context_select_ids, context_select_components} = context_select_button(view, table, sfx)
-    action_ids = action_ids ++ context_select_ids
+
+    select_components =
+      if Enum.any?(view.components, &(&1.name == :form)), do: select_button(table, sfx), else: []
+
+    action_ids =
+      action_ids ++ context_select_ids ++ Enum.map(Enum.take(select_components, 1), & &1["id"])
 
     row_components =
       case table.component.row_layout do
@@ -592,7 +601,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       end
 
     row_components ++
-      List.flatten(action_components) ++ context_select_components ++ select_button(table, sfx)
+      List.flatten(action_components) ++ context_select_components ++ select_components
   end
 
   # Each record renders as a Card (chrome themed via --a2ui-card-*)
@@ -611,7 +620,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     row = %{
       "id" => "record_row#{sfx}_content",
       "component" => "Row",
-      "children" => cell_ids ++ action_ids ++ ["row_select#{sfx}_button"]
+      "children" => cell_ids ++ action_ids
     }
 
     [card, row | Enum.flat_map(fields, &cell(view, &1, sfx))]
@@ -682,7 +691,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_header_right",
         "component" => "Row",
         "align" => "center",
-        "children" => Enum.map(badge, & &1["id"]) ++ action_ids ++ ["row_select#{sfx}_button"]
+        "children" => Enum.map(badge, & &1["id"]) ++ action_ids
       }
     ] ++ badge ++ meta_components
   end
@@ -740,6 +749,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     |> then(fn {row_ids, components} -> {row_ids, List.flatten(components)} end)
   end
 
+  # Only emitted on surfaces with a :form component — select_row's single
+  # purpose is populating /form for editing, so a formless surface gets no
+  # Select button (see table_descendants/3).
   defp select_button(table, sfx) do
     [
       %{

@@ -68,7 +68,10 @@ expose it via `row_actions` instead.
   actual write is the subsequent `"invoke"` with `"values"`.
 - `"select_row"` — context `%{"recordId" => id}`. Returns one
   `updateDataModel` populating `/form` with the record's values (edit-form
-  population).
+  population). The per-row Select button is emitted only on surfaces with
+  a `:form` component — with nothing to populate it would be a dead
+  control (row selection on formless master/detail surfaces is the
+  `select_context` button instead).
 - `"query"` — context `%{"query" => <the query state map>}` plus optional
   `"page"`/`"pageDelta"`. Requires the table to declare a `query` entity;
   every search/sort/filter/page value is validated against that allowlist

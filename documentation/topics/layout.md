@@ -119,7 +119,8 @@ surfaces infix the table name as everywhere else), but the row becomes:
 - `record_row_header` — a `Row` (`justify: spaceBetween`, `align: center`)
   of the title `Text` (variant `h4`, `weight: 1`) and `record_row_header_right`
   — a `Row` of the badge `Text` (variant `caption`, when declared), the
-  row-action anchors, and the `row_select_button`,
+  row-action anchors, and the `row_select_button` (surfaces with a `:form`
+  component only — formless surfaces omit it),
 - `record_row_meta_row_<i>` — the metadata grid: each cell a `weight: 1`
   `Column` (`record_row_meta_cell_<field>`) of a caption `Text` with the
   field's label over a `Text` bound to the value (honoring `format`).
