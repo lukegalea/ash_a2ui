@@ -374,7 +374,9 @@ function detectPicker(surface, id) {
 
   return {
     base,
-    label: labelText,
+    // The v1.0 encoder emits heading Texts as Markdown ("### User"); the
+    // picker renders its label as plain inline text, so strip the marker.
+    label: labelText.replace(/^#{1,6}\s+/, ""),
     labelPath,
     // The picker's selected value lives next to its label in the reserved
     // state shape ({value, label, search}).
