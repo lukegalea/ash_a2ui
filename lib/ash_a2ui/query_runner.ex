@@ -215,8 +215,12 @@ defmodule AshA2ui.QueryRunner do
   `scope` (from `AshA2ui.ContextRunner.table_scope/3`) is a list of
   `{attribute, value}` context filters ANDed onto the read *before*
   search/filters/pagination — total counts and `hasMore` respect it.
+
+  The first argument is anything carrying the queried-read shape —
+  `AshA2ui.ResolvedView.t/0` itself, or one resolved table of a
+  multi-table view (`AshA2ui.ResolvedView.table/0`).
   """
-  @spec run(ResolvedView.t(), params, keyword, [{atom, term}]) ::
+  @spec run(ResolvedView.t() | ResolvedView.table(), params, keyword, [{atom, term}]) ::
           {:ok, [Ash.Resource.record()], map} | {:error, term}
   def run(view, params, ash_opts, scope \\ []) do
     query = view.query

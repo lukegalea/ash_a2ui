@@ -1448,7 +1448,11 @@ defmodule AshA2ui.ActionHandler do
   # not the on-screen page). A report export re-runs the generic action
   # with the carried params. Both serialize through the standard row
   # serialization, so CSV cells match what the table/report renders.
-  defp export_row_maps(%{path: _report_path} = report, context, %{view: view, ash_opts: ash_opts}) do
+  defp export_row_maps(
+         %{component: %AshA2ui.Component{name: :report}} = report,
+         context,
+         %{view: view, ash_opts: ash_opts}
+       ) do
     invoke_report(view, report, Map.get(context, "params"), ash_opts)
   end
 
