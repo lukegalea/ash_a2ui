@@ -97,24 +97,33 @@ defmodule AshA2ui.Sections do
   defp do_expand(view, opts) do
     view.tables
     |> Enum.reduce_while({:ok, []}, fn table, {:ok, acc} ->
-      case Map.get(table, :sections) do
-        nil ->
-          {:cont, {:ok, acc ++ [{table.component, [table]}]}}
-
-        config ->
-          case read_sections(config, opts) do
-            {:ok, section_records} ->
-              {:cont,
-               {:ok, acc ++ [{table.component, expand_table(table, config, section_records)}]}}
-
-            {:error, error} ->
-              {:halt, {:error, error}}
-          end
+      case table_replacement(table, opts) do
+        {:ok, replacement} -> {:cont, {:ok, acc ++ [replacement]}}
+        {:error, error} -> {:halt, {:error, error}}
       end
     end)
     |> case do
       {:ok, replacements} -> {:ok, rebuild_view(view, replacements)}
       {:error, error} -> {:error, error}
+    end
+  end
+
+  # One `{template_component, concrete_tables}` replacement pair per table:
+  # sectionless tables map onto themselves, sectioned templates onto their
+  # per-section expansion (failing over the source read's error).
+  defp table_replacement(table, opts) do
+    case Map.get(table, :sections) do
+      nil ->
+        {:ok, {table.component, [table]}}
+
+      config ->
+        case read_sections(config, opts) do
+          {:ok, section_records} ->
+            {:ok, {table.component, expand_table(table, config, section_records)}}
+
+          {:error, error} ->
+            {:error, error}
+        end
     end
   end
 

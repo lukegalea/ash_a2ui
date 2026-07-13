@@ -140,6 +140,8 @@ defmodule AshA2ui.ActionHandler do
   alias Ash.Resource.Info, as: ResourceInfo
   alias AshA2ui.Conditions
   alias AshA2ui.ContextRunner
+  alias AshA2ui.Csv
+  alias AshA2ui.Encoder.V1_0
   alias AshA2ui.QueryRunner
   alias AshA2ui.ResolvedView
 
@@ -1487,14 +1489,14 @@ defmodule AshA2ui.ActionHandler do
   defp deliver_export(view, target, columns, row_maps) do
     headers = Enum.map(columns, &export_header(view, &1))
     cells = Enum.map(row_maps, fn row -> Enum.map(columns, &Map.get(row, to_string(&1))) end)
-    csv = AshA2ui.Csv.encode(headers, cells)
+    csv = Csv.encode(headers, cells)
     filename = target.export.filename
 
     call =
-      AshA2ui.Encoder.V1_0.call_function("downloadFile", %{
+      V1_0.call_function("downloadFile", %{
         "filename" => filename,
         "mimeType" => "text/csv",
-        "dataUrl" => AshA2ui.Csv.data_url(csv)
+        "dataUrl" => Csv.data_url(csv)
       })
 
     response =
@@ -1618,21 +1620,23 @@ defmodule AshA2ui.ActionHandler do
          {:ok, scope} <- ContextRunner.table_scope(view, table, env.selected),
          {:ok, records} <- read_edited_table(table, scope, env) do
       rows =
-        Enum.map(rows(view, table, records), fn row ->
-          if row["id"] == record_id do
-            row
-            |> Map.put(to_string(field), value)
-            |> Map.put("_error_#{field}", text)
-          else
-            row
-          end
-        end)
+        view
+        |> rows(table, records)
+        |> Enum.map(&patch_errored_row(&1, record_id, field, value, text))
 
       [update_data_model(view, table.records_path, rows)]
     else
       _no_field_error_or_unreadable -> []
     end
   end
+
+  defp patch_errored_row(%{"id" => record_id} = row, record_id, field, value, text) do
+    row
+    |> Map.put(to_string(field), value)
+    |> Map.put("_error_#{field}", text)
+  end
+
+  defp patch_errored_row(row, _record_id, _field, _value, _text), do: row
 
   # The mirror re-read honors the client's current query state (page,
   # search, filters), like any refresh.

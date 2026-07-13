@@ -38,12 +38,14 @@ defmodule AshA2ui.Verifiers.VerifyReports do
     with :ok <- verify_report_options_placement(components, module) do
       components
       |> Enum.filter(&(&1.name == :report))
-      |> Enum.reduce_while(:ok, fn component, :ok ->
-        case verify_report(component, dsl_state, module) do
-          :ok -> {:cont, :ok}
-          {:error, error} -> {:halt, {:error, error}}
-        end
-      end)
+      |> Enum.reduce_while(:ok, &reduce_report(&1, &2, dsl_state, module))
+    end
+  end
+
+  defp reduce_report(component, :ok, dsl_state, module) do
+    case verify_report(component, dsl_state, module) do
+      :ok -> {:cont, :ok}
+      {:error, error} -> {:halt, {:error, error}}
     end
   end
 

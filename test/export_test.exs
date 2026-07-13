@@ -16,6 +16,7 @@ defmodule AshA2ui.ExportTest do
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.BucketWord
   alias AshA2ui.Test.ExportWordsV1UI
+  alias AshA2ui.Test.SchemaHelper
   alias AshA2ui.Test.WordReportV1UI
 
   defp envelope(name, context, surface) do
@@ -47,13 +48,13 @@ defmodule AshA2ui.ExportTest do
   # other message validates against the plain v1.0 schemas.
   defp assert_valid_export_messages(messages) do
     extension_schema =
-      AshA2ui.Test.SchemaHelper.resolved_schema(:v1_0, "server_to_client.json",
+      SchemaHelper.resolved_schema(:v1_0, "server_to_client.json",
         catalog: "catalogs/ash_a2ui/catalog.json"
       )
 
     Enum.each(messages, fn
       %{"callFunction" => _call} = message ->
-        assert :ok = AshA2ui.Test.SchemaHelper.validate(extension_schema, message)
+        assert :ok = SchemaHelper.validate(extension_schema, message)
 
       message ->
         assert_valid_server_message(message, :v1_0)

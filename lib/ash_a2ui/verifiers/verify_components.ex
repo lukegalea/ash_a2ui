@@ -161,22 +161,19 @@ defmodule AshA2ui.Verifiers.VerifyComponents do
   defp editable_actions(components, target) do
     components
     |> Enum.filter(& &1.editable)
-    |> Enum.flat_map(fn component ->
-      case {component.editable.update_action, target} do
-        {nil, nil} ->
-          []
-
-        {nil, target} ->
-          case ResourceInfo.primary_action(target, :update) do
-            %{name: name} -> [name]
-            nil -> []
-          end
-
-        {declared, _target} ->
-          [declared]
-      end
-    end)
+    |> Enum.flat_map(&editable_action(&1.editable.update_action, target))
   end
+
+  defp editable_action(nil, nil), do: []
+
+  defp editable_action(nil, target) do
+    case ResourceInfo.primary_action(target, :update) do
+      %{name: name} -> [name]
+      nil -> []
+    end
+  end
+
+  defp editable_action(declared, _target), do: [declared]
 
   # The primary create/update actions a form falls back to when it omits
   # create_action/update_action.
