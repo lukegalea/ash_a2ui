@@ -541,6 +541,12 @@ Shipped beyond the v0 core:
   search/sort/filter/pagination per table, referenced by name and validated
   server-side (see
   [Queries and Pagination](documentation/topics/queries-and-pagination.md)).
+- ✅ **AG-UI transport** (`AshA2ui.AgUi`) — serve surfaces to AG-UI clients
+  (CopilotKit et al.) from any HTTP host: framework-free event builders,
+  SSE encoding, `RunAgentInput`/action decoding, and the `a2ui-surface`
+  activity binding, with a per-call `spec_version:` override to pin the
+  wire version to the consuming renderer (see
+  [External Transports](documentation/topics/external-transports.md)).
 - ✅ **`usage_rules` support** — the package ships `usage-rules.md` plus
   `usage-rules/actions.md`, `usage-rules/liveview.md`, `usage-rules/queries.md`,
   `usage-rules/relationships.md`, and `usage-rules/contexts.md` sub-rules,
@@ -674,7 +680,12 @@ Documented as roadmap (not built):
   audience-conditional surfaces chosen in plain Elixir — simple gates in
   metadata, complex branching in ordinary functions, never a hidden rules
   engine.
-- **Non-LiveView streaming transports** (SSE, raw WebSocket).
+- **A2A transport binding** — the a2ui.org A2A extension (A2UI messages as
+  `DataPart`s with the `application/a2ui+json` MIME type); the binding is
+  designed in [External Transports](documentation/topics/external-transports.md)
+  and waits on an Elixir A2A server to embed in plus a concrete
+  agent-to-agent consumer.
+- **Raw WebSocket transport.**
 - **Custom component catalogs** beyond the basic catalog.
 - **Dynamic `nested_form` composition** — nested relationship forms remain
   DSL-only (they depend on `manage_relationship` change knowledge an
@@ -689,6 +700,9 @@ Documented as roadmap (not built):
   per-feature UX rationale, and the executable conformance suite
 - [Rendering Clients](documentation/topics/rendering-clients.md) — transports,
   hook contract, `@a2ui/lit` / `@a2ui/react`
+- [External Transports](documentation/topics/external-transports.md) — the
+  AG-UI transport (`AshA2ui.AgUi`), the CopilotKit client wiring, and the
+  designed A2A binding
 - [Actions and Authorization](documentation/topics/actions-and-authorization.md)
 - [Queries and Pagination](documentation/topics/queries-and-pagination.md)
 - [Multi-Section Surfaces](documentation/topics/multi-section-surfaces.md)

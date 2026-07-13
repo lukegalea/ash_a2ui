@@ -168,7 +168,10 @@ treats them like any other data update.
 
 JSON endpoints don't get PubSub live refresh (there's no persistent
 connection); pair them with polling or use the LiveView transport when you
-need liveness. Other streaming transports (SSE, raw WebSocket) are roadmap.
+need liveness. For serving surfaces to AG-UI clients (CopilotKit chat UIs
+and other external consumers) over SSE, see
+[External Transports](external-transports.md); raw WebSocket remains
+roadmap.
 
 ## Browser renderers: `@a2ui/lit` and `@a2ui/react`
 

@@ -10,6 +10,29 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- **AG-UI transport** (`AshA2ui.AgUi`) — surfaces are now consumable by
+  AG-UI clients (CopilotKit chat UIs and anything else speaking the
+  protocol) from any HTTP host, joining the AG-UI/A2UI interoperability
+  stack. The module is framework-free (Jason only; compiled under
+  `NO_PHOENIX`): AG-UI event builders (run lifecycle, streamed text, tool
+  calls, custom), the `a2ui-surface` `ACTIVITY_SNAPSHOT` binding carrying
+  A2UI message lists under `a2ui_operations`, SSE frame encoding,
+  `RunAgentInput` decoding, and `decode_action/1` converting AG-UI client
+  actions into the spec-valid v0.9.1 envelopes
+  `AshA2ui.ActionHandler`/`AshA2ui.Dynamic` consume. The new
+  [External Transports](documentation/topics/external-transports.md) topic
+  documents the endpoint contract, event mapping, the CopilotKit
+  `selfManagedAgents` client wiring (no Node middleman), the
+  authentication/actor contract, and the **designed** (deferred) A2A
+  binding (`DataPart` + `application/a2ui+json`).
+- **Per-resolve `spec_version:` override** —
+  `AshA2ui.Info.build_surface/2`, `build_data_model/2`, and
+  `AshA2ui.ActionHandler.handle/3` now accept `spec_version: "0.9.1" |
+  "1.0"`, overriding the surface's declared version for that call.
+  Transports pin the wire version to what their renderer actually speaks
+  (CopilotKit's shipped A2UI renderer processes v0.9 messages only)
+  without touching surface DSLs.
+
 - **A2UI v1.0 (RC) support** — to our knowledge the first framework
   shipping a v1.0 conformance suite. `spec_version "1.0"` (DSL) /
   `spec_version: "1.0"` (`AshA2ui.Dynamic.resolve/2`) opts a surface into

@@ -207,7 +207,8 @@ defmodule AshA2ui.ResolvedView do
     :authorize?,
     :query_state,
     :context_state,
-    :surface_properties
+    :surface_properties,
+    :spec_version
   ]
 
   @doc """
@@ -220,6 +221,10 @@ defmodule AshA2ui.ResolvedView do
     * `:actor` / `:tenant` / `:authorize?` / `:domain` / `:query_state` —
       reserved for data loading (see `AshA2ui.Info.build_surface/2`);
       validated and passed through, not consumed by normalization itself.
+    * `:spec_version` — `"0.9.1"` or `"1.0"`: overrides the surface's
+      declared `spec_version` for this resolve. Transports whose renderer
+      only speaks one protocol version (see the External Transports topic)
+      use this to pin the wire version without touching the DSL.
   """
   @spec resolve(module | Spark.Dsl.t(), keyword) :: t()
   def resolve(resource_or_ui_module, opts \\ []) do
@@ -250,7 +255,7 @@ defmodule AshA2ui.ResolvedView do
     %__MODULE__{
       resource: resource,
       surface_id: surface_id(resource_or_ui_module, resource),
-      spec_version: spec_version(resource_or_ui_module),
+      spec_version: spec_version(resource_or_ui_module, opts[:spec_version]),
       components: components,
       fields: fields,
       read_action: single && single.read_action,
@@ -755,12 +760,25 @@ defmodule AshA2ui.ResolvedView do
 
   # The declared `spec_version` DSL option, normalized to the version atom
   # the encoders and handler dispatch on. Defaults to :v0_9_1 (the DSL
-  # default), so pre-1.0 surfaces are untouched.
-  defp spec_version(resource_or_ui_module) do
-    case AshA2ui.Info.a2ui_spec_version(resource_or_ui_module) do
-      {:ok, "1.0"} -> :v1_0
-      _default -> :v0_9_1
+  # default), so pre-1.0 surfaces are untouched. A per-resolve `:spec_version`
+  # override (a transport pinning the wire version) wins over the DSL.
+  defp spec_version(resource_or_ui_module, override) do
+    case override || declared_spec_version(resource_or_ui_module) do
+      "1.0" ->
+        :v1_0
+
+      "0.9.1" ->
+        :v0_9_1
+
+      other ->
+        raise ArgumentError, "spec_version must be \"0.9.1\" or \"1.0\", got: #{inspect(other)}"
     end
+  end
+
+  # The DSL option has a default, so the Info getter always returns {:ok, _}.
+  defp declared_spec_version(resource_or_ui_module) do
+    {:ok, version} = AshA2ui.Info.a2ui_spec_version(resource_or_ui_module)
+    version
   end
 
   # A declared action wins; otherwise fall back to the resource's primary

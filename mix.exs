@@ -91,6 +91,7 @@ defmodule AshA2ui.MixProject do
         "documentation/topics/what-is-ash-a2ui.md",
         "documentation/topics/a2ui-1-0.md",
         "documentation/topics/rendering-clients.md",
+        "documentation/topics/external-transports.md",
         "documentation/topics/theming.md",
         "documentation/topics/actions-and-authorization.md",
         "documentation/topics/queries-and-pagination.md",
@@ -137,6 +138,9 @@ defmodule AshA2ui.MixProject do
         ],
         "LiveView Transport": [
           AshA2ui.LiveRenderer
+        ],
+        "External Transports": [
+          AshA2ui.AgUi
         ],
         Internals: ~r/.*/
       ]

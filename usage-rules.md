@@ -14,6 +14,9 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
   data-model paths.
 - `ash_a2ui:liveview` — the `AshA2ui.LiveRenderer` transport and the JS
   hook wiring contract.
+- `ash_a2ui:ag-ui` — the `AshA2ui.AgUi` transport: serving surfaces to
+  AG-UI clients (CopilotKit) over SSE, the action round trip, and the
+  authentication contract.
 - `ash_a2ui:queries` — the `query` entity's server-enforced allowlists for
   search/sort/filter/pagination.
 - `ash_a2ui:relationships` — `belongs_to` form selects (inference,
