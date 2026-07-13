@@ -25,7 +25,8 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
   `select_context`) and `:detail` components.
 - `ash_a2ui:dynamic` — agent-composed surfaces (`AshA2ui.Dynamic`): the
   runtime JSON surface spec, the resource allowlist, the server-held
-  surface contract, and LLM tool integration.
+  surface contract, LLM tool integration, and the spec lifecycle
+  (serialize/deserialize, diff, promote to a DSL module).
 
 ## Protocol versions
 

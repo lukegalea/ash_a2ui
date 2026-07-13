@@ -69,6 +69,29 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   `authorize?: true` authorization apply exactly as on declared surfaces.
   See the new `agent-composed-surfaces` topic and the `ash_a2ui:dynamic`
   usage rules.
+- The spec-as-artifact lifecycle: agent-composed specs are now first-class,
+  persistable, reviewable artifacts.
+  - `AshA2ui.Dynamic.serialize/1` / `deserialize/2` — a canonical stored
+    form (versioned `{"spec": ..., "spec_format": 1}` envelope, object keys
+    sorted at every level, so identical specs serialize byte-identically)
+    plus `fingerprint/1` (`"sha256:..."`) as the content identity. Loading
+    **re-validates against the current resource state** through
+    `resolve/2`: fields/actions/resources removed since a spec was saved
+    surface as the same structured `AshA2ui.Dynamic.Error` list a fresh
+    spec would produce — drift becomes reviewable errors, not a crash.
+  - `AshA2ui.Dynamic.diff/2` — the change summary a ratifying human reads:
+    computed at the spec vocabulary level (components, queries and their
+    presets, fields, actions, contexts matched by name; option-level
+    changes with old and new values; `row_layout` flattened to dotted
+    options), never a raw JSON diff. `AshA2ui.Dynamic.Diff.summary/1`
+    renders per-change review lines; changes are Jason-encodable for
+    review UIs.
+  - `AshA2ui.Dynamic.to_dsl_source/2` — promote a validated spec into the
+    source of a checked-in `AshA2ui.Standalone` module: formatted with the
+    DSL's own `locals_without_parens`, compile-ready, provenance-commented
+    with the spec fingerprint. Resolving the promoted module is equivalent
+    to resolving the spec directly (held as a round-trip property in the
+    test suite).
 - Section card chrome: context picker sections, `:detail` panels, and query
   controls now emit as a basic-catalog `Card` over a `_body` container
   (`context_<name>` > `context_<name>_body`, `detail_<name>` >

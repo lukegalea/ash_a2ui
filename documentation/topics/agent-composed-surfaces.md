@@ -173,6 +173,64 @@ options as their `AshA2ui.Info` / `AshA2ui.ActionHandler` counterparts —
 `:context_state` — and authorization is actor-based exactly as on declared
 surfaces.
 
+## The spec-as-artifact lifecycle: propose → ratify → persist → promote
+
+A validated spec is worth keeping. The lifecycle API treats specs as
+first-class artifacts — serializable, diffable, and promotable — so an
+organization's library of agent-designed surfaces can grow as a reviewed
+asset instead of evaporating with the chat session:
+
+1. **Propose.** The agent emits a spec; `resolve/2` validates it and the
+   host serves it (everything above).
+2. **Ratify.** A human reviews what the spec *is* — or, for an updated
+   spec, what changed: `AshA2ui.Dynamic.diff(stored, proposed)` computes a
+   change summary at the spec vocabulary level (components, queries and
+   their presets, fields, actions, contexts, matched by name; option
+   changes with old and new values — never a raw JSON diff).
+   `AshA2ui.Dynamic.Diff.summary/1` renders it as review lines:
+
+   ```elixir
+   AshA2ui.Dynamic.diff(stored, proposed) |> AshA2ui.Dynamic.Diff.summary()
+   # => [
+   #   ~s(surface: title changed from "Feedback" to "Recent feedback"),
+   #   ~s(added query "default"),
+   #   ~s(component "table": row_actions changed from [] to ["toggle_done"])
+   # ]
+   ```
+
+3. **Persist.** `AshA2ui.Dynamic.serialize/1` produces the canonical stored
+   form: a versioned JSON envelope (`{"spec": ..., "spec_format": 1}`) with
+   object keys sorted at every level, so semantically identical specs
+   serialize byte-identically. `AshA2ui.Dynamic.fingerprint/1` derives the
+   matching `"sha256:..."` content identity. Loading goes through
+   `AshA2ui.Dynamic.deserialize(serialized, allowlist: allowlist)` — which
+   **re-validates against the current resource state**. A spec saved six
+   months ago is a claim about resources that may have changed; fields or
+   actions removed in the meantime come back as the same structured
+   `AshA2ui.Dynamic.Error` list a freshly composed spec would produce.
+   Drift is a reviewable error, never a crash.
+4. **Promote.** When a stored spec earns permanence,
+   `AshA2ui.Dynamic.to_dsl_source/2` generates a checked-in standalone UI
+   module — formatted, compile-ready, provenance-commented with the spec's
+   fingerprint:
+
+   ```elixir
+   {:ok, source} =
+     AshA2ui.Dynamic.to_dsl_source(spec,
+       module: MyApp.UI.RecentFeedbackUI,
+       allowlist: allowlist
+     )
+
+   File.write!("lib/my_app/ui/recent_feedback_ui.ex", source)
+   ```
+
+   Resolving the generated module produces a surface equivalent to
+   resolving the spec directly (the test suite holds this as a round-trip
+   property). Promotion changes *where* the declaration lives — reviewable
+   code with compile-time verification instead of stored data — never what
+   it renders. The spec's `title` is host-rendered chrome, not DSL
+   vocabulary; it is carried into the generated module's `@moduledoc`.
+
 ## Capability edges (honest limits)
 
 - The spec exposes **exactly the DSL vocabulary** — nothing the DSL cannot

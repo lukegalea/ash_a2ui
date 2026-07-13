@@ -51,6 +51,24 @@ end
   actor-based with `authorize?: true` by default, exactly as on declared
   surfaces.
 
+## The spec lifecycle (persist / diff / promote)
+
+- Persist specs with `AshA2ui.Dynamic.serialize(spec_or_surface)` — the
+  canonical versioned envelope (sorted keys, `spec_format` field). Never
+  store ad-hoc JSON encodings; canonical form is what makes fingerprints
+  and diffs stable. `AshA2ui.Dynamic.fingerprint/1` is the content identity.
+- Load stored specs with `AshA2ui.Dynamic.deserialize(serialized, allowlist: ...)`
+  — it re-validates against the **current** resource state through
+  `resolve/2`. Treat errors as reviewable drift (show them to the admin),
+  not as exceptions. Re-validate on every open, not only on save.
+- Before a human approves a new or updated spec, show
+  `AshA2ui.Dynamic.diff(stored, proposed) |> AshA2ui.Dynamic.Diff.summary()`
+  — entity-level change lines, not a raw JSON diff.
+- Promote long-lived specs to checked-in code with
+  `AshA2ui.Dynamic.to_dsl_source(spec, module: MyApp.UI.FooUI, allowlist: ...)`;
+  commit the generated module and drop (or archive) the stored spec so
+  there is one source of truth.
+
 ## Avoid list
 
 - ❌ Constructing `%AshA2ui.Dynamic.Surface{}` by hand — only

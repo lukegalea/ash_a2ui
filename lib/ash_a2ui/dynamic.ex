@@ -85,8 +85,11 @@ defmodule AshA2ui.Dynamic do
       end
   """
 
+  alias AshA2ui.Dynamic.Diff
   alias AshA2ui.Dynamic.Error
   alias AshA2ui.Dynamic.Parser
+  alias AshA2ui.Dynamic.Promoter
+  alias AshA2ui.Dynamic.Serializer
   alias AshA2ui.Dynamic.Surface
   alias AshA2ui.Transformers.InferFields
 
@@ -177,6 +180,125 @@ defmodule AshA2ui.Dynamic do
   @spec handle_action(Surface.t(), map, keyword) :: {:ok, [map]} | {:error, [map]}
   def handle_action(%Surface{} = surface, action_message, opts \\ []) do
     AshA2ui.ActionHandler.handle(surface.dsl_state, action_message, opts)
+  end
+
+  # --- the spec-as-artifact lifecycle ---------------------------------------------
+
+  @doc """
+  Serializes a spec (or a resolved surface's spec) to its **canonical**
+  versioned JSON form: object keys sorted at every level, array order
+  preserved, wrapped in a `{"spec": ..., "spec_format": #{Serializer.spec_format()}}`
+  envelope (see `AshA2ui.Dynamic.Serializer`).
+
+  Canonical serialization is deterministic — semantically identical specs
+  serialize byte-identically — which makes stored specs diffable,
+  fingerprintable, and stable under version control.
+  """
+  @spec serialize(map | Surface.t()) :: String.t()
+  def serialize(%Surface{spec: spec}), do: Serializer.serialize(spec)
+  def serialize(spec) when is_map(spec), do: Serializer.serialize(spec)
+
+  @doc """
+  A stable content fingerprint (`"sha256:<hex>"` of the canonical
+  serialization) of a spec or resolved surface — the identity stored specs
+  and promoted modules are traced by. Input key order never matters.
+  """
+  @spec fingerprint(map | Surface.t()) :: String.t()
+  def fingerprint(%Surface{spec: spec}), do: Serializer.fingerprint(spec)
+  def fingerprint(spec) when is_map(spec), do: Serializer.fingerprint(spec)
+
+  @doc """
+  Loads a serialized spec (as produced by `serialize/1`) back into a served
+  surface, **re-validating it against the current resource state** through
+  `resolve/2` (same options).
+
+  A stored spec is a claim about resources that may have changed since it
+  was saved. Deserialization therefore never trusts it: fields, actions, or
+  resources removed in the meantime surface as the same structured
+  `AshA2ui.Dynamic.Error` list a freshly composed spec would produce —
+  drift becomes reviewable errors, not a crash. Malformed payloads and
+  unknown `spec_format` versions are reported the same way.
+  """
+  @spec deserialize(String.t(), keyword) :: {:ok, Surface.t()} | {:error, [Error.t()]}
+  def deserialize(serialized, opts) when is_binary(serialized) do
+    with {:ok, spec} <- Serializer.deserialize(serialized) do
+      resolve(spec, opts)
+    end
+  end
+
+  @doc """
+  The human-reviewable change summary between two specs — what a ratifying
+  human reads. Accepts spec maps, serialized specs, and `%Surface{}` structs
+  interchangeably.
+
+  The diff is computed at the spec vocabulary level (components, queries and
+  their presets, fields, actions, contexts, matched by name; option changes
+  with old and new values), never as a raw JSON diff. See
+  `AshA2ui.Dynamic.Diff` for the change structure and
+  `AshA2ui.Dynamic.Diff.summary/1` for the rendered lines.
+  """
+  @spec diff(map | String.t() | Surface.t(), map | String.t() | Surface.t()) :: Diff.t()
+  def diff(old, new) do
+    Diff.compute(to_spec!(old), to_spec!(new))
+  end
+
+  @doc """
+  Promotes a validated spec into the source of a checked-in standalone UI
+  module — a formatted, compile-ready `use AshA2ui.Standalone` module with
+  the equivalent `a2ui do ... end` block and a provenance comment carrying
+  the spec's `fingerprint/1`.
+
+  The spec is validated through `resolve/2` first; promotion of an invalid
+  (or drifted) spec returns its errors. Resolving the generated module
+  produces a surface equivalent to resolving the spec directly.
+
+  ## Options
+
+    * `:module` (required) — the module name to generate.
+    * `:allowlist` (required) — as `resolve/2`; also maps the spec's
+      resource names back to modules in the generated source.
+    * `:surface_id` — the surface id declared in the generated block.
+      Defaults to the underscored last segment of `:module` (a promoted
+      surface should have a stable id, not a per-resolve `dyn_` one).
+    * `:spec_version` — as `resolve/2`; declared in the generated block
+      when not the default.
+  """
+  @spec to_dsl_source(map | Surface.t(), keyword) :: {:ok, String.t()} | {:error, [Error.t()]}
+  def to_dsl_source(spec_or_surface, opts) do
+    Keyword.validate!(opts, [:module, :allowlist, :surface_id, :spec_version])
+    module = Keyword.fetch!(opts, :module)
+    allowlist = Keyword.fetch!(opts, :allowlist)
+    spec = to_spec!(spec_or_surface)
+
+    resolve_opts =
+      opts
+      |> Keyword.take([:allowlist, :spec_version])
+      |> Keyword.put(:surface_id, "promotion_check")
+
+    with {:ok, surface} <- resolve(spec, resolve_opts) do
+      {:ok,
+       Promoter.generate(
+         spec,
+         module,
+         surface.resource,
+         allowlist,
+         Keyword.take(opts, [:surface_id, :spec_version])
+       )}
+    end
+  end
+
+  defp to_spec!(%Surface{spec: spec}), do: spec
+  defp to_spec!(spec) when is_map(spec), do: spec
+
+  defp to_spec!(serialized) when is_binary(serialized) do
+    case Serializer.deserialize(serialized) do
+      {:ok, spec} ->
+        spec
+
+      {:error, errors} ->
+        raise ArgumentError,
+              "not a serialized surface spec: #{Enum.join(Error.messages(errors), "; ")}"
+    end
   end
 
   # --- allowlist ----------------------------------------------------------------
