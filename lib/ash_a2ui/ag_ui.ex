@@ -10,9 +10,10 @@ defmodule AshA2ui.AgUi do
   `data: <json>\\n\\n` frame per event). This module provides everything the
   protocol layer needs and **nothing transport-framework specific**: plain
   map event builders, SSE frame encoding, `RunAgentInput` decoding, and the
-  A2UI↔AG-UI bindings (surfaces out, client actions in). It depends only on
-  `Jason` — no Phoenix, no Plug — so it is always compiled; the HTTP
-  endpoint itself is a handful of lines in the host (see the
+  A2UI↔AG-UI bindings (surfaces out, client actions in). It is
+  framework-free — no Phoenix, no Plug, only `Jason` and the extension's
+  own protocol core — so it is always compiled; the HTTP endpoint itself is
+  a handful of lines in the host (see the
   [External Transports](external-transports.html) topic for a complete
   Phoenix example).
 
@@ -57,6 +58,26 @@ defmodule AshA2ui.AgUi do
   runs the agent once, then clears it). `decode_action/1` converts that
   payload into the client envelope `AshA2ui.ActionHandler.handle/3` and
   `AshA2ui.Dynamic.handle_action/3` consume.
+
+  ## Human in the loop: the pending-surface-action convention
+
+  AG-UI's interrupt pattern maps naturally onto surfaces: to pause an
+  agent turn on a human decision, the host
+
+    1. emits the decision request as a tool call that stays **unresolved**
+       when `run_finished/3` fires — `pending_tool_call/4` builds the
+       start/args/end triple with no `TOOL_CALL_RESULT`;
+    2. emits the surface the user decides on (`surface_activity/2`) and
+       finishes the run;
+    3. remembers the pending call (tool call id + the confirmation
+       surface's id), scoped to **authenticated actor + thread id**;
+    4. on the next run, asks `resolve_pending/2` whether the incoming
+       input resolves the pending call — a surface action carrying the
+       `toolCallId` in its context, any action from the pending
+       confirmation surface, or a `role: "tool"` result message in the
+       AG-UI message history. On `{:resume, tool_call_id, result}` the
+       host re-enters its agent loop with the user's decision as the tool
+       result.
 
   ## Authentication contract (read this)
 
@@ -199,6 +220,32 @@ defmodule AshA2ui.AgUi do
   end
 
   @doc """
+  The event triple for a tool call that will remain **unresolved** when
+  `run_finished/3` fires — the human-in-the-loop pause: `TOOL_CALL_START`,
+  one `TOOL_CALL_ARGS` carrying the whole argument payload, and
+  `TOOL_CALL_END`, with **no** `TOOL_CALL_RESULT`.
+
+  Emit these (typically alongside a `surface_activity/2` confirmation
+  surface), finish the run, and remember `tool_call_id` scoped to the
+  authenticated actor + thread; `resolve_pending/2` detects the user's
+  answer on a later run.
+
+  `args` may be a map (JSON-encoded here) or an already-encoded JSON
+  string. Options are passed to `tool_call_start/3`
+  (`:parent_message_id`).
+  """
+  @spec pending_tool_call(String.t(), String.t(), map | String.t(), keyword) :: [map]
+  def pending_tool_call(tool_call_id, tool_call_name, args \\ %{}, opts \\ []) do
+    args_json = if is_binary(args), do: args, else: Jason.encode!(args)
+
+    [
+      tool_call_start(tool_call_id, tool_call_name, opts),
+      tool_call_args(tool_call_id, args_json),
+      tool_call_end(tool_call_id)
+    ]
+  end
+
+  @doc """
   The `ACTIVITY_SNAPSHOT` event carrying an A2UI surface: `activityType`
   `"#{@a2ui_activity_type}"`, with the surface's ordinary A2UI
   server→client message list wrapped under `content.#{@a2ui_operations_key}`
@@ -218,6 +265,33 @@ defmodule AshA2ui.AgUi do
       "content" => %{@a2ui_operations_key => messages},
       "replace" => true
     }
+  end
+
+  @doc """
+  Re-emits a surface as a fresh `ACTIVITY_SNAPSHOT` with a **rebuilt** data
+  model — the freshness helper for while-run-open refreshes (PubSub-driven
+  record changes) and post-action re-emits.
+
+  `ui_or_surface` is either a declared UI module (or resolved DSL state) —
+  rebuilt through `AshA2ui.Info.build_surface/2` — or a server-held
+  `AshA2ui.Dynamic.Surface` struct, rebuilt through
+  `AshA2ui.Dynamic.build_surface/2`. `opts` pass through to the builder
+  (`:actor`, `:tenant`, `:query_state`, `:context_state`,
+  `:spec_version`, ...), so a refresh can preserve the user's current
+  filters/selections instead of resetting them.
+
+  Keep `message_id` consistent with the surface's original emission —
+  snapshot semantics replace by `messageId`.
+  """
+  @spec refresh_activity(String.t(), module | struct | Spark.Dsl.t(), keyword) :: map
+  def refresh_activity(message_id, ui_or_surface, opts \\ [])
+
+  def refresh_activity(message_id, %AshA2ui.Dynamic.Surface{} = surface, opts) do
+    surface_activity(message_id, AshA2ui.Dynamic.build_surface(surface, opts))
+  end
+
+  def refresh_activity(message_id, ui, opts) do
+    surface_activity(message_id, AshA2ui.Info.build_surface(ui, opts))
   end
 
   @doc "A `CUSTOM` extension event (`name` + arbitrary `value`)."
@@ -262,6 +336,10 @@ defmodule AshA2ui.AgUi do
       `:developer` roles with non-empty string content are kept — tool,
       activity, and reasoning messages are transport bookkeeping, not chat
       history for your agent loop.
+    * `:tool_results` — `role: "tool"` result messages as a
+      `%{toolCallId => content}` map (string content only; the last result
+      for an id wins). Used by `resolve_pending/2` to detect a client-side
+      answer to a pending human-in-the-loop tool call.
     * `:a2ui_action` — the raw `forwardedProps.a2uiAction` payload when the
       run was triggered by an A2UI user action (see `decode_action/1`),
       else `nil`.
@@ -274,6 +352,7 @@ defmodule AshA2ui.AgUi do
           thread_id: String.t(),
           run_id: String.t(),
           messages: [%{role: atom, content: String.t()}],
+          tool_results: %{String.t() => String.t()},
           a2ui_action: map | nil,
           forwarded_props: map
         }
@@ -288,6 +367,7 @@ defmodule AshA2ui.AgUi do
       thread_id: string_or_default(body["threadId"], ""),
       run_id: string_or_default(body["runId"], ""),
       messages: decode_messages(body["messages"]),
+      tool_results: decode_tool_results(body["messages"]),
       a2ui_action:
         case forwarded_props["a2uiAction"] do
           action when is_map(action) -> action
@@ -314,6 +394,17 @@ defmodule AshA2ui.AgUi do
   end
 
   defp decode_messages(_other), do: []
+
+  defp decode_tool_results(messages) when is_list(messages) do
+    for %{"role" => "tool", "toolCallId" => id, "content" => content} <- messages,
+        is_binary(id) and id != "",
+        is_binary(content),
+        into: %{} do
+      {id, content}
+    end
+  end
+
+  defp decode_tool_results(_other), do: %{}
 
   @doc """
   Decodes an A2UI client action received over AG-UI into the v0.9.1 client
@@ -364,6 +455,71 @@ defmodule AshA2ui.AgUi do
   end
 
   def decode_action(_other), do: :error
+
+  @doc """
+  Detects whether a decoded run input (from `decode_run_input/1`) resolves
+  a **pending** human-in-the-loop tool call (see `pending_tool_call/4`).
+
+  `pending` describes the call the host is waiting on:
+
+    * `:tool_call_id` (required) — the unresolved call's id.
+    * `:surface_id` (optional) — the confirmation surface's A2UI surface
+      id. When given, **any** action from that surface resolves the call —
+      the natural convention when the host renders a dedicated decision
+      surface and every affordance on it is an answer.
+
+  Resolution sources, in priority order:
+
+    1. An incoming `a2uiAction` whose action context carries the pending
+       id under `"toolCallId"` (surfaces that stamp the id into their
+       action context resolve explicitly, from anywhere).
+    2. An incoming `a2uiAction` originating from `:surface_id`.
+    3. A `role: "tool"` result message for the pending id in the run's
+       message history (the standard AG-UI frontend-tool answer path).
+
+  Returns `{:resume, tool_call_id, result}` — `result` is the decoded
+  action map (`"name"`/`"surfaceId"`/`"context"`, sources 1–2) or the
+  tool message's string content (source 3) — or `:none`. On `{:resume, ...}`
+  the host re-enters its agent loop with the user's decision as the
+  pending call's tool result instead of treating the run as a chat turn
+  or an ordinary surface action.
+  """
+  @spec resolve_pending(map, map) :: {:resume, String.t(), map | String.t()} | :none
+  def resolve_pending(input, pending) when is_map(input) and is_map(pending) do
+    tool_call_id = Map.fetch!(pending, :tool_call_id)
+
+    with :none <- action_resolution(input, tool_call_id, Map.get(pending, :surface_id)) do
+      tool_result_resolution(input, tool_call_id)
+    end
+  end
+
+  defp action_resolution(%{a2ui_action: nil}, _tool_call_id, _surface_id), do: :none
+
+  defp action_resolution(%{a2ui_action: payload}, tool_call_id, surface_id) do
+    case decode_action(payload) do
+      {:ok, %{"action" => action}} ->
+        cond do
+          action["context"]["toolCallId"] == tool_call_id ->
+            {:resume, tool_call_id, action}
+
+          surface_id != nil and action["surfaceId"] == surface_id ->
+            {:resume, tool_call_id, action}
+
+          true ->
+            :none
+        end
+
+      :error ->
+        :none
+    end
+  end
+
+  defp tool_result_resolution(%{tool_results: results}, tool_call_id) do
+    case results do
+      %{^tool_call_id => content} -> {:resume, tool_call_id, content}
+      _other -> :none
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # Helpers

@@ -61,11 +61,14 @@ builds):
 | `run_started/2`, `run_finished/3`, `run_error/2` | Run lifecycle events |
 | `text_message_start/2`, `text_message_content/2`, `text_message_end/1` | Streamed assistant tokens |
 | `tool_call_start/3`, `tool_call_args/2`, `tool_call_end/1`, `tool_call_result/3` | Tool activity |
+| `pending_tool_call/4` | A tool call left unresolved at `RUN_FINISHED` — the human-in-the-loop pause |
 | `surface_activity/2` | An A2UI surface as an `a2ui-surface` activity snapshot |
+| `refresh_activity/3` | Re-emit a surface with a freshly rebuilt data model |
 | `custom/2` | App-specific extension events |
 | `encode_sse/1` | One event → one `data: <json>\n\n` frame |
-| `decode_run_input/1` | `RunAgentInput` body → thread/run ids, chat messages, `a2uiAction` |
+| `decode_run_input/1` | `RunAgentInput` body → thread/run ids, chat messages, tool results, `a2uiAction` |
 | `decode_action/1` | AG-UI client action → the v0.9.1 envelope `ActionHandler` consumes |
+| `resolve_pending/2` | Does this run answer a pending human-in-the-loop call? |
 
 The HTTP endpoint itself stays in the host — that is where authentication,
 actor resolution, and process supervision belong (and it keeps the
@@ -190,6 +193,74 @@ Because HTTP runs are stateless, a host that serves actions must remember
 `AshA2ui.Dynamic.Surface` — the Dynamic host contract requires the
 server-held struct). Key that state by **authenticated actor + thread id**,
 never by client-supplied thread id alone.
+
+## Human in the loop: pausing a turn on a surface decision
+
+Some agent actions should not execute on the LLM's say-so — the agent
+proposes, a human disposes. The AG-UI shape for this is a tool call that
+the run **finishes without resolving**, answered on a later run. Bound to
+surfaces, the convention is:
+
+1. **Pause.** When the agent loop reaches the gated step, the host stops
+   the loop and emits `pending_tool_call/4` (a `TOOL_CALL_START` /
+   `TOOL_CALL_ARGS` / `TOOL_CALL_END` triple with **no**
+   `TOOL_CALL_RESULT`), then a confirmation surface via
+   `surface_activity/2`, then `run_finished/3`. The transcript shows an
+   open question; the surface is how the user answers it.
+2. **Remember.** Store the pending call — its tool call id plus the
+   confirmation surface's id — scoped to **authenticated actor + thread
+   id** (the same scoping rule as all per-thread surface state).
+3. **Resume.** On each subsequent run, call `resolve_pending/2` with the
+   decoded input and the stored pending descriptor *before* dispatching
+   the run as a chat turn or ordinary surface action. It recognizes three
+   answer shapes: a surface action whose context carries the pending id
+   under `"toolCallId"`, any action originating from the stored
+   confirmation surface id, or a `role: "tool"` result message for the id
+   in the run's message history (the standard AG-UI frontend-tool path;
+   `decode_run_input/1` collects these under `:tool_results`).
+4. **Act.** On `{:resume, tool_call_id, result}`, the host interprets the
+   user's decision, performs the gated side effect **itself**
+   (actor-authorized, only on an explicit affirmative), and re-enters its
+   agent loop with the decision supplied as the pending call's tool
+   result — the LLM sees a completed tool call and narrates the outcome.
+
+The library deliberately provides only the protocol pieces: what counts
+as a gated action, how the confirmation surface looks, and how the
+decision maps onto side effects are host policy.
+
+## Refreshing an open surface (PubSub bridging)
+
+`refresh_activity/3` rebuilds a surface's message list — declared UI
+module or server-held `AshA2ui.Dynamic.Surface` — with fresh data and
+wraps it as an activity snapshot. Two places to use it:
+
+* **Post-action re-emits**: after routing an action envelope, re-emit the
+  surface so the client renders the write's effect.
+* **While-run-open live refreshes**: AG-UI is request/response, but the
+  SSE response stays open for the whole run — long agent turns can flush
+  data changes as they happen. Subscribe to the surface's PubSub topics
+  when the stream opens, and in the request process's receive loop turn
+  each change notification into a `refresh_activity/3` frame; unsubscribe
+  when the run finishes:
+
+```elixir
+topics = ["ticket:created", "ticket:updated", "ticket:destroyed"]
+Enum.each(topics, &Phoenix.PubSub.subscribe(MyApp.PubSub, &1))
+
+# ... inside the receive loop that streams agent events:
+{:record_changed, _payload} ->
+  event = AgUi.refresh_activity("surface-tickets", MyApp.UI.TicketUI,
+    actor: actor, spec_version: "0.9.1")
+  {:ok, conn} = chunk(conn, AgUi.encode_sse(event))
+
+# ... after RUN_FINISHED / RUN_ERROR:
+Enum.each(topics, &Phoenix.PubSub.unsubscribe(MyApp.PubSub, &1))
+```
+
+Between runs no stream is open — a change that happens then reaches the
+client on the next run's re-emit (rebuilds always load fresh data). Pass
+`:query_state`/`:context_state` from the surface's last known client
+state to preserve the user's filters and selections across refreshes.
 
 ## Wiring a CopilotKit client (no Node middleman)
 

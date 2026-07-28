@@ -84,6 +84,38 @@ defmodule AshA2ui.AgUiTest do
     end
   end
 
+  describe "pending_tool_call/4 — the HITL pause" do
+    test "emits the start/args/end triple with encoded args and no result" do
+      events =
+        AgUi.pending_tool_call("tc-confirm", "request_admin_confirmation", %{
+          "summary" => "Approve the referral?"
+        })
+
+      assert [
+               %{
+                 "type" => "TOOL_CALL_START",
+                 "toolCallId" => "tc-confirm",
+                 "toolCallName" => "request_admin_confirmation"
+               },
+               %{"type" => "TOOL_CALL_ARGS", "toolCallId" => "tc-confirm", "delta" => args},
+               %{"type" => "TOOL_CALL_END", "toolCallId" => "tc-confirm"}
+             ] = events
+
+      assert Jason.decode!(args) == %{"summary" => "Approve the referral?"}
+
+      # The pause convention: no TOOL_CALL_RESULT — the host emits
+      # run_finished/3 with this call unresolved and waits for the user.
+      refute Enum.any?(events, &(&1["type"] == "TOOL_CALL_RESULT"))
+    end
+
+    test "passes string args through verbatim and forwards options" do
+      assert [start_event, %{"delta" => ~s({"x":1})}, _end_event] =
+               AgUi.pending_tool_call("tc", "confirm", ~s({"x":1}), parent_message_id: "m9")
+
+      assert start_event["parentMessageId"] == "m9"
+    end
+  end
+
   describe "surface_activity/2 — the A2UI binding" do
     test "wraps A2UI messages in the a2ui-surface activity snapshot" do
       messages = AshA2ui.Info.build_surface(MinimalUI)
@@ -161,9 +193,25 @@ defmodule AshA2ui.AgUiTest do
                  %{role: :user, content: "hello"},
                  %{role: :assistant, content: "hi"}
                ],
+               tool_results: %{"tc" => "{}"},
                a2ui_action: nil,
                forwarded_props: %{"custom" => 1}
              }
+    end
+
+    test "collects tool-result messages by toolCallId (last write wins)" do
+      body = %{
+        "messages" => [
+          %{"id" => "t1", "role" => "tool", "toolCallId" => "tc-1", "content" => ~s({"ok":1})},
+          %{"id" => "t2", "role" => "tool", "toolCallId" => "tc-1", "content" => "second wins"},
+          # malformed entries are dropped, not raised on:
+          %{"id" => "t3", "role" => "tool", "content" => "no toolCallId"},
+          %{"id" => "t4", "role" => "tool", "toolCallId" => "tc-2", "content" => %{"n" => 1}},
+          %{"id" => "t5", "role" => "tool", "toolCallId" => 42, "content" => "bad id"}
+        ]
+      }
+
+      assert AgUi.decode_run_input(body).tool_results == %{"tc-1" => "second wins"}
     end
 
     test "surfaces forwardedProps.a2uiAction" do
@@ -180,6 +228,7 @@ defmodule AshA2ui.AgUiTest do
                thread_id: "",
                run_id: "",
                messages: [],
+               tool_results: %{},
                a2ui_action: nil,
                forwarded_props: %{}
              }
@@ -256,6 +305,133 @@ defmodule AshA2ui.AgUiTest do
 
       assert {:ok, messages} = AshA2ui.ActionHandler.handle(MinimalUI, envelope)
       assert Enum.any?(messages, &match?(%{"updateDataModel" => _}, &1))
+    end
+  end
+
+  describe "resolve_pending/2 — the HITL resume" do
+    defp action_input(user_action) do
+      AgUi.decode_run_input(%{
+        "forwardedProps" => %{"a2uiAction" => %{"userAction" => user_action}}
+      })
+    end
+
+    test "an a2ui action carrying the pending toolCallId resolves it" do
+      input =
+        action_input(%{
+          "name" => "invoke",
+          "surfaceId" => "somewhere-else",
+          "context" => %{"toolCallId" => "tc-confirm", "action" => "approve", "recordId" => "r1"}
+        })
+
+      assert {:resume, "tc-confirm", action} =
+               AgUi.resolve_pending(input, %{tool_call_id: "tc-confirm"})
+
+      assert action["name"] == "invoke"
+      assert action["context"]["action"] == "approve"
+      assert action["context"]["recordId"] == "r1"
+    end
+
+    test "an a2ui action from the pending confirmation surface resolves it" do
+      input =
+        action_input(%{
+          "name" => "invoke",
+          "surfaceId" => "confirm-surface",
+          "context" => %{"action" => "approve"}
+        })
+
+      assert {:resume, "tc-confirm", action} =
+               AgUi.resolve_pending(input, %{
+                 tool_call_id: "tc-confirm",
+                 surface_id: "confirm-surface"
+               })
+
+      assert action["surfaceId"] == "confirm-surface"
+    end
+
+    test "an unrelated a2ui action does not resolve the pending call" do
+      input =
+        action_input(%{
+          "name" => "invoke",
+          "surfaceId" => "another-surface",
+          "context" => %{"action" => "select"}
+        })
+
+      assert AgUi.resolve_pending(input, %{
+               tool_call_id: "tc-confirm",
+               surface_id: "confirm-surface"
+             }) == :none
+    end
+
+    test "a tool-result message in the history resolves it" do
+      input =
+        AgUi.decode_run_input(%{
+          "messages" => [
+            %{
+              "id" => "t1",
+              "role" => "tool",
+              "toolCallId" => "tc-confirm",
+              "content" => ~s({"decision":"approved"})
+            }
+          ]
+        })
+
+      assert {:resume, "tc-confirm", ~s({"decision":"approved"})} =
+               AgUi.resolve_pending(input, %{tool_call_id: "tc-confirm"})
+    end
+
+    test "returns :none when nothing resolves the call" do
+      assert AgUi.resolve_pending(AgUi.decode_run_input(%{}), %{tool_call_id: "tc"}) == :none
+
+      # a malformed action payload never resolves anything
+      malformed =
+        AgUi.decode_run_input(%{
+          "forwardedProps" => %{"a2uiAction" => %{"userAction" => %{"context" => %{}}}}
+        })
+
+      assert AgUi.resolve_pending(malformed, %{tool_call_id: "tc", surface_id: "s"}) == :none
+    end
+  end
+
+  describe "refresh_activity/3 — surface freshness" do
+    test "re-wraps a declared surface with freshly built messages" do
+      event = AgUi.refresh_activity("surface-minimal", MinimalUI)
+
+      assert event["type"] == "ACTIVITY_SNAPSHOT"
+      assert event["messageId"] == "surface-minimal"
+      assert event["activityType"] == "a2ui-surface"
+      assert event["content"] == %{"a2ui_operations" => AshA2ui.Info.build_surface(MinimalUI)}
+    end
+
+    test "a refresh reflects records created after the original emission" do
+      first = AgUi.refresh_activity("s", MinimalUI, spec_version: "0.9.1")
+
+      name = "fresh-record-#{System.unique_integer([:positive])}"
+
+      Minimal
+      |> Ash.Changeset.for_create(:create, %{name: name})
+      |> Ash.create!()
+
+      refreshed = AgUi.refresh_activity("s", MinimalUI, spec_version: "0.9.1")
+
+      refute Jason.encode!(first["content"]) =~ name
+      assert Jason.encode!(refreshed["content"]) =~ name
+    end
+
+    test "rebuilds a Dynamic surface through the server-held struct" do
+      {:ok, surface} =
+        AshA2ui.Dynamic.resolve(
+          %{
+            "resource" => "Minimal",
+            "title" => "Minimal (designed)",
+            "components" => [%{"kind" => "table", "fields" => ["name"]}]
+          },
+          allowlist: AshA2ui.Dynamic.allowlist([Minimal])
+        )
+
+      event = AgUi.refresh_activity("surface-dyn", surface)
+
+      assert event["messageId"] == "surface-dyn"
+      assert event["content"] == %{"a2ui_operations" => AshA2ui.Dynamic.build_surface(surface)}
     end
   end
 

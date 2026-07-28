@@ -53,6 +53,36 @@ decisions that go wrong.
   state by authenticated actor + thread id — a `threadId` is a client
   claim, not an identity.
 
+## Human in the loop (pending surface actions)
+
+- To pause a turn on a human decision: emit the decision request with
+  `pending_tool_call/4` (start/args/end, NO `TOOL_CALL_RESULT`), emit the
+  confirmation surface with `surface_activity/2`, then `run_finished/3`.
+  Store the pending call (tool call id + the confirmation surface's id)
+  scoped by authenticated actor + thread id.
+- On every subsequent run, check `resolve_pending/2` BEFORE treating the
+  run as a chat turn or an ordinary surface action. `{:resume, id, result}`
+  means the user answered — re-enter your agent loop with `result` as the
+  pending call's tool result.
+- Resolution convention (in priority order): an action whose context
+  carries the pending id under `"toolCallId"`, any action from the stored
+  confirmation surface, or a `role: "tool"` message for the id in the run's
+  history.
+- The gated side effect stays in the host: execute it only on the user's
+  explicit affirmative decision, actor-authorized — never from the LLM
+  turn that asked for confirmation.
+
+## Surface freshness
+
+- `refresh_activity/2,3` re-emits a surface as an activity snapshot with a
+  freshly rebuilt data model (declared UI modules and server-held Dynamic
+  structs both work). Pass `:query_state`/`:context_state` to preserve the
+  user's current filters and selections.
+- While a run is open you can bridge PubSub record changes onto the
+  stream: subscribe when the SSE response starts, flush each change as a
+  `refresh_activity/3` re-emit, and unsubscribe when the run ends. See the
+  External Transports topic for the pattern.
+
 ## Authentication
 
 - Gate the route with your session/token pipeline. The actor comes from
