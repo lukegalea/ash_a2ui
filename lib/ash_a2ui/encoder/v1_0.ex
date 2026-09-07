@@ -186,9 +186,17 @@ defmodule AshA2ui.Encoder.V1_0 do
   # --- data model -------------------------------------------------------------
 
   # The full data model's reserved "ui" region: the v0.9.1 status trio
-  # becomes the single structured response object.
-  defp upgrade_data_model(%{"ui" => _ui} = value) do
-    Map.put(value, "ui", %{"response" => @initial_response})
+  # becomes the single structured response object. Any other "ui" keys —
+  # the experience v2 intent/panel/feedback state — pass through untouched
+  # (under experience v1 the trio is the whole region, so the result is
+  # byte-identical to the previous wholesale replacement).
+  defp upgrade_data_model(%{"ui" => ui} = value) do
+    ui =
+      ui
+      |> Map.drop(["status", "action_result", "action_result_text"])
+      |> Map.put("response", @initial_response)
+
+    Map.put(value, "ui", ui)
   end
 
   defp upgrade_data_model(value), do: value

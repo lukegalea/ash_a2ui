@@ -431,6 +431,20 @@ Records are loaded through the resource's read action with `authorize?: true`
 and your `actor:`/`tenant:` — policies apply exactly as everywhere else in
 Ash.
 
+### Experience v2
+
+By default surfaces render exactly as documented above. Setting
+`config :ash_a2ui, :experience_version, 2` opts the whole library into the
+experience v2 layer (`AshA2ui.Experience`): rows get semantic **View** /
+**Edit** controls instead of **Select**, a **Create <Resource>** affordance
+appears for create-capable surfaces, the form renders inside a task panel
+with an explicit heading and a mode-aware primary label (open via the new
+`start_create` / `view_record` / `start_edit` client actions, closed by
+`cancel_record_task`), pagination hides when it has nothing to do, empty
+tables render a data-driven empty state, and action outcomes carry typed
+feedback (`/ui/feedback` kind + message). The default version `1` is
+byte-identical to the previous release.
+
 ## Transports
 
 ### LiveView (batteries included)

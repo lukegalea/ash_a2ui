@@ -117,6 +117,17 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   Record values are JSON-safe: dates/datetimes via `to_iso8601`, decimals and
   atoms via `to_string`.
+
+  ## Experience v2
+
+  With `config :ash_a2ui, :experience_version, 2` the shapes above change
+  behind the `AshA2ui.Experience` module: the form is gated behind the
+  `/ui/panel/visible` sentinel with a task heading and a bound primary
+  label, row controls become View/Edit, a create affordance appears, the
+  pagination row and prev/next hide behind query-state sentinels, tables
+  gain a data-driven empty state, and the status Text reads the typed
+  feedback message. Every change is strictly gated — under the default
+  version `1` the output is byte-identical to this documentation.
   """
 
   @behaviour AshA2ui.Encoder
@@ -182,7 +193,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
            |> put_select_state(resolved_view)
            |> put_context_data(resolved_view, opts)
            |> put_report_state(resolved_view)
-           |> put_export_state(resolved_view)}
+           |> put_export_state(resolved_view)
+           |> put_experience_state(resolved_view)}
       end
 
     %{
@@ -325,8 +337,10 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
         table_components(view, table, sfx) ++
           query_components(view, table, sfx) ++
+          create_button_components(view, table, sfx) ++
           table_export_components(view, table, sfx) ++
-          table_descendants(view, table, sfx)
+          table_descendants(view, table, sfx) ++
+          empty_state_components(view, table, sfx)
       end)
 
     detail_sections = Enum.flat_map(view.details, &detail_components(view, &1))
@@ -343,7 +357,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     status = %{
       "id" => "status_text",
       "component" => "Text",
-      "text" => %{"path" => "/ui/status"}
+      "text" => %{"path" => status_path()}
     }
 
     [
@@ -352,6 +366,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           table_sections ++ detail_sections ++ report_sections ++ form_components
     ] ++
       form_descendants(view, form, options) ++ [status | action_result_components()]
+  end
+
+  # Under experience v2 the status Text reads the typed feedback message
+  # (the classic /ui/status writes keep flowing server-side; the kind value
+  # sits alongside at /ui/feedback/kind). v1 keeps the frozen binding.
+  defp status_path do
+    if AshA2ui.Experience.v2?(), do: "/ui/feedback/message", else: "/ui/status"
   end
 
   defp table_suffix(view, table) do
@@ -371,7 +392,15 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     component_children = Enum.flat_map(view.components, &component_root_children(view, &1))
 
     context_children ++
-      component_children ++ ((form && ["form"]) || []) ++ ["status_text", "action_result_panel"]
+      component_children ++
+      ((form && [form_root_child()]) || []) ++
+      ["status_text", "action_result_panel"]
+  end
+
+  # v2 roots the form at the form_slot visibility gate (the List templated
+  # over /ui/panel/visible); v1 keeps the bare form Column id.
+  defp form_root_child do
+    if AshA2ui.Experience.v2?(), do: "form_slot", else: "form"
   end
 
   defp component_root_children(view, %{name: :table} = component) do
@@ -380,7 +409,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     ["table_heading#{sfx}"] ++
       ((table.query && ["query#{sfx}_controls"]) || []) ++
+      create_button_ids(view, table, sfx) ++
       ["records_list#{sfx}"] ++
+      empty_state_ids(view, table, sfx) ++
       ((table.query && ["query#{sfx}_pagination"]) || []) ++
       ((table.export && ["export#{sfx}_controls"]) || [])
   end
@@ -409,6 +440,65 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "text" => %{"path" => "/ui/action_result_text"}
       }
     ]
+  end
+
+  # --- experience v2 affordances ---
+
+  # The create affordance (v2 only, and only when the view declares a create
+  # action): a Button dispatching `start_create`, placed right after the
+  # query controls. Under v1 no create affordance is emitted.
+  defp create_button_ids(view, _table, sfx) do
+    if AshA2ui.Experience.v2?() and view.create_action, do: ["create#{sfx}_button"], else: []
+  end
+
+  defp create_button_components(view, _table, sfx) do
+    if AshA2ui.Experience.v2?() and view.create_action do
+      [
+        %{
+          "id" => "create#{sfx}_button",
+          "component" => "Button",
+          "variant" => "primary",
+          "child" => "create#{sfx}_text",
+          "action" => %{"event" => %{"name" => "start_create", "context" => %{}}}
+        },
+        %{
+          "id" => "create#{sfx}_text",
+          "component" => "Text",
+          "text" => AshA2ui.Experience.create_label(view)
+        }
+      ]
+    else
+      []
+    end
+  end
+
+  # The per-table empty state (v2 only): a zero-or-one List over the root
+  # `_empty_visible` sentinel (see AshA2ui.Experience) rendering the
+  # "No <resource> records yet." Text — toggled by every records rewrite.
+  defp empty_state_ids(_view, _table, sfx) do
+    if AshA2ui.Experience.v2?(), do: ["empty_state#{sfx}"], else: []
+  end
+
+  defp empty_state_components(view, table, sfx) do
+    if AshA2ui.Experience.v2?() do
+      [
+        %{
+          "id" => "empty_state#{sfx}",
+          "component" => "List",
+          "children" => %{
+            "componentId" => "empty_state#{sfx}_text",
+            "path" => AshA2ui.Experience.empty_visible_path(view, table)
+          }
+        },
+        %{
+          "id" => "empty_state#{sfx}_text",
+          "component" => "Text",
+          "text" => %{"path" => "_empty_message#{sfx}"}
+        }
+      ]
+    else
+      []
+    end
   end
 
   # Single-table headings show the humanized resource name (frozen); each
@@ -555,22 +645,82 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   defp pagination_components(view, table, sfx) do
+    if AshA2ui.Experience.v2?() do
+      experience_pagination_components(view, table, sfx)
+    else
+      [
+        %{
+          "id" => "query#{sfx}_pagination",
+          "component" => "Row",
+          "children" => [
+            "query#{sfx}_prev_button",
+            "query#{sfx}_page_text",
+            "query#{sfx}_next_button"
+          ]
+        },
+        query_button("query#{sfx}_prev", table, %{"pageDelta" => -1}, view),
+        %{"id" => "query#{sfx}_prev_text", "component" => "Text", "text" => "Previous"},
+        %{
+          "id" => "query#{sfx}_page_text",
+          "component" => "Text",
+          "text" => %{"path" => "#{table.query_path}/page"}
+        },
+        query_button("query#{sfx}_next", table, %{"pageDelta" => 1}, view),
+        %{"id" => "query#{sfx}_next_text", "component" => "Text", "text" => "Next"}
+      ]
+    end
+  end
+
+  # v2 pagination: the row hides behind the `_pagination_visible` sentinel
+  # (a zero-or-one List, same technique as the row-action visibility slots —
+  # see AshA2ui.Experience), the prev/next buttons each hide behind their
+  # own sentinel, and the page number becomes the result-range text. The
+  # Button ids are unchanged so themes keep working; the slot paths are
+  # absolute because the sentinels live on the /query state itself, not on
+  # the template item.
+  defp experience_pagination_components(view, table, sfx) do
+    query_path = table.query_path
+
     [
       %{
         "id" => "query#{sfx}_pagination",
+        "component" => "List",
+        "children" => %{
+          "componentId" => "query#{sfx}_pagination_row",
+          "path" => "#{query_path}/_pagination_visible"
+        }
+      },
+      %{
+        "id" => "query#{sfx}_pagination_row",
         "component" => "Row",
         "children" => [
-          "query#{sfx}_prev_button",
+          "query#{sfx}_prev_slot",
           "query#{sfx}_page_text",
-          "query#{sfx}_next_button"
+          "query#{sfx}_next_slot"
         ]
+      },
+      %{
+        "id" => "query#{sfx}_prev_slot",
+        "component" => "List",
+        "children" => %{
+          "componentId" => "query#{sfx}_prev_button",
+          "path" => "#{query_path}/_previous_visible"
+        }
       },
       query_button("query#{sfx}_prev", table, %{"pageDelta" => -1}, view),
       %{"id" => "query#{sfx}_prev_text", "component" => "Text", "text" => "Previous"},
       %{
         "id" => "query#{sfx}_page_text",
         "component" => "Text",
-        "text" => %{"path" => "#{table.query_path}/page"}
+        "text" => %{"path" => "#{query_path}/_range_text"}
+      },
+      %{
+        "id" => "query#{sfx}_next_slot",
+        "component" => "List",
+        "children" => %{
+          "componentId" => "query#{sfx}_next_button",
+          "path" => "#{query_path}/_next_visible"
+        }
       },
       query_button("query#{sfx}_next", table, %{"pageDelta" => 1}, view),
       %{"id" => "query#{sfx}_next_text", "component" => "Text", "text" => "Next"}
@@ -622,16 +772,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       |> Enum.unzip()
 
     # The context-select button (master/detail hook) rides along with the
-    # row-action anchors in either layout, as does the row-select button —
-    # but the latter only on surfaces with a form: select_row exists solely
-    # to populate /form, so a formless surface would render a dead button.
+    # row-action anchors in either layout, as do the row controls — Select
+    # under v1 (form surfaces only); View/Edit under v2.
     {context_select_ids, context_select_components} = context_select_button(view, table, sfx)
+    {control_ids, control_components} = row_controls(view, table, sfx)
 
-    select_components =
-      if Enum.any?(view.components, &(&1.name == :form)), do: select_button(table, sfx), else: []
-
-    action_ids =
-      action_ids ++ context_select_ids ++ Enum.map(Enum.take(select_components, 1), & &1["id"])
+    action_ids = action_ids ++ context_select_ids ++ control_ids
 
     row_components =
       case table.component.row_layout do
@@ -640,7 +786,59 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       end
 
     row_components ++
-      List.flatten(action_components) ++ context_select_components ++ select_components
+      List.flatten(action_components) ++ context_select_components ++ control_components
+  end
+
+  # The row controls tail: v1 keeps the frozen Select button (form surfaces
+  # only — see select_button/2); v2 replaces it with View — plus Edit when
+  # the view declares an update action — carrying the same recordId path
+  # binding.
+  defp row_controls(view, table, sfx) do
+    if AshA2ui.Experience.v2?() do
+      {view_id, view_components} =
+        record_control(table, "view#{sfx}_button", "view_record", "View")
+
+      {edit_ids, edit_components} =
+        if view.update_action do
+          {id, components} = record_control(table, "edit#{sfx}_button", "start_edit", "Edit")
+          {[id], components}
+        else
+          {[], []}
+        end
+
+      {[view_id | edit_ids], view_components ++ edit_components}
+    else
+      components =
+        if Enum.any?(view.components, &(&1.name == :form)),
+          do: select_button(table, sfx),
+          else: []
+
+      {Enum.map(Enum.take(components, 1), & &1["id"]), components}
+    end
+  end
+
+  # One v2 record control: a Button dispatching `event` with the row's
+  # recordId binding, plus its label Text (mirrors select_button/2).
+  defp record_control(table, id, event, label) do
+    components = [
+      %{
+        "id" => id,
+        "component" => "Button",
+        "child" => "#{id}_text",
+        "action" => %{
+          "event" => %{
+            "name" => event,
+            "context" => %{
+              "recordId" => %{"path" => "id"},
+              "component" => to_string(table.name)
+            }
+          }
+        }
+      },
+      %{"id" => "#{id}_text", "component" => "Text", "text" => label}
+    ]
+
+    {id, components}
   end
 
   # Each record renders as a Card (chrome themed via --a2ui-card-*)
@@ -1141,10 +1339,32 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp form_components(view, form) do
     field_children = form_field_children(view, form)
     nested_children = Enum.map(form.nested_forms, &"nested_#{&1.name}")
-    children = field_children ++ nested_children ++ ["form_submit_button"]
 
-    [%{"id" => "form", "component" => "Column", "children" => children}] ++
-      group_components(view, form)
+    children =
+      if AshA2ui.Experience.v2?() do
+        ["form_title"] ++
+          field_children ++ nested_children ++ ["form_submit_slot", "form_cancel_button"]
+      else
+        field_children ++ nested_children ++ ["form_submit_button"]
+      end
+
+    form_column = %{"id" => "form", "component" => "Column", "children" => children}
+
+    # v2 gates the whole form behind the /ui/panel/visible sentinel (the
+    # zero-or-one List over the panel state — the form only renders inside
+    # an open create/view/edit task). v1 keeps the always-rendered form.
+    if AshA2ui.Experience.v2?() do
+      [
+        %{
+          "id" => "form_slot",
+          "component" => "List",
+          "children" => %{"componentId" => "form", "path" => "/ui/panel/visible"}
+        },
+        form_column
+      ] ++ group_components(view, form)
+    else
+      [form_column] ++ group_components(view, form)
+    end
   end
 
   defp field_anchor_ids(view, field) do
@@ -1244,7 +1464,49 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     errors = Enum.map(form.fields, &form_error/1)
 
-    submit = [
+    List.flatten(inputs) ++ nested ++ errors ++ form_task_descendants(view)
+  end
+
+  # The form's task affordances: v1 keeps the frozen always-visible "Save"
+  # submit. v2 adds the panel heading (bound to /ui/panel/title), gates the
+  # submit behind the /ui/panel/submit_visible sentinel with its label bound
+  # to /ui/panel/primary_label (so it disappears in view mode), and emits
+  # the Cancel button dispatching `cancel_record_task`.
+  defp form_task_descendants(view) do
+    if AshA2ui.Experience.v2?() do
+      [
+        %{
+          "id" => "form_title",
+          "component" => "Text",
+          "text" => %{"path" => "/ui/panel/title"},
+          "variant" => "h3"
+        },
+        %{
+          "id" => "form_submit_slot",
+          "component" => "List",
+          "children" => %{
+            "componentId" => "form_submit_button",
+            "path" => "/ui/panel/submit_visible"
+          }
+        }
+      ] ++
+        submit_button(view, %{"path" => "/ui/panel/primary_label"}) ++
+        [
+          %{
+            "id" => "form_cancel_button",
+            "component" => "Button",
+            "child" => "form_cancel_text",
+            "action" => %{"event" => %{"name" => "cancel_record_task", "context" => %{}}}
+          },
+          %{"id" => "form_cancel_text", "component" => "Text", "text" => "Cancel"}
+        ]
+    else
+      submit_button(view, "Save")
+    end
+  end
+
+  defp submit_button(view, label) do
+    [
       %{
         "id" => "form_submit_button",
         "component" => "Button",
@@ -1263,10 +1525,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           }
         }
       },
-      %{"id" => "form_submit_text", "component" => "Text", "text" => "Save"}
+      %{"id" => "form_submit_text", "component" => "Text", "text" => label}
     ]
-
-    List.flatten(inputs) ++ nested ++ errors ++ submit
   end
 
   # --- searchable selects ---
@@ -2102,6 +2362,77 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       value
     else
       Map.put(value, "prompt", %{"values" => prompt_values})
+    end
+  end
+
+  # --- experience v2 state ---
+
+  # The experience v2 additions to the initial data model (a no-op under v1
+  # — the frozen shape is untouched): the `/ui` task-mode region (intent /
+  # panel / feedback, see AshA2ui.Experience), per-table empty-state
+  # sentinels, and the pagination sentinels on every query state. Sentinels
+  # are re-derived from the rows at hand, so explicit `:query_state` opts
+  # (states carried from the client) are adorned the same way.
+  defp put_experience_state(value, view) do
+    if AshA2ui.Experience.v2?() do
+      value
+      |> Map.update!("ui", &Map.merge(&1, AshA2ui.Experience.ui_data(view)))
+      |> put_empty_state(view)
+      |> put_pagination_sentinels(view)
+    else
+      value
+    end
+  end
+
+  defp put_empty_state(value, view) do
+    Enum.reduce(view.tables, value, fn table, acc ->
+      sfx = table_suffix(view, table)
+      rows = rows_at(value, view, table)
+
+      acc
+      |> Map.put("_empty_visible#{sfx}", AshA2ui.Experience.sentinel(rows == []))
+      |> Map.put("_empty_message#{sfx}", AshA2ui.Experience.empty_message(view, table))
+    end)
+  end
+
+  defp put_pagination_sentinels(value, view) do
+    query_tables = Enum.filter(view.tables, & &1.query)
+
+    cond do
+      query_tables == [] ->
+        value
+
+      ResolvedView.multi_table?(view) ->
+        Map.update!(value, "query", fn states ->
+          Map.new(states, &adorned_table_state(&1, value, view, query_tables))
+        end)
+
+      true ->
+        [single] = query_tables
+
+        Map.update!(
+          value,
+          "query",
+          &AshA2ui.Experience.with_pagination_sentinels(
+            &1,
+            value |> rows_at(view, single) |> length()
+          )
+        )
+    end
+  end
+
+  defp adorned_table_state({name, state}, value, view, query_tables) do
+    table = Enum.find(query_tables, &(to_string(&1.name) == name))
+    count = value |> rows_at(view, table) |> length()
+
+    {name, AshA2ui.Experience.with_pagination_sentinels(state, count)}
+  end
+
+  defp rows_at(value, view, table) do
+    if ResolvedView.multi_table?(view) do
+      value["records"][to_string(table.name)] || []
+    else
+      value["records"] || []
     end
   end
 

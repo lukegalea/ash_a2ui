@@ -80,6 +80,24 @@ defmodule AshA2ui.ActionHandler do
       `updateDataModel` populating `/form` with the record's field values
       (edit-form population), including `"id"`.
 
+    * `"start_create"` / `"view_record"` / `"start_edit"` /
+      `"cancel_record_task"` — the experience v2 task-mode actions (see
+      `AshA2ui.Experience`; only accepted when
+      `config :ash_a2ui, :experience_version` is `2` — under v1 they are
+      rejected like any unknown action). `start_create` opens the record
+      panel in create mode over a fresh `/form`; `view_record`/`start_edit`
+      take `%{"recordId" => id}`, fetch the record through an authorized
+      read (`start_edit` additionally pre-flights the update authorization,
+      so the edit panel never opens on a task the server would refuse to
+      commit) and populate `/form` exactly like `select_row`; the panel
+      state (intent, mode, heading, primary label, submit visibility)
+      carries the mode. `cancel_record_task` closes the panel, resets
+      `/form`, and clears feedback. Task submissions (`submit_form` under
+      v2) report typed outcomes at `/ui/feedback` (`{"kind", "message"}` —
+      success closes the panel and returns to browse; errors keep the mode,
+      panel, and submitted values), and `invoke` failures under v2 carry an
+      `/ui/feedback` error write alongside the classic `/ui/status` text.
+
     * `"query"` — context `%{"query" => <the /query map>}` plus an optional
       literal `"page"` override or relative `"pageDelta"` (used by the
       emitted Apply / prev / next controls). Requires the surface's table to
@@ -142,6 +160,7 @@ defmodule AshA2ui.ActionHandler do
   alias AshA2ui.ContextRunner
   alias AshA2ui.Csv
   alias AshA2ui.Encoder.V1_0
+  alias AshA2ui.Experience
   alias AshA2ui.QueryRunner
   alias AshA2ui.ResolvedView
 
@@ -304,7 +323,7 @@ defmodule AshA2ui.ActionHandler do
 
   defp dispatch("submit_form", context, env) do
     values = Map.get(context, "values") || %{}
-    env = Map.put(env, :submitted, values)
+    env = env |> Map.put(:submitted, values) |> Map.put(:task, Experience.v2?())
 
     case Map.get(context, "recordId") do
       nil -> create(env, values)
@@ -313,25 +332,9 @@ defmodule AshA2ui.ActionHandler do
   end
 
   defp dispatch("invoke", context, %{view: view} = env) do
-    requested = Map.get(context, "action")
-    allowed = requested && Enum.find(view.row_actions, &(to_string(&1) == requested))
-
-    cond do
-      not is_binary(requested) ->
-        {:error, [status(view, ~s(Malformed invoke action: context is missing "action".))]}
-
-      is_nil(allowed) ->
-        {:error,
-         [
-           status(
-             view,
-             "Action #{inspect(requested)} is not allowed: it is not listed in the " <>
-               "view's row_actions."
-           )
-         ]}
-
-      true ->
-        invoke(allowed, Map.get(context, "recordId"), Map.get(context, "values"), env)
+    case invoke_dispatch(context, env) do
+      {:error, messages} -> {:error, messages ++ invoke_feedback(view, messages)}
+      ok -> ok
     end
   end
 
@@ -550,8 +553,169 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
+  # --- experience v2 task modes ----------------------------------------------
+
+  # The task-mode actions exist only under experience v2; under v1 the names
+  # fall through to the unknown-action error, exactly as before.
+
+  defp dispatch("start_create", _context, %{view: view} = env) do
+    if Experience.v2?(), do: start_create(env), else: unknown_action(view, "start_create")
+  end
+
+  defp dispatch("view_record", context, %{view: view} = env) do
+    if Experience.v2?(), do: view_record(env, context), else: unknown_action(view, "view_record")
+  end
+
+  defp dispatch("start_edit", context, %{view: view} = env) do
+    if Experience.v2?(), do: start_edit(env, context), else: unknown_action(view, "start_edit")
+  end
+
+  defp dispatch("cancel_record_task", _context, %{view: view} = env) do
+    if Experience.v2?(),
+      do: cancel_record_task(env),
+      else: unknown_action(view, "cancel_record_task")
+  end
+
   defp dispatch(name, _context, %{view: view}) do
+    unknown_action(view, name)
+  end
+
+  # Opens the create task: the panel in create mode over a fresh /form,
+  # prior feedback and stale errors cleared. Rejected on formless surfaces
+  # without a create action (the affordance is never emitted there anyway).
+  defp start_create(%{view: view} = _env) do
+    if view.create_action do
+      {:ok,
+       [
+         update_data_model(view, "/ui/intent", "create"),
+         update_data_model(view, "/ui/panel", Experience.panel_state(:create, view, nil)),
+         update_data_model(view, "/form", ResolvedView.initial_form(view)),
+         update_data_model(view, "/errors", %{}),
+         update_data_model(view, "/ui/feedback", Experience.clear_feedback())
+       ]}
+    else
+      {:error, [status(view, "This surface does not declare a create action.")]}
+    end
+  end
+
+  defp view_record(%{view: view, ash_opts: ash_opts} = _env, context) do
+    case Map.get(context, "recordId") do
+      nil ->
+        {:error, [status(view, ~s(Malformed view_record action: context is missing "recordId".))]}
+
+      record_id ->
+        result =
+          with {:ok, record} <-
+                 fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)) do
+            {:ok, task_open_messages(view, :view, record) ++ form_population(view, record)}
+          end
+
+        case result do
+          {:ok, messages} -> {:ok, messages}
+          {:error, error} -> {:error, error_messages(view, error)}
+        end
+    end
+  end
+
+  # start_edit pre-flights the update authorization (the write itself only
+  # happens on the subsequent submit_form): a record the actor may read but
+  # not update is rejected here, so the edit panel never opens on a task the
+  # server would refuse to commit.
+  defp start_edit(%{view: view, ash_opts: ash_opts} = _env, context) do
+    case Map.get(context, "recordId") do
+      nil ->
+        {:error, [status(view, ~s(Malformed start_edit action: context is missing "recordId".))]}
+
+      record_id ->
+        result =
+          with {:ok, record} <-
+                 fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)),
+               :ok <- authorize_update(view, record, ash_opts) do
+            {:ok, task_open_messages(view, :edit, record) ++ form_population(view, record)}
+          end
+
+        case result do
+          {:ok, messages} -> {:ok, messages}
+          {:error, error} -> {:error, error_messages(view, error)}
+        end
+    end
+  end
+
+  defp authorize_update(view, record, ash_opts) do
+    action = view.update_action || primary_action(view.resource, :update)
+    changeset = Ash.Changeset.for_update(record, action, %{}, ash_opts)
+
+    if Ash.can?(changeset, ash_opts[:actor]) do
+      :ok
+    else
+      {:error, %Ash.Error.Forbidden{}}
+    end
+  end
+
+  defp cancel_record_task(%{view: view} = _env) do
+    {:ok,
+     [
+       update_data_model(view, "/ui/intent", "browse"),
+       update_data_model(view, "/ui/panel", Experience.panel_state(:hidden)),
+       update_data_model(view, "/form", ResolvedView.initial_form(view)),
+       update_data_model(view, "/errors", %{}),
+       update_data_model(view, "/ui/feedback", Experience.clear_feedback())
+     ]}
+  end
+
+  # The task-open write set: intent + panel for the mode, stale errors and
+  # feedback cleared. The /form population rides along from the caller.
+  defp task_open_messages(view, mode, record) do
+    [
+      update_data_model(view, "/ui/intent", to_string(mode)),
+      update_data_model(view, "/ui/panel", Experience.panel_state(mode, view, record.id)),
+      update_data_model(view, "/errors", %{}),
+      update_data_model(view, "/ui/feedback", Experience.clear_feedback())
+    ]
+  end
+
+  defp unknown_action(view, name) do
     {:error, [status(view, "Unknown action #{inspect(name)}.")]}
+  end
+
+  # v2 typed feedback: an invoke failure carries an /ui/feedback error write
+  # alongside the classic /ui/status text (no visual change required of the
+  # basic catalog — the kind is there for renderers that want it).
+  defp invoke_feedback(view, messages) do
+    if Experience.v2?() do
+      [
+        update_data_model(
+          view,
+          "/ui/feedback",
+          Experience.feedback("error", feedback_message(messages))
+        )
+      ]
+    else
+      []
+    end
+  end
+
+  defp invoke_dispatch(context, %{view: view} = env) do
+    requested = Map.get(context, "action")
+    allowed = requested && Enum.find(view.row_actions, &(to_string(&1) == requested))
+
+    cond do
+      not is_binary(requested) ->
+        {:error, [status(view, ~s(Malformed invoke action: context is missing "action".))]}
+
+      is_nil(allowed) ->
+        {:error,
+         [
+           status(
+             view,
+             "Action #{inspect(requested)} is not allowed: it is not listed in the " <>
+               "view's row_actions."
+           )
+         ]}
+
+      true ->
+        invoke(allowed, Map.get(context, "recordId"), Map.get(context, "values"), env)
+    end
   end
 
   # --- option search / nested rows ---------------------------------------------
@@ -815,20 +979,19 @@ defmodule AshA2ui.ActionHandler do
 
   # require_context unmet: an honest empty result without touching Ash.
   defp require_unmet_messages(view, table, params) do
-    [
-      update_data_model(view, table.records_path, []),
-      update_data_model(view, table.query_path, QueryRunner.state(table.query, params, 0, false))
-    ]
+    state = QueryRunner.state(table.query, params, 0, false)
+
+    records_messages(view, table, []) ++ query_state_messages(view, table, state, [])
   end
 
   defp run_scoped_query(view, table, params, scope, ash_opts) do
     case QueryRunner.run(table, params, ash_opts, scope) do
       {:ok, records, query_state} ->
+        rows = rows(view, table, records)
+
         {:ok,
-         [
-           update_data_model(view, table.records_path, rows(view, table, records)),
-           update_data_model(view, table.query_path, query_state)
-         ]}
+         records_messages(view, table, rows) ++
+           query_state_messages(view, table, query_state, rows)}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
@@ -1184,17 +1347,21 @@ defmodule AshA2ui.ActionHandler do
   # without wave-5 relationship inputs emit the single frozen /form message).
   defp select_row(view, record_id, ash_opts) do
     case fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)) do
-      {:ok, record} ->
-        form =
-          view
-          |> record_values(record, form_fields(view))
-          |> Map.merge(nested_row_values(view, record))
-
-        {:ok, [update_data_model(view, "/form", form) | select_state_messages(view, record)]}
-
-      {:error, error} ->
-        {:error, error_messages(view, error)}
+      {:ok, record} -> {:ok, form_population(view, record)}
+      {:error, error} -> {:error, error_messages(view, error)}
     end
+  end
+
+  # The shared /form population for select_row (v1's row-select) and the v2
+  # view_record/start_edit tasks: the record's field values plus nested rows,
+  # then the searchable selects' label rewrite.
+  defp form_population(view, record) do
+    form =
+      view
+      |> record_values(record, form_fields(view))
+      |> Map.merge(nested_row_values(view, record))
+
+    [update_data_model(view, "/form", form) | select_state_messages(view, record)]
   end
 
   # The /form/<argument> rows of the record's currently-related records:
@@ -1662,8 +1829,10 @@ defmodule AshA2ui.ActionHandler do
   defp after_write(:ok, env, status_text), do: success(env, status_text)
   defp after_write({:ok, _record}, env, status_text), do: success(env, status_text)
 
-  defp after_write({:error, error}, %{view: view} = env, _status_text),
-    do: {:error, error_messages(view, error) ++ nested_error_mirrors(env, error)}
+  defp after_write({:error, error}, %{view: view} = env, _status_text) do
+    messages = error_messages(view, error) ++ nested_error_mirrors(env, error)
+    {:error, messages ++ task_error_feedback(env, messages)}
+  end
 
   # A success re-reads and re-emits every refresh-target table (each table's
   # records path, plus its query state when a query is attached — run
@@ -1697,7 +1866,7 @@ defmodule AshA2ui.ActionHandler do
              update_data_model(view, "/form", ResolvedView.initial_form(view)),
              update_data_model(view, "/errors", %{}),
              update_data_model(view, "/ui/response", response)
-           ] ++ select_clear(view) ++ prompt_clear(env)}
+           ] ++ select_clear(view) ++ prompt_clear(env) ++ task_success(env, status_text)}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
@@ -1715,11 +1884,55 @@ defmodule AshA2ui.ActionHandler do
              update_data_model(view, "/ui/status", status_text),
              update_data_model(view, "/ui/action_result", %{}),
              update_data_model(view, "/ui/action_result_text", "")
-           ] ++ select_clear(view) ++ prompt_clear(env) ++ extra}
+           ] ++
+           select_clear(view) ++ prompt_clear(env) ++ extra ++ task_success(env, status_text)}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
     end
+  end
+
+  # v2: a successful task submission (submit_form) closes the panel, returns
+  # to browse, and reports the outcome as typed success feedback.
+  defp task_success(%{task: true, view: view}, status_text) do
+    [
+      update_data_model(view, "/ui/intent", "browse"),
+      update_data_model(view, "/ui/panel", Experience.panel_state(:hidden)),
+      update_data_model(view, "/ui/feedback", Experience.feedback("success", status_text))
+    ]
+  end
+
+  defp task_success(_env, _status_text), do: []
+
+  # v2: a failed task submission reports typed error feedback; the mode,
+  # panel, and submitted /form values are deliberately left untouched (the
+  # client keeps its state for correction).
+  defp task_error_feedback(%{task: true, view: view}, messages) do
+    [
+      update_data_model(
+        view,
+        "/ui/feedback",
+        Experience.feedback("error", feedback_message(messages))
+      )
+    ]
+  end
+
+  defp task_error_feedback(_env, _messages), do: []
+
+  # The human-readable text of the batch's /ui/status (or v1.0 /ui/response)
+  # write — reused as the typed feedback message.
+  defp feedback_message(messages) do
+    Enum.find_value(messages, "", fn
+      %{"updateDataModel" => %{"path" => "/ui/status", "value" => text}}
+      when is_binary(text) ->
+        text
+
+      %{"updateDataModel" => %{"path" => "/ui/response", "value" => %{"message" => message}}} ->
+        message
+
+      _other ->
+        nil
+    end)
   end
 
   # Surfaces with searchable selects / pick_existing pickers reset their
@@ -1767,23 +1980,20 @@ defmodule AshA2ui.ActionHandler do
   end
 
   defp empty_table_messages(view, %{query: nil} = table, _params) do
-    [update_data_model(view, table.records_path, [])]
+    records_messages(view, table, [])
   end
 
   defp empty_table_messages(view, table, params) do
     state =
       QueryRunner.state(table.query, params || QueryRunner.default_params(table.query), 0, false)
 
-    [
-      update_data_model(view, table.records_path, []),
-      update_data_model(view, table.query_path, state)
-    ]
+    records_messages(view, table, []) ++ query_state_messages(view, table, state, [])
   end
 
   defp scoped_table_refresh(view, %{query: nil} = table, _params, ash_opts, scope) do
     case read_table(table, ash_opts, scope) do
       {:ok, records} ->
-        {:ok, [update_data_model(view, table.records_path, rows(view, table, records))]}
+        {:ok, records_messages(view, table, rows(view, table, records))}
 
       {:error, error} ->
         {:error, error}
@@ -1795,15 +2005,48 @@ defmodule AshA2ui.ActionHandler do
 
     case QueryRunner.run(table, params, ash_opts, scope) do
       {:ok, records, query_state} ->
+        rows = rows(view, table, records)
+
         {:ok,
-         [
-           update_data_model(view, table.records_path, rows(view, table, records)),
-           update_data_model(view, table.query_path, query_state)
-         ]}
+         records_messages(view, table, rows) ++
+           query_state_messages(view, table, query_state, rows)}
 
       {:error, error} ->
         {:error, error}
     end
+  end
+
+  # The records rewrite, plus (v2) the table's `_empty_visible` sentinel so
+  # the empty state stays data-driven across refreshes (no-op under v1).
+  defp records_messages(view, table, rows) do
+    [update_data_model(view, table.records_path, rows)]
+    |> Kernel.++(empty_state_messages(view, table, rows))
+  end
+
+  defp empty_state_messages(view, table, rows) do
+    if Experience.v2?() do
+      [
+        update_data_model(
+          view,
+          Experience.empty_visible_path(view, table),
+          Experience.sentinel(rows == [])
+        )
+      ]
+    else
+      []
+    end
+  end
+
+  # The query-state rewrite, with (v2) the pagination sentinels re-derived
+  # from the refreshed rows (a pass-through under v1).
+  defp query_state_messages(view, table, state, rows) do
+    [
+      update_data_model(
+        view,
+        table.query_path,
+        Experience.with_pagination_sentinels(state, length(rows))
+      )
+    ]
   end
 
   # Table rows carry the per-row visibility data (`"_actions"` +

@@ -8,6 +8,30 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ## Unreleased
 
+### Features:
+
+- **Experience v2** (`AshA2ui.Experience`) — an opt-in UX layer behind
+  `config :ash_a2ui, :experience_version, 2` (default `1` is byte-identical
+  to the previous release). Surfaces gain explicit task modes: rows offer
+  semantic **View**/`view_record` and (when the view has an update action)
+  **Edit**/`start_edit` controls instead of **Select**, a
+  **Create <Resource>**/`start_create` affordance appears near the query
+  controls, and the form renders inside a task panel — gated behind the
+  `/ui/panel/visible` sentinel, headed by `/ui/panel/title`, with the
+  submit label bound to `/ui/panel/primary_label` and hidden in view mode
+  via `/ui/panel/submit_visible`. `cancel_record_task` returns to browse
+  and resets the form. Pagination becomes conditional (sentinels on the
+  `/query` state hide the row when there is nothing to page; the page
+  number becomes a result-range text, `"1–5 of 42"` or `"Showing 1–5"`),
+  tables gain a data-driven empty state ("No <Resource> records yet."),
+  and action outcomes carry typed feedback at `/ui/feedback`
+  (`{"kind": "success" | "error", "message": ...}` — a successful task
+  submission closes the panel; validation failures retain the open task,
+  its values, and its mode). Forged task events run the same authorized
+  actions as before (`start_edit` pre-flights the update authorization).
+  The v1.0 encoder passes the new `/ui/*` state through its
+  `/ui/response` collapse unchanged.
+
 ### Bug Fixes:
 
 - Formless surfaces no longer render a per-row **Select** button.

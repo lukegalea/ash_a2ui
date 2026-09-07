@@ -1,0 +1,219 @@
+---
+# Acceptance criteria for A2UI-101 (experience patch: explicit task modes,
+# conditional pagination, semantic action labels, typed feedback).
+# Written BEFORE implementation, per the ai-sdlc oracle-first format.
+# Criterion ids are immutable from here on.
+# CI is the only evidence producer.
+#
+# Scope note: this oracle covers the protocol/contract tier (Elixir ExUnit in
+# ash_a2ui). Browser-tier evidence (visual regression, screen reader) belongs
+# to the host-app Playwright suite and is tracked by the later A2UI-101B item;
+# nothing here requires a browser.
+#
+# Toggle under test: `config :ash_a2ui, :experience_version` —
+#   1 (default) = today's byte-identical behavior
+#   2           = experience layer described below
+item: A2UI-101
+
+criteria:
+  - id: A2UI-101/AC-1
+    given: an experience v2 surface whose query returns zero records
+    when: the data model is built
+    then: >-
+      an empty-state message is present for the table, and the pagination
+      sentinel is empty (pagination invisible): no previous, next, or page
+      affordance is bound to anything visible
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/pagination_visibility_test.exs::zero_records_hide_pagination_and_show_empty_state
+
+  - id: A2UI-101/AC-2
+    given: an experience v2 surface with fewer records than the page size
+    when: the data model is built on page 1
+    then: >-
+      the pagination sentinel is empty and the previous and next sentinels are
+      both empty — no pagination renders for a single page, even though the
+      table declares a query
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/pagination_visibility_test.exs::single_page_hides_pagination_entirely
+
+  - id: A2UI-101/AC-3
+    given: an experience v2 surface with exactly page_size + 1 matching records
+    when: page 1 is loaded
+    then: >-
+      the next sentinel is non-empty, the previous sentinel is empty, and the
+      result-range text reads "Showing 1–<page_size>" without a total
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/pagination_visibility_test.exs::overflow_page_shows_next_without_previous
+
+  - id: A2UI-101/AC-4
+    given: an experience v2 surface on a page greater than 1 with no further
+      records
+    when: the data model is built
+    then: >-
+      the pagination sentinel is non-empty, the previous sentinel is non-empty,
+      the next sentinel is empty, and the previous affordance survives a sparse
+      current page
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/pagination_visibility_test.exs::last_page_shows_previous_without_next
+
+  - id: A2UI-101/AC-5
+    given: an experience v2 surface whose query state carries a non-null
+      totalCount
+    when: the result range is rendered
+    then: the range text is "<first>–<last> of <total>"
+    verify: unit
+    risk: low
+    test: >-
+      test/ash_a2ui/experience/pagination_visibility_test.exs::known_total_renders_of_form
+
+  - id: A2UI-101/AC-6
+    given: a freshly built experience v2 surface with a form-capable table
+    when: the client receives the initial surface and data model
+    then: >-
+      the intent state is "browse", the record panel is hidden, no form is
+      visible, the submit control is hidden, and no row control labeled
+      "Select" exists anywhere in the component tree
+    verify: unit
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/mode_state_machine_test.exs::initial_surface_is_browse_with_hidden_panel
+
+  - id: A2UI-101/AC-7
+    given: an experience v2 surface and a client event start_create
+    when: the action handler processes it
+    then: >-
+      intent becomes "create", the panel is visible in create mode with an
+      explicit heading (e.g. "Create Appointment"), the primary label is
+      "Create <resource>", the form is reset to initial values, and prior
+      feedback is cleared
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/mode_state_machine_test.exs::start_create_opens_a_labeled_create_task
+
+  - id: A2UI-101/AC-8
+    given: an experience v2 surface and a client event view_record with a
+      record id the actor may read
+    when: the action handler processes it
+    then: >-
+      intent becomes "view", the panel shows the record's values in view mode
+      with a visible heading, and no primary submit action is offered
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/mode_state_machine_test.exs::view_record_populates_read_only_panel
+
+  - id: A2UI-101/AC-9
+    given: an experience v2 surface and a client event start_edit with a
+      record id the actor may update
+    when: the action handler processes it
+    then: >-
+      intent becomes "edit", the panel shows the record's values in edit mode
+      with an "Edit <resource>" heading, and the primary label reads
+      "Save changes"
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/mode_state_machine_test.exs::start_edit_populates_edit_task_with_save_changes
+
+  - id: A2UI-101/AC-10
+    given: an experience v2 surface and an open create or edit task
+    when: the client sends cancel_record_task
+    then: >-
+      intent returns to "browse", the panel hides, the form resets to initial
+      values, and feedback is cleared
+    verify: unit
+    risk: low
+    test: >-
+      test/ash_a2ui/experience/mode_state_machine_test.exs::cancel_returns_to_browse_and_resets_the_form
+
+  - id: A2UI-101/AC-11
+    given: an experience v2 surface for a resource without an update action
+    when: row controls and the create affordance are emitted
+    then: >-
+      rows offer View but never Edit, and no blank form ever appears without
+      the client first requesting a task
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/affordances_test.exs::no_update_action_means_no_edit_control
+
+  - id: A2UI-101/AC-12
+    given: an experience v2 surface for a resource with a create action
+    when: affordances are emitted
+    then: a "Create <resource>" affordance is present and no blank form is
+      initially visible
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/affordances_test.exs::create_action_presence_gates_the_create_affordance
+
+  - id: A2UI-101/AC-13
+    given: an experience v2 surface for a resource with neither create nor
+      update actions
+    when: affordances are emitted
+    then: rows offer View only, there is no create affordance, and no form or
+      submit control is emitted
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/affordances_test.exs::read_only_resource_offers_view_only
+
+  - id: A2UI-101/AC-14
+    given: an open create or edit task whose submitted values fail action
+      validation
+    when: the form submission is processed
+    then: >-
+      the mode and panel state are retained, the submitted /form values are
+      retained, field errors remain associated with their inputs, and the
+      feedback kind is "error"
+    verify: unit
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/feedback_and_validation_test.exs::validation_failure_retains_mode_values_and_field_errors
+
+  - id: A2UI-101/AC-15
+    given: a successful create or update submission under experience v2
+    when: the action completes
+    then: >-
+      feedback kind is "success" with a message, the panel hides, intent
+      returns to "browse", and the collection data refreshes
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/feedback_and_validation_test.exs::success_closes_panel_with_typed_feedback
+
+  - id: A2UI-101/AC-16
+    given: an actor not permitted to update a record
+    when: a forged start_edit or submit_form for that record is sent to the
+      action handler
+    then: >-
+      no update occurs and an authorized-readable error response is returned,
+      exactly as the pre-existing authorized path does today — the experience
+      layer adds no new execution path
+    verify: security
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/feedback_and_validation_test.exs::forged_events_still_hit_authorized_actions
+
+  - id: A2UI-101/AC-17
+    given: the default configuration (experience_version not set, or set to 1)
+    when: any existing surface is built and any existing client event is
+      handled
+    then: >-
+      output is byte-compatible with the previous release: the persistent form
+      with its "Save" submit, the "Select" row control, always-present
+      pagination, and select_row handling all behave exactly as before, and the
+      entire pre-existing test suite passes unmodified
+    verify: unit
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/compat_v1_test.exs::version_one_output_is_unchanged
