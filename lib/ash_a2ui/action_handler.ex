@@ -2038,13 +2038,17 @@ defmodule AshA2ui.ActionHandler do
   end
 
   # The query-state rewrite, with (v2) the pagination sentinels re-derived
-  # from the refreshed rows (a pass-through under v1).
+  # from the refreshed rows and — when the admin catalog is effective — the
+  # plain boolean pagination props (both adornments are gated no-ops
+  # outside their mode; the handler learns no new actions for either).
   defp query_state_messages(view, table, state, rows) do
     [
       update_data_model(
         view,
         table.query_path,
-        Experience.with_pagination_sentinels(state, length(rows))
+        state
+        |> Experience.with_pagination_sentinels(length(rows))
+        |> Experience.with_admin_pagination_booleans(length(rows))
       )
     ]
   end

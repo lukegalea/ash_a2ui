@@ -1,0 +1,159 @@
+---
+# Acceptance criteria for A2UI-101B (semantic admin catalog, Elixir contract
+# tier). Written BEFORE implementation. Criterion ids are immutable.
+# CI is the only evidence producer.
+#
+# The Lit renderer implementation (priv/js) is covered by this oracle only
+# structurally (file present, contract-consistent exports); its visual and
+# accessibility evidence is produced by the host-app Playwright tier (Phase C)
+# and is not claimed here.
+item: A2UI-101B
+
+criteria:
+  - id: A2UI-101B/AC-1
+    given: the admin catalog definition file
+    when: it is loaded and validated
+    then: >-
+      it declares all ten components of the contract (entityPage, dataGrid,
+      emptyState, pagination, recordPanel, fieldDisplay, formSection,
+      actionBar, statusBanner, confirmDialog) with the pinned property names
+      from notes/2026-09-07-admin-catalog-contract.md
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_contract_test.exs::catalog_declares_the_full_component_vocabulary
+
+  - id: A2UI-101B/AC-2
+    given: an experience v2 core surface (table + form, no advanced features)
+      and config catalog: :admin_v1
+    when: the surface is encoded
+    then: >-
+      createSurface carries catalogId https://ash-a2ui.dev/catalogs/admin/v1,
+      the root component is EntityPage, and the semantic subtree contains
+      DataGrid, RecordPanel, and StatusBanner — with no form-slot List
+      composition, no sentinel-bound pagination row, and no standalone
+      view/edit button primitives from the basic-v2 emission
+    verify: unit
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_encoder_test.exs::admin_surface_uses_semantic_components
+
+  - id: A2UI-101B/AC-3
+    given: an experience v2 admin surface
+    when: DataGrid is emitted
+    then: >-
+      columns carry one entry per visible field with label and cell path,
+      rowActions include the View envelope, include the Edit envelope only
+      when the view has an update action, and map declared row actions to
+      their existing invoke envelopes marked destructive when the action is a
+      destroy
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_encoder_test.exs::data_grid_derives_columns_and_row_actions
+
+  - id: A2UI-101B/AC-4
+    given: an experience v2 admin surface with a query
+    when: the data model and Pagination component are built
+    then: >-
+      Pagination binds page, pageSize, total, hasNext, visible,
+      previousVisible, nextVisible, and rangeText — with visible/previous/
+      next as plain booleans from the query state (paginationVisible/
+      previousVisible/nextVisible keys), and no zero-or-one sentinel lists
+      anywhere in the admin pagination props
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_encoder_test.exs::pagination_component_receives_boolean_props
+
+  - id: A2UI-101B/AC-5
+    given: an experience v2 admin surface
+    when: RecordPanel is emitted
+    then: >-
+      mode, title, and recordId bind to the /ui/panel state, and the panel
+      declares FieldDisplay children for view rendering and FormSection +
+      ActionBar children for create/edit rendering, with ActionBar's
+      primaryLabel bound to /ui/panel/primary_label
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_encoder_test.exs::record_panel_binds_mode_and_declares_mode_children
+
+  - id: A2UI-101B/AC-6
+    given: an experience v2 admin surface
+    when: StatusBanner is emitted
+    then: kind binds /ui/feedback/kind and message binds /ui/feedback/message
+    verify: unit
+    risk: low
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_encoder_test.exs::status_banner_binds_typed_feedback
+
+  - id: A2UI-101B/AC-7
+    given: an experience v2 admin surface using an advanced feature (sections,
+      reports, export, editable, or nested_form)
+    when: the surface is encoded
+    then: >-
+      the advanced subtree is byte-equal to the basic-v2 emission of the same
+      surface, while the core subtree upgrades to semantic components
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_fallback_test.exs::advanced_features_stay_basic_composed
+
+  - id: A2UI-101B/AC-8
+    given: default configuration (catalog unset or :basic)
+    when: any v2 surface is encoded
+    then: >-
+      output is byte-identical to the A2UI-101 basic-v2 emission — the admin
+      layer changes nothing unless selected
+    verify: unit
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_fallback_test.exs::basic_catalog_output_is_unchanged
+
+  - id: A2UI-101B/AC-9
+    given: experience_version 1 with config catalog: :admin_v1
+    when: any surface is encoded
+    then: >-
+      output is byte-identical to basic v1 — admin requires the experience
+      layer and the configuration is ignored rather than partially applied
+    verify: unit
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_fallback_test.exs::admin_catalog_requires_experience_v2
+
+  - id: A2UI-101B/AC-10
+    given: an admin surface encoded under spec_version 1.0
+    when: the v1.0 upgrade runs
+    then: >-
+      custom component kinds and their bindings pass through untouched and
+      the /ui/response collapse preserves the A2UI-101 behavior
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_upgrade_test.exs::v1_0_upgrade_passes_custom_kinds_through
+
+  - id: A2UI-101B/AC-11
+    given: admin-encoded surfaces driven through client events
+    when: submit_form, query page turns, view_record, start_edit, start_create,
+      and cancel_record_task are handled
+    then: >-
+      every action reuses the existing A2UI-101 envelopes — the action
+      handler grows no new action names and no new dispatch clauses for the
+      catalog
+    verify: unit
+    risk: high
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_encoder_test.exs::semantic_components_reuse_existing_action_envelopes
+
+  - id: A2UI-101B/AC-12
+    given: the renderer asset shipped in priv/js
+    when: it is inspected
+    then: >-
+      priv/js/ash_admin_catalog.js exists, exports createAshAdminCatalog/1,
+      and registers components for all ten contract kinds without adding
+      build tooling to the library
+    verify: unit
+    risk: low
+    test: >-
+      test/ash_a2ui/experience/admin_catalog_contract_test.exs::renderer_asset_declares_the_component_vocabulary

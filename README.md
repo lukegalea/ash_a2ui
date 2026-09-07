@@ -445,6 +445,24 @@ tables render a data-driven empty state, and action outcomes carry typed
 feedback (`/ui/feedback` kind + message). The default version `1` is
 byte-identical to the previous release.
 
+### Admin catalog
+
+On top of experience v2, `config :ash_a2ui, :catalog, :admin_v1` selects
+the semantic admin catalog (`AshA2ui.Experience.effective_admin?/0`):
+surfaces are emitted as an `entityPage` of `dataGrid` (with `emptyState` /
+`pagination` children and destructive-confirmed row actions), a
+`recordPanel` (`fieldDisplay` for view mode, `formSection` + `actionBar`
+for create/edit), and a `statusBanner` — declared in
+`priv/a2ui/admin_v1/catalog.json`. Advanced-feature subtrees (sections,
+reports, export, editable, nested forms) stay basic-composed, and query
+states carry plain boolean pagination props alongside the v2 sentinels.
+Precedence is deterministic: the catalog selection requires experience v2 —
+under version `1` it is ignored and output stays basic v1, byte-identical;
+version `2` with the default `:basic` catalog stays byte-identical to the
+experience v2 emission. The Lit renderer registration ships separately in
+`priv/js/ash_admin_catalog.js` (`createAshAdminCatalog(deps)`), a plain ES
+module consumed by the host's bundler.
+
 ## Transports
 
 ### LiveView (batteries included)

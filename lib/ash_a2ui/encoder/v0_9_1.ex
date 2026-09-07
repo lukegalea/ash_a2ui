@@ -147,7 +147,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "version" => @version,
         "createSurface" => %{
           "surfaceId" => resolved_view.surface_id,
-          "catalogId" => @catalog_id
+          "catalogId" => catalog_id()
         }
       },
       %{
@@ -159,6 +159,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       },
       encode_data_model(resolved_view, records, opts)
     ]
+  end
+
+  # The admin catalog (v2 + `catalog: :admin_v1`) surfaces declare their own
+  # catalog id; everything else stays the basic catalog.
+  defp catalog_id do
+    if AshA2ui.Experience.effective_admin?(),
+      do: AshA2ui.Experience.admin_catalog_id(),
+      else: @catalog_id
   end
 
   @doc """
@@ -326,6 +334,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # leading noun ("records_list_<name>", "table_cell_<name>_<field>",
   # "query_<name>_apply_button", ...) — see the sfx/1-using call sites.
   defp components(view, options) do
+    if AshA2ui.Experience.effective_admin?() do
+      admin_components(view, options)
+    else
+      basic_components(view, options)
+    end
+  end
+
+  defp basic_components(view, options) do
     form = Enum.find(view.components, &(&1.name == :form))
 
     context_sections =
@@ -373,6 +389,331 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # sits alongside at /ui/feedback/kind). v1 keeps the frozen binding.
   defp status_path do
     if AshA2ui.Experience.v2?(), do: "/ui/feedback/message", else: "/ui/status"
+  end
+
+  # --- admin catalog composition (v2 + catalog :admin_v1) ---
+
+  # The admin emission upgrades the CORE subtree — collection → dataGrid
+  # (+ emptyState + pagination), form → recordPanel (+ fieldDisplays,
+  # formSection + actionBar), status → statusBanner, root → entityPage —
+  # and keeps everything else basic: context pickers and query controls are
+  # basic by contract, the create affordance stays a basic button, the
+  # action-result panel is untouched, and advanced-feature subtrees
+  # (dynamic sections, export, inline editing, nested forms, reports,
+  # details) emit their basic-v2 composition byte-equal (see
+  # notes/2026-09-07-admin-catalog-contract.md). Action envelopes are the
+  # exact A2UI-101 shapes — the handler learns nothing new.
+  defp admin_components(view, options) do
+    form = Enum.find(view.components, &(&1.name == :form))
+
+    context_sections =
+      Enum.flat_map(view.context_order, &context_picker_components(view, view.contexts[&1]))
+
+    {table_section_lists, table_children_lists} =
+      view.tables
+      |> Enum.map(&admin_table_section(view, &1, options))
+      |> Enum.unzip()
+
+    table_sections = List.flatten(table_section_lists)
+    table_children = List.flatten(table_children_lists)
+
+    detail_sections = Enum.flat_map(view.details, &detail_components(view, &1))
+    report_sections = Enum.flat_map(view.reports, &report_components(view, &1))
+
+    detail_children =
+      Enum.flat_map(view.components, fn
+        %{name: :detail} = component -> ["detail_#{AshA2ui.Component.key(component)}"]
+        %{name: :report} = component -> ["report_#{AshA2ui.Component.key(component)}"]
+        _other -> []
+      end)
+
+    {form_sections, form_children} = admin_form_sections(view, form, options)
+
+    root = %{
+      "id" => "root",
+      "component" => "entityPage",
+      "title" => AshA2ui.Experience.resource_label(view),
+      "children" =>
+        context_children(view) ++
+          table_children ++
+          detail_children ++ form_children ++ ["status_banner", "action_result_panel"]
+    }
+
+    [
+      root
+      | context_sections ++
+          table_sections ++ detail_sections ++ report_sections ++ form_sections
+    ] ++ [admin_status_banner() | action_result_components()]
+  end
+
+  defp context_children(view) do
+    for name <- view.context_order, view.contexts[name].picker, do: "context_#{name}"
+  end
+
+  # A table whose whole subtree upgrades to the semantic components: no
+  # dynamic sections, no export controls, no inline cell editing — the
+  # contract's advanced-feature list. Everything else (and the form's
+  # nested_form case below) falls back to its byte-equal basic-v2 subtree.
+  defp admin_core_table?(table) do
+    is_nil(table.sections) and is_nil(table.export) and is_nil(table.editable)
+  end
+
+  defp admin_table_section(view, table, _options) do
+    sfx = table_suffix(view, table)
+
+    if admin_core_table?(table) do
+      {query_control_components(view, table, sfx) ++
+         create_button_components(view, table, sfx) ++
+         admin_data_grid_components(view, table, sfx),
+       ((table.query && ["query#{sfx}_controls"]) || []) ++
+         create_button_ids(view, table, sfx) ++ ["data_grid#{sfx}"]}
+    else
+      {table_components(view, table, sfx) ++
+         query_components(view, table, sfx) ++
+         create_button_components(view, table, sfx) ++
+         table_export_components(view, table, sfx) ++
+         table_descendants(view, table, sfx) ++
+         empty_state_components(view, table, sfx), component_root_children(view, table.component)}
+    end
+  end
+
+  # The form subtree: recordPanel (+ fieldDisplay children for view mode,
+  # formSection + actionBar for create/edit) on core surfaces; the
+  # byte-equal basic-v2 form_slot composition when nested forms are
+  # declared.
+  defp admin_form_sections(_view, nil, _options), do: {[], []}
+
+  defp admin_form_sections(view, form, options) do
+    if form.nested_forms == [] do
+      {[admin_record_panel(form) | admin_panel_descendants(view, form, options)],
+       ["record_panel"]}
+    else
+      {form_components(view, form) ++ form_descendants(view, form, options), [form_root_child()]}
+    end
+  end
+
+  defp admin_status_banner do
+    %{
+      "id" => "status_banner",
+      "component" => "statusBanner",
+      "kind" => %{"path" => "/ui/feedback/kind"},
+      "message" => %{"path" => "/ui/feedback/message"}
+    }
+  end
+
+  defp admin_data_grid_components(view, table, sfx) do
+    pagination_children = if table.query, do: ["pagination#{sfx}"], else: []
+
+    data_grid = %{
+      "id" => "data_grid#{sfx}",
+      "component" => "dataGrid",
+      "columns" => admin_columns(view, table),
+      "rows" => %{"path" => table.records_path},
+      "rowId" => "id",
+      "label" => AshA2ui.Experience.collection_label(view, table),
+      "rowActions" => admin_row_actions(view, table),
+      "children" => ["empty_state#{sfx}" | pagination_children]
+    }
+
+    [data_grid, admin_empty_state(sfx) | admin_pagination_components(view, table, sfx)]
+  end
+
+  # One column per visible field, derived exactly like the basic Row/Card
+  # composition derives its cells: the declared field order (or the row
+  # layout's title/badge/meta sequence for card-style rows). Paths are
+  # row-relative — rows are items of the records list, like the record_row
+  # template.
+  defp admin_columns(view, table) do
+    fields =
+      case table.component.row_layout do
+        nil ->
+          table.component.fields
+
+        layout ->
+          [layout.title, layout.badge]
+          |> Enum.reject(&is_nil/1)
+          |> Kernel.++(layout.meta)
+          |> Enum.uniq()
+      end
+
+    Enum.map(fields, fn field ->
+      %{"label" => view.fields[field].label, "path" => to_string(field)}
+    end)
+  end
+
+  # The row action envelopes, reusing the exact context shapes the
+  # basic-v2 record controls and invoke/confirm buttons emit: View always;
+  # Edit when the view has an update action; declared row actions as their
+  # existing invoke envelopes (the prompt-fields confirm envelope when the
+  # action declares prompt_fields) — destructive: true when the action is
+  # a destroy, so the renderer confirms through ConfirmDialog and
+  # dispatches the envelope unchanged.
+  defp admin_row_actions(view, table) do
+    view_entry = admin_row_envelope("View", "view_record", table)
+
+    edit_entries =
+      if view.update_action, do: [admin_row_envelope("Edit", "start_edit", table)], else: []
+
+    declared_entries =
+      Enum.map(table.row_actions, fn action ->
+        setting = Map.get(view.actions, action)
+
+        context =
+          %{
+            "action" => to_string(action),
+            "recordId" => %{"path" => "id"},
+            "component" => to_string(table.name)
+          }
+          |> put_query_binding(view)
+          |> put_contexts_binding(view)
+          |> put_admin_prompt_values(setting)
+
+        %{"label" => humanize(action), "action" => "invoke", "context" => context}
+        |> maybe_destructive(view.resource, action)
+      end)
+
+    [view_entry | edit_entries] ++ declared_entries
+  end
+
+  defp admin_row_envelope(label, action, table) do
+    %{
+      "label" => label,
+      "action" => action,
+      "context" => %{
+        "recordId" => %{"path" => "id"},
+        "component" => to_string(table.name)
+      }
+    }
+  end
+
+  defp put_admin_prompt_values(context, %{prompt_fields: [_ | _], name: name}) do
+    Map.put(context, "values", %{"path" => "/prompt/values/#{name}"})
+  end
+
+  defp put_admin_prompt_values(context, _setting), do: context
+
+  defp maybe_destructive(envelope, resource, action) do
+    case ResourceInfo.action(resource, action) do
+      %Ash.Resource.Actions.Destroy{} -> Map.put(envelope, "destructive", true)
+      _other -> envelope
+    end
+  end
+
+  defp admin_empty_state(sfx) do
+    %{
+      "id" => "empty_state#{sfx}",
+      "component" => "emptyState",
+      "message" => %{"path" => "_empty_message#{sfx}"},
+      "children" => []
+    }
+  end
+
+  # The pagination component binds PLAIN values — the query state's
+  # boolean keys (no zero-or-one sentinel lists). prev/next dispatch the
+  # existing query envelope with pageDelta -1/+1 (unchanged handler
+  # contract); the context shape matches the basic prev/next buttons.
+  defp admin_pagination_components(_view, %{query: nil}, _sfx), do: []
+
+  defp admin_pagination_components(view, table, sfx) do
+    query_path = table.query_path
+
+    [
+      %{
+        "id" => "pagination#{sfx}",
+        "component" => "pagination",
+        "page" => %{"path" => "#{query_path}/page"},
+        "pageSize" => %{"path" => "#{query_path}/pageSize"},
+        "total" => %{"path" => "#{query_path}/totalCount"},
+        "hasNext" => %{"path" => "#{query_path}/hasMore"},
+        "visible" => %{"path" => "#{query_path}/paginationVisible"},
+        "previousVisible" => %{"path" => "#{query_path}/previousVisible"},
+        "nextVisible" => %{"path" => "#{query_path}/nextVisible"},
+        "rangeText" => %{"path" => "#{query_path}/_range_text"},
+        "previousAction" => admin_page_action(table, -1, view),
+        "nextAction" => admin_page_action(table, 1, view)
+      }
+    ]
+  end
+
+  defp admin_page_action(table, page_delta, view) do
+    %{
+      "name" => "query",
+      "context" =>
+        %{"query" => %{"path" => table.query_path}, "pageDelta" => page_delta}
+        |> Map.put("component", to_string(table.name))
+        |> put_contexts_binding(view)
+    }
+  end
+
+  defp admin_record_panel(form) do
+    %{
+      "id" => "record_panel",
+      "component" => "recordPanel",
+      "mode" => %{"path" => "/ui/panel/mode"},
+      "title" => %{"path" => "/ui/panel/title"},
+      "recordId" => %{"path" => "/ui/panel/record_id"},
+      "children" =>
+        Enum.map(form.fields, &"field_display_#{&1}") ++ ["form_section", "action_bar"]
+    }
+  end
+
+  defp admin_panel_descendants(view, form, options) do
+    field_displays = Enum.map(form.fields, &admin_field_display(view, &1))
+
+    form_section = %{
+      "id" => "form_section",
+      "component" => "formSection",
+      "children" => form_field_children(view, form)
+    }
+
+    inputs =
+      Enum.map(form.fields, fn field ->
+        if searchable_select?(view, field) do
+          searchable_select_components(view, field)
+        else
+          form_input(view, field, options)
+        end
+      end)
+
+    errors = Enum.map(form.fields, &form_error/1)
+
+    action_bar = %{
+      "id" => "action_bar",
+      "component" => "actionBar",
+      "primaryLabel" => %{"path" => "/ui/panel/primary_label"},
+      "busy" => false,
+      "action" => %{"event" => submit_event(view)},
+      "children" => ["form_cancel_button"]
+    }
+
+    field_displays ++
+      [form_section | List.flatten(inputs) ++ errors ++ group_components(view, form)] ++
+      [action_bar | cancel_components()]
+  end
+
+  defp admin_field_display(view, field) do
+    display = %{
+      "id" => "field_display_#{field}",
+      "component" => "fieldDisplay",
+      "label" => view.fields[field].label,
+      "value" => %{"path" => "/form/#{field}"}
+    }
+
+    case admin_display_format(view, field) do
+      nil -> display
+      format -> Map.put(display, "format", format)
+    end
+  end
+
+  # The optional format hint: boolean/datetime from the resolved widget,
+  # number from the field type; text (the default) is omitted.
+  defp admin_display_format(view, field) do
+    cond do
+      view.fields[field].widget == :check_box -> "boolean"
+      view.fields[field].widget == :date_time_input -> "datetime"
+      attribute_type(view.resource, field) in @numeric_types -> "number"
+      true -> nil
+    end
   end
 
   defp table_suffix(view, table) do
@@ -540,9 +881,17 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # (`"page" => 1`, Apply) or a relative page change (`"pageDelta" => -1 | 1`,
   # prev/next). The server validates everything against the declared
   # allowlist (`AshA2ui.QueryRunner`).
-  defp query_components(_view, %{query: nil}, _sfx), do: []
-
   defp query_components(view, table, sfx) do
+    query_control_components(view, table, sfx) ++
+      pagination_components(view, table, sfx)
+  end
+
+  # The search/preset/filter/range controls plus the Apply button — the
+  # query section MINUS pagination (the admin emission composes its own
+  # semantic pagination, so it consumes this variant directly).
+  defp query_control_components(_view, %{query: nil}, _sfx), do: []
+
+  defp query_control_components(view, table, sfx) do
     query = table.query
     search = (query.search_fields != [] && [search_input(table, sfx)]) || []
     presets = (query.presets != [] && [preset_picker(query, table, sfx)]) || []
@@ -567,7 +916,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     }
 
     [card, controls | search ++ presets ++ filters ++ ranges] ++
-      apply_button(view, table, sfx) ++ pagination_components(view, table, sfx)
+      apply_button(view, table, sfx)
   end
 
   defp search_input(table, sfx) do
@@ -643,6 +992,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{"id" => "query#{sfx}_apply_text", "component" => "Text", "text" => "Apply"}
     ]
   end
+
+  defp pagination_components(_view, %{query: nil}, _sfx), do: []
 
   defp pagination_components(view, table, sfx) do
     if AshA2ui.Experience.v2?() do
@@ -1491,18 +1842,24 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         }
       ] ++
         submit_button(view, %{"path" => "/ui/panel/primary_label"}) ++
-        [
-          %{
-            "id" => "form_cancel_button",
-            "component" => "Button",
-            "child" => "form_cancel_text",
-            "action" => %{"event" => %{"name" => "cancel_record_task", "context" => %{}}}
-          },
-          %{"id" => "form_cancel_text", "component" => "Text", "text" => "Cancel"}
-        ]
+        cancel_components()
     else
       submit_button(view, "Save")
     end
+  end
+
+  # The Cancel button (v2 basic form and the admin ActionBar secondary):
+  # dispatches the existing cancel_record_task envelope.
+  defp cancel_components do
+    [
+      %{
+        "id" => "form_cancel_button",
+        "component" => "Button",
+        "child" => "form_cancel_text",
+        "action" => %{"event" => %{"name" => "cancel_record_task", "context" => %{}}}
+      },
+      %{"id" => "form_cancel_text", "component" => "Text", "text" => "Cancel"}
+    ]
   end
 
   defp submit_button(view, label) do
@@ -1512,21 +1869,25 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "component" => "Button",
         "variant" => "primary",
         "child" => "form_submit_text",
-        "action" => %{
-          "event" => %{
-            "name" => "submit_form",
-            "context" =>
-              %{
-                "values" => %{"path" => "/form"},
-                "recordId" => %{"path" => "/form/id"}
-              }
-              |> put_query_binding(view)
-              |> put_contexts_binding(view)
-          }
-        }
+        "action" => %{"event" => submit_event(view)}
       },
       %{"id" => "form_submit_text", "component" => "Text", "text" => label}
     ]
+  end
+
+  # The frozen submit_form event envelope, shared by the basic submit
+  # button and the admin ActionBar's primary action.
+  defp submit_event(view) do
+    %{
+      "name" => "submit_form",
+      "context" =>
+        %{
+          "values" => %{"path" => "/form"},
+          "recordId" => %{"path" => "/form/id"}
+        }
+        |> put_query_binding(view)
+        |> put_contexts_binding(view)
+    }
   end
 
   # --- searchable selects ---
@@ -2413,19 +2774,26 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         Map.update!(
           value,
           "query",
-          &AshA2ui.Experience.with_pagination_sentinels(
-            &1,
-            value |> rows_at(view, single) |> length()
-          )
+          &adorned_query_state(&1, value |> rows_at(view, single) |> length())
         )
     end
+  end
+
+  # The v2 sentinels plus — when the admin emission is effective — the
+  # plain boolean pagination props the semantic Pagination component binds.
+  # Both adornments are gated no-ops outside their mode, so v1 and v2-basic
+  # query states are unchanged.
+  defp adorned_query_state(state, count) do
+    state
+    |> AshA2ui.Experience.with_pagination_sentinels(count)
+    |> AshA2ui.Experience.with_admin_pagination_booleans(count)
   end
 
   defp adorned_table_state({name, state}, value, view, query_tables) do
     table = Enum.find(query_tables, &(to_string(&1.name) == name))
     count = value |> rows_at(view, table) |> length()
 
-    {name, AshA2ui.Experience.with_pagination_sentinels(state, count)}
+    {name, adorned_query_state(state, count)}
   end
 
   defp rows_at(value, view, table) do

@@ -10,6 +10,30 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- **Admin catalog v1** (`config :ash_a2ui, :catalog, :admin_v1`) — a
+  semantic admin component vocabulary for experience v2 surfaces, selected
+  app-wide (requires `experience_version 2`; an `:admin_v1` selection under
+  v1 is ignored, keeping output byte-identical — see the precedence rules
+  in `notes/2026-09-07-admin-catalog-contract.md`). The encoder upgrades
+  the core subtree — root → `entityPage`, each core table → `dataGrid`
+  (columns derived from the resolved field order, rowAction envelopes
+  reusing the existing `view_record`/`start_edit`/`invoke` contexts with
+  `destructive: true` on destroys) with `emptyState` + `pagination`
+  children, the form → `recordPanel` (`fieldDisplay` children for view
+  mode, `formSection` + `actionBar` for create/edit), and the status Text
+  → `statusBanner` bound to `/ui/feedback/kind`/`message`. Query states
+  additionally carry plain booleans `paginationVisible`/`previousVisible`/
+  `nextVisible` for the semantic Pagination (the v2 sentinels remain for
+  basic renderers); prev/next dispatch the existing `query` envelope with
+  `pageDelta`. Surfaces using sections, reports, export, editable fields,
+  or nested forms keep those subtrees byte-equal to the basic-v2
+  composition — only the core upgrades. The catalog definition ships at
+  `priv/a2ui/admin_v1/catalog.json` (catalog id
+  `https://ash-a2ui.dev/catalogs/admin/v1`); the Lit renderer registration
+  ships separately as `priv/js/ash_admin_catalog.js`
+  (`createAshAdminCatalog(deps)`). The action handler learns nothing new —
+  zero new action names or dispatch clauses.
+
 - **Experience v2** (`AshA2ui.Experience`) — an opt-in UX layer behind
   `config :ash_a2ui, :experience_version, 2` (default `1` is byte-identical
   to the previous release). Surfaces gain explicit task modes: rows offer
