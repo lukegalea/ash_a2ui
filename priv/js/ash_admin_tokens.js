@@ -102,7 +102,9 @@ export function createAdminStyles(css) {
       --am-surface-raised: var(--ash-admin-surface-raised, var(--am-surface));
       --am-text: var(--ash-admin-text, var(--a2ui-color-on-surface, #0f172a));
       --am-text-muted: var(--ash-admin-text-muted, #475569);
-      --am-text-faint: var(--ash-admin-text-faint, #94a3b8);
+      /* #5d6d81 clears WCAG AA (5.29:1 on #ffffff, 5.06:1 on sunken,
+         4.83:1 on hover tints); the old #94a3b8 default failed at ~2.5:1. */
+      --am-text-faint: var(--ash-admin-text-faint, #5d6d81);
       --am-border: var(--ash-admin-border, var(--a2ui-color-border, #e2e8f0));
       --am-border-strong: var(--ash-admin-border-strong, #cbd5e1);
 
