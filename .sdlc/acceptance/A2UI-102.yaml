@@ -1,0 +1,68 @@
+---
+# Acceptance criteria for A2UI-102 (canonical canvas graph, library tier).
+# Written BEFORE implementation. Criterion ids are immutable.
+# CI is the only evidence producer. Host/browser criteria (Cytoscape
+# rendering, /canvas route) belong to the later host canvas lane.
+item: A2UI-102
+
+criteria:
+  - id: A2UI-102/AC-1
+    given: a registry over domains with resources, relationships, actions,
+      policies and a state machine
+    when: the canonical graph is built
+    then: >-
+      every domain and resource appears under a stable opaque id,
+      application-to-domain and domain-to-resource containment edges and
+      resource-to-resource relationship edges are typed and named, and
+      inherited/declared metadata is present without any Mermaid or SVG
+      parsing anywhere in the canvas namespace
+    verify: integration
+    risk: medium
+    test: >-
+      test/ash_a2ui/canvas/graph_builder_test.exs::derives_the_complete_application_graph
+
+  - id: A2UI-102/AC-2
+    given: two graph builds over semantically identical registry content
+    when: the registry lists its domains in different orders
+    then: node ids, edge ids, and the semantic graph revision are identical
+    verify: property
+    risk: medium
+    test: >-
+      test/ash_a2ui/canvas/graph_identity_test.exs::stable_across_registration_order
+
+  - id: A2UI-102/AC-3
+    given: two registry configurations differing by one relationship
+    when: both graphs are built and diffed
+    then: >-
+      the revisions differ, and the diff reports exactly that relationship
+      edge (added or removed) with no other deltas
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/canvas/graph_diff_test.exs::semantic_change_moves_the_revision
+
+  - id: A2UI-102/AC-4
+    given: a resource with actions, an authorizer with policies, and a state
+      machine
+    when: the graph is built
+    then: >-
+      actions, policies, and the state machine appear as addressable typed
+      sub-entities of the resource node (stable ids like
+      resource:X#action:create) and are covered by the revision hash —
+      adding an action changes the revision and surfaces the node in the diff
+    verify: unit
+    risk: medium
+    test: >-
+      test/ash_a2ui/canvas/graph_builder_test.exs::behavioral_layers_are_addressable_and_versioned
+
+  - id: A2UI-102/AC-5
+    given: two graph revisions
+    when: Graph.diff/2 runs
+    then: >-
+      the diff lists exactly the added/removed nodes and edges and the
+      changed nodes (including sub-entity changes), deterministically, with
+      from/to revisions
+    verify: unit
+    risk: low
+    test: >-
+      test/ash_a2ui/canvas/graph_diff_test.exs::diff_reports_exact_deltas

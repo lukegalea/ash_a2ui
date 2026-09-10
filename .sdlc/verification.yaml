@@ -1,0 +1,28 @@
+---
+# Verification contract for ash_a2ui (ai-sdlc ADR 0039 style).
+#
+# Where acceptance criteria live, one file per work item.
+ac_dir: .sdlc/acceptance
+
+# ExUnit tagging convention: every acceptance test carries
+# `@tag ac: "<criterion-id>"` so CI can trace failures back to the oracle.
+tag_convention: exunit-tag-ac
+
+# The evidence artifact CI produces. JUnit XML is the compatibility floor.
+report:
+  format: junit
+  path: test/reports/junit/*.xml
+
+# How to run each verification level. Only the levels this repo uses.
+suites:
+  unit: >-
+    mix test
+  static: >-
+    mix compile --warnings-as-errors && mix format --check-formatted &&
+    mix credo --strict && mix dialyzer
+
+# Where the verdict lands. The commit status is written under CI's identity,
+# never an agent's.
+ci:
+  provider: github-actions
+  status_context: ci/elixir
