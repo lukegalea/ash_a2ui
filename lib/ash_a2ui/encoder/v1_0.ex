@@ -51,6 +51,7 @@ defmodule AshA2ui.Encoder.V1_0 do
   @behaviour AshA2ui.Encoder
 
   alias AshA2ui.Encoder.V0_9_1
+  alias AshA2ui.Experience
 
   @version "v1.0"
   @catalog_id "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
@@ -80,13 +81,19 @@ defmodule AshA2ui.Encoder.V1_0 do
     create =
       %{
         "surfaceId" => resolved_view.surface_id,
-        "catalogId" => @catalog_id,
+        "catalogId" => catalog_id(),
         "components" => components,
         "dataModel" => data_model
       }
       |> put_surface_properties(surface_properties)
 
     [%{"version" => @version, "createSurface" => create}]
+  end
+
+  # The admin catalog (v2 + `catalog: :admin_v1`) surfaces declare the admin
+  # catalog id on their inline createSurface too.
+  defp catalog_id do
+    if Experience.effective_admin?(), do: Experience.admin_catalog_id(), else: @catalog_id
   end
 
   @doc """

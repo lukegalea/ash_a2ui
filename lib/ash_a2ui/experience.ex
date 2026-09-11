@@ -73,6 +73,37 @@ defmodule AshA2ui.Experience do
   @spec v2?() :: boolean
   def v2?, do: version() == 2
 
+  @admin_catalog_id "https://ash-a2ui.dev/catalogs/admin/v1"
+
+  @doc """
+  The configured component catalog: `:basic` (default) or `:admin_v1`
+  (the semantic admin catalog, see `priv/a2ui/admin_v1/catalog.json` and
+  `notes/2026-09-07-admin-catalog-contract.md`).
+  """
+  @spec catalog() :: :basic | :admin_v1
+  def catalog, do: Application.get_env(:ash_a2ui, :catalog, :basic)
+
+  @doc """
+  Whether the admin catalog is selected (regardless of the experience
+  version — see `effective_admin?/0` for the gated predicate).
+  """
+  @spec admin?() :: boolean
+  def admin?, do: catalog() == :admin_v1
+
+  @doc """
+  Whether the admin emission is actually active: it requires BOTH the
+  experience v2 layer and the `:admin_v1` catalog selection. Under
+  experience v1 an `:admin_v1` selection is ignored (not an error) — the
+  output stays basic v1, byte-identical to before.
+  """
+  @spec effective_admin?() :: boolean
+  def effective_admin?, do: v2?() and admin?()
+
+  @doc false
+  # The admin catalog id emitted on createSurface when the admin emission
+  # is active (see notes/2026-09-07-admin-catalog-contract.md).
+  def admin_catalog_id, do: @admin_catalog_id
+
   @doc """
   The zero-or-one visibility sentinel value: `[]` (hidden) or a one-item
   list (visible) — the exact shape the row-action `visible_when` slots bind
@@ -157,15 +188,19 @@ defmodule AshA2ui.Experience do
   The per-table empty-state text (e.g. `"No Appointment records yet."`).
   """
   @spec empty_message(ResolvedView.t(), ResolvedView.table()) :: String.t()
-  def empty_message(view, table) do
-    label =
-      if ResolvedView.multi_table?(view) do
-        table.name |> to_string() |> humanize()
-      else
-        resource_label(view)
-      end
+  def empty_message(view, table), do: "No #{collection_label(view, table)} records yet."
 
-    "No #{label} records yet."
+  @doc false
+  # The humanized collection name for a table: the resource label on
+  # single-table surfaces, the humanized table component name on
+  # multi-table surfaces (same scheme as the section headings).
+  @spec collection_label(ResolvedView.t(), ResolvedView.table()) :: String.t()
+  def collection_label(view, table) do
+    if ResolvedView.multi_table?(view) do
+      table.name |> to_string() |> humanize()
+    else
+      resource_label(view)
+    end
   end
 
   @doc false
@@ -297,6 +332,26 @@ defmodule AshA2ui.Experience do
         "_previous_visible" => sentinel(state.previous?),
         "_next_visible" => sentinel(state.next?),
         "_range_text" => state.range_text
+      })
+    else
+      query_state
+    end
+  end
+
+  @doc false
+  # Adorns a `/query` state map with the admin catalog's plain boolean
+  # pagination props (`paginationVisible`/`previousVisible`/`nextVisible`)
+  # — a no-op unless the admin emission is effective. The v2 sentinels stay
+  # (basic renderers keep working); the admin Pagination component binds
+  # these plain booleans instead.
+  def with_admin_pagination_booleans(query_state, record_count) do
+    if effective_admin?() and is_map(query_state) do
+      state = pagination_state(query_state, record_count)
+
+      Map.merge(query_state, %{
+        "paginationVisible" => state.visible?,
+        "previousVisible" => state.previous?,
+        "nextVisible" => state.next?
       })
     else
       query_state
