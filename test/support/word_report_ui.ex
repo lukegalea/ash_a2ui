@@ -33,7 +33,7 @@ defmodule AshA2ui.Test.WordReportV1UI do
   a2ui do
     for_resource AshA2ui.Test.BucketWord
     surface_id "word_report_v1"
-    spec_version("1.0")
+    spec_version "1.0"
 
     component :report, :lengths do
       action :length_report
@@ -61,7 +61,7 @@ defmodule AshA2ui.Test.ExportWordsV1UI do
   a2ui do
     for_resource AshA2ui.Test.BucketWord
     surface_id "export_words_v1"
-    spec_version("1.0")
+    spec_version "1.0"
 
     query :words do
       search_fields [:word]
