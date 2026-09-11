@@ -157,7 +157,8 @@ defmodule AshA2ui.Dynamic.Parser do
     [row_layout_def] = component_def.entities[:row_layout]
     [group_def] = component_def.entities[:groups]
 
-    with {:ok, row_layout} <- parse_row_layout(Map.get(entry, "row_layout"), row_layout_def, path),
+    with {:ok, row_layout} <-
+           parse_row_layout(Map.get(entry, "row_layout"), row_layout_def, path),
          {:ok, groups} <- parse_groups(Map.get(entry, "groups"), group_def, path) do
       {:ok, [row_layout: row_layout, groups: groups, nested_forms: []]}
     end
