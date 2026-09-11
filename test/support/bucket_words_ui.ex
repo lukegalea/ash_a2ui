@@ -69,7 +69,7 @@ defmodule AshA2ui.Test.BucketWordsV1UI do
   a2ui do
     for_resource AshA2ui.Test.BucketWord
     surface_id "bucket_words_v1"
-    spec_version("1.0")
+    spec_version "1.0"
 
     query :word_q do
       search_fields [:word]

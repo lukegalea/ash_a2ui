@@ -130,7 +130,8 @@ defmodule AshA2ui.Dynamic do
          {:ok, title} <- spec_title(spec),
          {:ok, entities} <- Parser.parse(Map.drop(spec, ["resource", "title"]), allowlist),
          :ok <- require_component(entities),
-         surface_id = Keyword.get_lazy(opts, :surface_id, fn -> generate_surface_id(resource) end),
+         surface_id =
+           Keyword.get_lazy(opts, :surface_id, fn -> generate_surface_id(resource) end),
          {:ok, dsl_state} <-
            infer_fields(synthetic_dsl_state(resource, surface_id, spec_version, entities)),
          :ok <- run_verifiers(dsl_state) do
