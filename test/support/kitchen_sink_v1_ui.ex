@@ -12,7 +12,7 @@ defmodule AshA2ui.Test.KitchenSinkV1UI do
   a2ui do
     for_resource AshA2ui.Test.KitchenSink
     surface_id "kitchen_sink_v1"
-    spec_version("1.0")
+    spec_version "1.0"
 
     component :table do
       fields [:name, :active, :count, :price, :birthday, :scheduled_at, :status, :inserted_at]
