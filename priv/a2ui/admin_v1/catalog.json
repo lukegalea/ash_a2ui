@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ash-a2ui.dev/catalogs/admin/v1",
+  "title": "AshA2ui Admin Catalog v1",
+  "description": "Semantic admin components for AshA2ui experience v2 surfaces (see notes/2026-09-07-admin-catalog-contract.md). Extends the A2UI basic catalog: basic inputs, buttons and pickers remain available inside admin surfaces; the admin vocabulary adds the page shell, collection, task panel and feedback components. Selected with `config :ash_a2ui, :catalog, :admin_v1` (requires experience_version 2; ignored under v1). Property values are literals or data-model path bindings using the same {\"path\": ...} template-ref mechanism the basic encoders emit.",
+  "catalogId": "https://ash-a2ui.dev/catalogs/admin/v1",
+  "components": {
+    "entityPage": {
+      "type": "object",
+      "description": "Page shell for an admin resource surface: title, optional description, and the page body (context pickers, query controls, DataGrid, RecordPanel, StatusBanner).",
+      "properties": {
+        "component": {"const": "entityPage"},
+        "title": {
+          "type": "object",
+          "description": "Page title: a literal string or a data-model path binding."
+        },
+        "description": {
+          "type": "object",
+          "description": "Optional page description: a literal string or a data-model path binding."
+        },
+        "children": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Ids of the page body components, in order."
+        }
+      },
+      "required": ["component", "title", "children"],
+      "unevaluatedProperties": false
+    },
+    "dataGrid": {
+      "type": "object",
+      "description": "Collection view over one table's records. Rows come from the bound records list; row identity is the rowId data path. Row actions dispatch their envelopes via the rowActions entries (View/Edit start the record tasks; declared row actions reuse their existing invoke envelopes, destructive when the action is a destroy — the renderer confirms through ConfirmDialog before dispatching unchanged).",
+      "properties": {
+        "component": {"const": "dataGrid"},
+        "columns": {
+          "type": "array",
+          "description": "One entry per visible field, in field order: {label: string, path: string} where path is row-relative (the cell value's key on the row object).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {"type": "string"},
+              "path": {"type": "string"}
+            },
+            "required": ["label", "path"],
+            "additionalProperties": false
+          }
+        },
+        "rows": {
+          "type": "object",
+          "description": "Binding to the table's records list path (e.g. {\"path\": \"/records\"})."
+        },
+        "rowId": {
+          "type": "string",
+          "description": "Row-relative data path for row identity (\"id\")."
+        },
+        "label": {
+          "type": "string",
+          "description": "Accessible collection name (e.g. \"Appointments\")."
+        },
+        "rowActions": {
+          "type": "array",
+          "description": "Action envelopes reusing the existing button context shape: {label, action, context} plus destructive: true on destroys.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {"type": "string"},
+              "action": {"type": "string", "description": "The client action name dispatched (view_record, start_edit, or invoke)."},
+              "context": {"type": "object", "description": "The action context: literal values and {\"path\": ...} refs resolved against the row (recordId, component, action, values)."},
+              "destructive": {"type": "boolean", "description": "true when dispatch must be confirmed through ConfirmDialog (destroy actions)."}
+            },
+            "required": ["label", "action", "context"],
+            "additionalProperties": false
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "At most one emptyState and at most one pagination child."
+        }
+      },
+      "required": ["component", "columns", "rows", "rowId", "label", "rowActions", "children"],
+      "unevaluatedProperties": false
+    },
+    "emptyState": {
+      "type": "object",
+      "description": "Zero-results state for a DataGrid. The renderer shows it only while the grid's bound rows list is empty — no sentinel prop.",
+      "properties": {
+        "component": {"const": "emptyState"},
+        "message": {
+          "type": "object",
+          "description": "The empty-state text (e.g. \"No Tasks records yet.\"): a literal string or a data-model path binding."
+        },
+        "children": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Optional hint / action button."
+        }
+      },
+      "required": ["component", "message", "children"],
+      "unevaluatedProperties": false
+    },
+    "pagination": {
+      "type": "object",
+      "description": "Conditional pagination navigation. All data props are plain values or bindings — no zero-or-one sentinel lists. Visibility is decided server-side (the query state's boolean keys); the renderer hides the whole bar when visible is false.",
+      "properties": {
+        "component": {"const": "pagination"},
+        "page": {"type": "object", "description": "Current 1-based page (bound to the query state)."},
+        "pageSize": {"type": "object", "description": "Page size (bound to the query state)."},
+        "total": {"type": "object", "description": "Total matching records when known, null otherwise (bound)."},
+        "hasNext": {"type": "object", "description": "Whether a further page exists (bound)."},
+        "visible": {"type": "object", "description": "Whether the bar renders at all: page > 1 or hasNext (bound to the query state's paginationVisible)."},
+        "previousVisible": {"type": "object", "description": "Whether the previous affordance renders (bound to previousVisible)."},
+        "nextVisible": {"type": "object", "description": "Whether the next affordance renders (bound to nextVisible)."},
+        "rangeText": {"type": "object", "description": "Result range text, \"1–5 of 42\" / \"Showing 1–5\" (bound to _range_text)."},
+        "previousAction": {
+          "type": "object",
+          "description": "The previous-page action envelope: the existing `query` action with pageDelta -1."
+        },
+        "nextAction": {
+          "type": "object",
+          "description": "The next-page action envelope: the existing `query` action with pageDelta 1."
+        }
+      },
+      "required": [
+        "component",
+        "page",
+        "pageSize",
+        "total",
+        "hasNext",
+        "visible",
+        "previousVisible",
+        "nextVisible",
+        "rangeText",
+        "previousAction",
+        "nextAction"
+      ],
+      "unevaluatedProperties": false
+    },
+    "recordPanel": {
+      "type": "object",
+      "description": "Explicit task panel for one record. Hidden while the bound mode is null (renderer concern). The renderer shows the fieldDisplay children in view mode and the formSection + actionBar children in create/edit mode.",
+      "properties": {
+        "component": {"const": "recordPanel"},
+        "mode": {"type": "object", "description": "Bound to /ui/panel/mode: \"create\", \"view\", \"edit\", or null (closed)."},
+        "title": {"type": "object", "description": "Bound to /ui/panel/title (e.g. \"Edit Tasks\")."},
+        "recordId": {"type": "object", "description": "Bound to /ui/panel/record_id."},
+        "children": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "One fieldDisplay per field, then the formSection and actionBar."
+        }
+      },
+      "required": ["component", "mode", "title", "recordId", "children"],
+      "unevaluatedProperties": false
+    },
+    "fieldDisplay": {
+      "type": "object",
+      "description": "Read-only value display for view mode — text semantics, never a disabled input.",
+      "properties": {
+        "component": {"const": "fieldDisplay"},
+        "label": {"type": "string", "description": "The field's resolved label."},
+        "value": {"type": "object", "description": "Binding to the field's /form/<field> value."},
+        "format": {
+          "type": "string",
+          "enum": ["text", "datetime", "boolean", "number"],
+          "description": "Optional value formatting hint; text when omitted."
+        }
+      },
+      "required": ["component", "label", "value"],
+      "unevaluatedProperties": false
+    },
+    "formSection": {
+      "type": "object",
+      "description": "Labeled field grouping for create/edit mode. Children are basic-catalog input components (text_field, check_box, choice_picker, date_time_input) with the exact per-field bindings and /errors/<field> associations the basic form emission produces.",
+      "properties": {
+        "component": {"const": "formSection"},
+        "title": {
+          "type": "object",
+          "description": "Optional section title."
+        },
+        "columns": {
+          "type": "integer",
+          "description": "Field layout columns (default 1)."
+        },
+        "children": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Ids of the basic inputs, their error texts, and any basic group cards."
+        }
+      },
+      "required": ["component", "children"],
+      "unevaluatedProperties": false
+    },
+    "actionBar": {
+      "type": "object",
+      "description": "Action hierarchy for the record panel: the primary action (hidden while the bound primaryLabel is empty) plus secondary buttons. The primary dispatches the existing submit_form envelope; secondaries are basic buttons (Cancel dispatches cancel_record_task).",
+      "properties": {
+        "component": {"const": "actionBar"},
+        "primaryLabel": {
+          "type": "object",
+          "description": "Bound to /ui/panel/primary_label — empty means the primary action is hidden."
+        },
+        "busy": {
+          "type": "object",
+          "description": "Reserved for pending-state binding; false for now."
+        },
+        "destructive": {
+          "type": "boolean",
+          "description": "Styles the primary action as destructive (default false)."
+        },
+        "action": {
+          "type": "object",
+          "description": "The primary action envelope: the existing submit_form event."
+        },
+        "children": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Ids of the secondary basic buttons."
+        }
+      },
+      "required": ["component", "primaryLabel", "busy", "action", "children"],
+      "unevaluatedProperties": false
+    },
+    "statusBanner": {
+      "type": "object",
+      "description": "Typed feedback banner. Renders nothing while the bound kind is null (renderer concern; success → role=status, error → role=alert).",
+      "properties": {
+        "component": {"const": "statusBanner"},
+        "kind": {"type": "object", "description": "Bound to /ui/feedback/kind: \"success\", \"error\", or null."},
+        "message": {"type": "object", "description": "Bound to /ui/feedback/message."}
+      },
+      "required": ["component", "kind", "message"],
+      "unevaluatedProperties": false
+    },
+    "confirmDialog": {
+      "type": "object",
+      "description": "Destructive-action confirmation. Declared in the catalog vocabulary and rendered by the DataGrid renderer when a rowAction envelope carries destructive: true; confirming dispatches the original envelope unchanged — the server never sees a new action name. Confirm/cancel are handled client-side before dispatch.",
+      "properties": {
+        "component": {"const": "confirmDialog"},
+        "title": {"type": "object", "description": "Dialog title."},
+        "body": {"type": "object", "description": "Dialog body text."},
+        "confirmLabel": {"type": "object", "description": "Confirm button label."},
+        "destructive": {
+          "type": "boolean",
+          "description": "Styles the confirm action as destructive (default true)."
+        }
+      },
+      "required": ["component", "title", "body", "confirmLabel"],
+      "unevaluatedProperties": false
+    }
+  },
+  "functions": {},
+  "$defs": {}
+}

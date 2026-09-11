@@ -10,6 +10,52 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- **Admin catalog v1** (`config :ash_a2ui, :catalog, :admin_v1`) — a
+  semantic admin component vocabulary for experience v2 surfaces, selected
+  app-wide (requires `experience_version 2`; an `:admin_v1` selection under
+  v1 is ignored, keeping output byte-identical — see the precedence rules
+  in `notes/2026-09-07-admin-catalog-contract.md`). The encoder upgrades
+  the core subtree — root → `entityPage`, each core table → `dataGrid`
+  (columns derived from the resolved field order, rowAction envelopes
+  reusing the existing `view_record`/`start_edit`/`invoke` contexts with
+  `destructive: true` on destroys) with `emptyState` + `pagination`
+  children, the form → `recordPanel` (`fieldDisplay` children for view
+  mode, `formSection` + `actionBar` for create/edit), and the status Text
+  → `statusBanner` bound to `/ui/feedback/kind`/`message`. Query states
+  additionally carry plain booleans `paginationVisible`/`previousVisible`/
+  `nextVisible` for the semantic Pagination (the v2 sentinels remain for
+  basic renderers); prev/next dispatch the existing `query` envelope with
+  `pageDelta`. Surfaces using sections, reports, export, editable fields,
+  or nested forms keep those subtrees byte-equal to the basic-v2
+  composition — only the core upgrades. The catalog definition ships at
+  `priv/a2ui/admin_v1/catalog.json` (catalog id
+  `https://ash-a2ui.dev/catalogs/admin/v1`); the Lit renderer registration
+  ships separately as `priv/js/ash_admin_catalog.js`
+  (`createAshAdminCatalog(deps)`). The action handler learns nothing new —
+  zero new action names or dispatch clauses.
+
+- **Experience v2** (`AshA2ui.Experience`) — an opt-in UX layer behind
+  `config :ash_a2ui, :experience_version, 2` (default `1` is byte-identical
+  to the previous release). Surfaces gain explicit task modes: rows offer
+  semantic **View**/`view_record` and (when the view has an update action)
+  **Edit**/`start_edit` controls instead of **Select**, a
+  **Create <Resource>**/`start_create` affordance appears near the query
+  controls, and the form renders inside a task panel — gated behind the
+  `/ui/panel/visible` sentinel, headed by `/ui/panel/title`, with the
+  submit label bound to `/ui/panel/primary_label` and hidden in view mode
+  via `/ui/panel/submit_visible`. `cancel_record_task` returns to browse
+  and resets the form. Pagination becomes conditional (sentinels on the
+  `/query` state hide the row when there is nothing to page; the page
+  number becomes a result-range text, `"1–5 of 42"` or `"Showing 1–5"`),
+  tables gain a data-driven empty state ("No <Resource> records yet."),
+  and action outcomes carry typed feedback at `/ui/feedback`
+  (`{"kind": "success" | "error", "message": ...}` — a successful task
+  submission closes the panel; validation failures retain the open task,
+  its values, and its mode). Forged task events run the same authorized
+  actions as before (`start_edit` pre-flights the update authorization).
+  The v1.0 encoder passes the new `/ui/*` state through its
+  `/ui/response` collapse unchanged.
+
 - **Canvas graph & objects** (`AshA2ui.Canvas.*`) — the naked-objects
   foundation, purely additive and gated behind a host-implemented registry:
   `AshA2ui.Canvas.Registry` (`domains/0`, optional `label/1`) defines the

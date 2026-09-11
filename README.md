@@ -431,6 +431,38 @@ Records are loaded through the resource's read action with `authorize?: true`
 and your `actor:`/`tenant:` — policies apply exactly as everywhere else in
 Ash.
 
+### Experience v2
+
+By default surfaces render exactly as documented above. Setting
+`config :ash_a2ui, :experience_version, 2` opts the whole library into the
+experience v2 layer (`AshA2ui.Experience`): rows get semantic **View** /
+**Edit** controls instead of **Select**, a **Create <Resource>** affordance
+appears for create-capable surfaces, the form renders inside a task panel
+with an explicit heading and a mode-aware primary label (open via the new
+`start_create` / `view_record` / `start_edit` client actions, closed by
+`cancel_record_task`), pagination hides when it has nothing to do, empty
+tables render a data-driven empty state, and action outcomes carry typed
+feedback (`/ui/feedback` kind + message). The default version `1` is
+byte-identical to the previous release.
+
+### Admin catalog
+
+On top of experience v2, `config :ash_a2ui, :catalog, :admin_v1` selects
+the semantic admin catalog (`AshA2ui.Experience.effective_admin?/0`):
+surfaces are emitted as an `entityPage` of `dataGrid` (with `emptyState` /
+`pagination` children and destructive-confirmed row actions), a
+`recordPanel` (`fieldDisplay` for view mode, `formSection` + `actionBar`
+for create/edit), and a `statusBanner` — declared in
+`priv/a2ui/admin_v1/catalog.json`. Advanced-feature subtrees (sections,
+reports, export, editable, nested forms) stay basic-composed, and query
+states carry plain boolean pagination props alongside the v2 sentinels.
+Precedence is deterministic: the catalog selection requires experience v2 —
+under version `1` it is ignored and output stays basic v1, byte-identical;
+version `2` with the default `:basic` catalog stays byte-identical to the
+experience v2 emission. The Lit renderer registration ships separately in
+`priv/js/ash_admin_catalog.js` (`createAshAdminCatalog(deps)`), a plain ES
+module consumed by the host's bundler.
+
 ## Transports
 
 ### LiveView (batteries included)

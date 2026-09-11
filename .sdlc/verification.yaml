@@ -8,7 +8,8 @@ ac_dir: .sdlc/acceptance
 # `@tag ac: "<criterion-id>"` so CI can trace failures back to the oracle.
 tag_convention: exunit-tag-ac
 
-# The evidence artifact CI produces. JUnit XML is the compatibility floor.
+# The evidence artifact CI produces. JUnit XML is the compatibility floor;
+# the format used by the vendored Phoenix/LiveView suites in this repo.
 report:
   format: junit
   path: test/reports/junit/*.xml

@@ -51,6 +51,7 @@ defmodule AshA2ui.Encoder.V1_0 do
   @behaviour AshA2ui.Encoder
 
   alias AshA2ui.Encoder.V0_9_1
+  alias AshA2ui.Experience
 
   @version "v1.0"
   @catalog_id "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
@@ -80,13 +81,19 @@ defmodule AshA2ui.Encoder.V1_0 do
     create =
       %{
         "surfaceId" => resolved_view.surface_id,
-        "catalogId" => @catalog_id,
+        "catalogId" => catalog_id(),
         "components" => components,
         "dataModel" => data_model
       }
       |> put_surface_properties(surface_properties)
 
     [%{"version" => @version, "createSurface" => create}]
+  end
+
+  # The admin catalog (v2 + `catalog: :admin_v1`) surfaces declare the admin
+  # catalog id on their inline createSurface too.
+  defp catalog_id do
+    if Experience.effective_admin?(), do: Experience.admin_catalog_id(), else: @catalog_id
   end
 
   @doc """
@@ -186,9 +193,17 @@ defmodule AshA2ui.Encoder.V1_0 do
   # --- data model -------------------------------------------------------------
 
   # The full data model's reserved "ui" region: the v0.9.1 status trio
-  # becomes the single structured response object.
-  defp upgrade_data_model(%{"ui" => _ui} = value) do
-    Map.put(value, "ui", %{"response" => @initial_response})
+  # becomes the single structured response object. Any other "ui" keys —
+  # the experience v2 intent/panel/feedback state — pass through untouched
+  # (under experience v1 the trio is the whole region, so the result is
+  # byte-identical to the previous wholesale replacement).
+  defp upgrade_data_model(%{"ui" => ui} = value) do
+    ui =
+      ui
+      |> Map.drop(["status", "action_result", "action_result_text"])
+      |> Map.put("response", @initial_response)
+
+    Map.put(value, "ui", ui)
   end
 
   defp upgrade_data_model(value), do: value
