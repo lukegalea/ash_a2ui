@@ -1,5 +1,12 @@
 import Config
 
+# ash 3.33 requires an explicit string-length counting mode whenever any
+# resource declares `min_length`/`max_length` on a string (our test fixtures
+# do). Codepoints matches how SQL data layers count, so validation agrees
+# with stored-value bounds. Host applications consuming this library must set
+# this for their own resources too.
+config :ash, default_string_length_count: :codepoints
+
 config :spark,
   formatter: [
     remove_parens?: true,
