@@ -36,7 +36,7 @@ defmodule AshA2ui.Test.EditableWordsV1UI do
   a2ui do
     for_resource AshA2ui.Test.BucketWord
     surface_id "editable_words_v1"
-    spec_version("1.0")
+    spec_version "1.0"
 
     component :table do
       fields [:word, :replacement]
