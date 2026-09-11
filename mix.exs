@@ -163,6 +163,12 @@ defmodule AshA2ui.MixProject do
   defp deps do
     [
       {:ash, "~> 3.0"},
+      # State-machine introspection for the canvas graph (A2UI-102) — strictly
+      # optional, exactly like phoenix_live_view below: the canvas
+      # introspects AshStateMachine resources only when the extension is
+      # loaded and omits the state-machine sub-entity (documented
+      # degradation) otherwise.
+      {:ash_state_machine, "~> 0.2", optional: true},
       {:igniter, "~> 0.5", only: [:dev, :test]},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false},
       {:ex_json_schema, "~> 0.10", only: [:dev, :test]},

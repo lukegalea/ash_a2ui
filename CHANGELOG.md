@@ -56,6 +56,30 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   The v1.0 encoder passes the new `/ui/*` state through its
   `/ui/response` collapse unchanged.
 
+- **Canvas graph & objects** (`AshA2ui.Canvas.*`) — the naked-objects
+  foundation, purely additive and gated behind a host-implemented registry:
+  `AshA2ui.Canvas.Registry` (`domains/0`, optional `label/1`) defines the
+  entire discovery surface — what it does not list does not exist. The
+  canonical graph (`Canvas.build_graph/1`) introspects Ash metadata directly
+  (`Ash.Domain.Info`, `Ash.Resource.Info`, `Ash.Policy.Info`, and
+  `AshStateMachine.Info` when the optional `ash_state_machine` dependency is
+  present) into an application → domain → resource containment tree with
+  named relationship edges between registered resources; behavioral layers
+  (actions, policies, state machines) ride as addressable typed
+  sub-entities in node metadata (`resource:x#action:create`,
+  `#policy:0`, `#state_machine`), and the revision is a deterministic
+  sha256 over the canonicalized semantic content — registration and
+  definition order cannot move it. `Graph.Diff.diff/2` reports exact
+  deltas, with sub-entity changes surfacing as `changed_nodes`. Object
+  resolution (`Canvas.resolve/2`) turns opaque refs
+  (`application:`, `domain:`, `resource:`, `record:`) into labeled
+  Objects with provenance, presence-derived resource capabilities,
+  `Ash.can?`-derived record capabilities (actor/tenant-scoped), and
+  declared projections — no records are ever materialized as graph nodes
+  and structural resolution performs zero record reads. Client input is
+  never converted to atoms or modules, and every failure mode collapses to
+  `{:error, :unknown_object}`.
+
 ### Bug Fixes:
 
 - Formless surfaces no longer render a per-row **Select** button.

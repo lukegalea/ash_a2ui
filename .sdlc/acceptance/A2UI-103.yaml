@@ -1,0 +1,70 @@
+---
+# Acceptance criteria for A2UI-103 (object resolution & capabilities,
+# library tier). Written BEFORE implementation. Criterion ids are immutable.
+# CI is the only evidence producer. Browser criteria (graph-node click →
+# inspector UX) belong to the later host canvas lane.
+item: A2UI-103
+
+criteria:
+  - id: A2UI-103/AC-1
+    given: a registry listing the fixture domains
+    when: application, domain, and resource refs are resolved with an actor
+      and tenant
+    then: >-
+      each returns an Object carrying a label, provenance, server-derived
+      capabilities (action presence at resource level), and derived
+      projections (resources: inspect/browse plus create/edit by action
+      presence; no surface is built)
+    verify: integration
+    risk: medium
+    test: >-
+      test/ash_a2ui/canvas/object_resolver_test.exs::resolves_structural_objects_with_derived_projections
+
+  - id: A2UI-103/AC-2
+    given: a record object resolved for an actor without update permission
+    when: record capabilities are derived
+    then: >-
+      no edit capability is authorized (Ash.can? against the scene actor),
+      while an actor with permission sees it authorized — and a
+      client-constructed capability envelope is rejected: capabilities are
+      server-derived data only
+    verify: security
+    risk: high
+    test: >-
+      test/ash_a2ui/canvas/capability_security_test.exs::record_capabilities_obey_actor_policy
+
+  - id: A2UI-103/AC-3
+    given: a ref naming a module that is not in the registry, or a malformed
+      ref string
+    when: resolution is attempted
+    then: >-
+      {:error, :unknown_object} is returned without converting any input to
+      an atom or module, without loading unregistered modules, and without
+      leaking registry contents in the error
+    verify: security
+    risk: high
+    test: >-
+      test/ash_a2ui/canvas/object_resolver_security_test.exs::rejects_unregistered_module_input
+
+  - id: A2UI-103/AC-4
+    given: a resource whose table holds records
+    when: the graph is built and the resource object is resolved
+    then: >-
+      no records are materialized as nodes and no record reads occur — the
+      collection is declared as lens data only; records enter exclusively by
+      resolving a record ref through an authorized read
+    verify: integration
+    risk: medium
+    test: >-
+      test/ash_a2ui/canvas/progressive_disclosure_test.exs::does_not_materialize_the_database_as_a_graph
+
+  - id: A2UI-103/AC-5
+    given: a record ref for a record the actor may read
+    when: it is resolved under the actor and tenant
+    then: >-
+      the Object carries the record's display identity as its label and
+      view/edit/act capabilities derived through Ash.can? for that record
+    verify: integration
+    risk: medium
+    test: >-
+      test/ash_a2ui/canvas/object_resolver_test.exs::record_refs_resolve_through_authorized_reads
