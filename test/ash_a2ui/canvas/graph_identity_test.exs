@@ -1,3 +1,21 @@
+# The inline registry is defined BEFORE the test module: with `async: true`
+# ExUnit can start tests as soon as the test module registers, while the
+# script is still evaluating — a trailing defmodule would race the tests.
+
+defmodule Canvas.Test.Reorder.Registry do
+  @moduledoc false
+
+  # Same last segment as `Canvas.Test.Registry` (so the derived application
+  # id matches), reversed domain order, same labels.
+  @behaviour AshA2ui.Canvas.Registry
+
+  @impl true
+  def domains, do: Enum.reverse(Canvas.Test.Registry.domains())
+
+  @impl true
+  def label(target), do: Canvas.Test.Registry.label(target)
+end
+
 defmodule AshA2ui.Canvas.GraphIdentityTest do
   @moduledoc """
   A2UI-102/AC-2: the revision hash and the whole graph AST are invariant
@@ -30,18 +48,4 @@ defmodule AshA2ui.Canvas.GraphIdentityTest do
     assert Enum.sort(Canvas.Test.Registry.domains()) ==
              Enum.sort(Canvas.Test.Reorder.Registry.domains())
   end
-end
-
-defmodule Canvas.Test.Reorder.Registry do
-  @moduledoc false
-
-  # Same last segment as `Canvas.Test.Registry` (so the derived application
-  # id matches), reversed domain order, same labels.
-  @behaviour AshA2ui.Canvas.Registry
-
-  @impl true
-  def domains, do: Enum.reverse(Canvas.Test.Registry.domains())
-
-  @impl true
-  def label(target), do: Canvas.Test.Registry.label(target)
 end
