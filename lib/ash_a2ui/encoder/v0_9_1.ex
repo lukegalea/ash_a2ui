@@ -432,7 +432,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     root = %{
       "id" => "root",
       "component" => "entityPage",
-      "title" => AshA2ui.Experience.resource_label(view),
+      "title" => AshA2ui.Experience.surface_title(view),
       "children" =>
         context_children(view) ++
           table_children ++

@@ -173,9 +173,28 @@ defmodule AshA2ui.Experience do
   def panel_title(:edit, view), do: "Edit #{resource_label(view)}"
 
   @doc """
-  The humanized resource short name (e.g. `"Appointment"`).
+  The surface's heading — what the page is a page *of*.
+
+  The view's declared `title` when it has one, and otherwise the derived
+  resource label. The distinction matters because the derived name is the
+  module's, not the reader's: a surface over `Legacy.User` is a list of users
+  belonging to another application's estate, and heading it "User" is both
+  singular and wrong about whose users they are. Hosts usually already have the
+  right words in their own navigation; `title` is how they say so.
+  """
+  @spec surface_title(ResolvedView.t()) :: String.t()
+  def surface_title(%{title: title}) when is_binary(title) and title != "", do: title
+  def surface_title(view), do: resource_label(view)
+
+  @doc """
+  The singular noun for one record, used by the derived task labels.
+
+  The view's declared `record_label` when it has one, else the humanized
+  resource short name (e.g. `"Appointment"`).
   """
   @spec resource_label(ResolvedView.t()) :: String.t()
+  def resource_label(%{record_label: label}) when is_binary(label) and label != "", do: label
+
   def resource_label(view) do
     view.resource
     |> Module.split()

@@ -186,3 +186,56 @@ defmodule AshA2ui.Test.Experience.Protected do
     end
   end
 end
+
+defmodule AshA2ui.Test.Experience.EstateUser do
+  @moduledoc """
+  Experience v2 fixture for surface naming: a module whose short name is the
+  *wrong* word for the page. It stands in for a strangler read model over
+  another application's estate — a list of that system's users, which the
+  derived label would head "User": singular, and wrong about whose users they
+  are. Declares both `title` and `record_label`.
+  """
+
+  use Ash.Resource,
+    domain: AshA2ui.Test.Experience.Domain,
+    data_layer: Ash.DataLayer.Ets,
+    extensions: [AshA2ui]
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :login, :string, public?: true, allow_nil?: false
+  end
+
+  actions do
+    defaults [:read, :destroy, create: :*, update: :*]
+  end
+
+  a2ui do
+    surface_id "estate_users"
+    title "Legacy users"
+    record_label("legacy user")
+
+    query :default do
+      search_fields [:login]
+      default_sort login: :asc
+      page_size 2
+    end
+
+    component :table do
+      fields [:login]
+      read_action :read
+      query :default
+    end
+
+    component :form do
+      fields [:login]
+      create_action :create
+      update_action :update
+    end
+  end
+end

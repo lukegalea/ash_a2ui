@@ -992,6 +992,25 @@ defmodule AshA2ui do
         doc:
           "Unique id of the A2UI surface. Defaults to the underscored short name of the resource."
       ],
+      title: [
+        type: :string,
+        doc: """
+        The surface's heading — what this page is a page *of*. Defaults to the
+        humanized resource short name, which is singular and named after a
+        module rather than after the thing: a surface over `Legacy.User` is
+        headed "User" though it is a list of users from another application's
+        estate. Set it to the words the host already uses in its own navigation.
+        """
+      ],
+      record_label: [
+        type: :string,
+        doc: """
+        The singular noun for one record, used by the derived task labels —
+        "Create <record_label>", "Edit <record_label>", "No <record_label>
+        records yet." Defaults to the humanized resource short name. Set it
+        where the module name is not the word a reader would use.
+        """
+      ],
       spec_version: [
         type: {:in, ["0.9.1", "1.0"]},
         default: "0.9.1",

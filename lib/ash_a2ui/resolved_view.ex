@@ -53,6 +53,8 @@ defmodule AshA2ui.ResolvedView do
   defstruct [
     :resource,
     :surface_id,
+    :title,
+    :record_label,
     :read_action,
     :create_action,
     :update_action,
@@ -208,6 +210,8 @@ defmodule AshA2ui.ResolvedView do
   @type t :: %__MODULE__{
           resource: module,
           surface_id: String.t(),
+          title: String.t() | nil,
+          record_label: String.t() | nil,
           spec_version: :v0_9_1 | :v1_0,
           sectioned?: boolean,
           components: [AshA2ui.Component.t()],
@@ -287,6 +291,8 @@ defmodule AshA2ui.ResolvedView do
     %__MODULE__{
       resource: resource,
       surface_id: surface_id(resource_or_ui_module, resource),
+      title: optional_label(resource_or_ui_module, :a2ui_title),
+      record_label: optional_label(resource_or_ui_module, :a2ui_record_label),
       spec_version: spec_version(resource_or_ui_module, opts[:spec_version]),
       sectioned?: sectioned?,
       components: components,
@@ -920,6 +926,15 @@ defmodule AshA2ui.ResolvedView do
   end
 
   defp resolve_query(_resource_or_ui_module, _table), do: nil
+
+  # `title` and `record_label` are both optional and both default to the
+  # derived resource label, so absence is the common case and must stay cheap.
+  defp optional_label(resource_or_ui_module, fun) do
+    case apply(AshA2ui.Info, fun, [resource_or_ui_module]) do
+      {:ok, value} when is_binary(value) -> value
+      _ -> nil
+    end
+  end
 
   defp surface_id(resource_or_ui_module, resource) do
     case AshA2ui.Info.a2ui_surface_id(resource_or_ui_module) do
