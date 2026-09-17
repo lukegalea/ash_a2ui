@@ -210,7 +210,7 @@ defmodule AshA2ui.MultiTableTest do
       data = value_at(messages, "/")
 
       assert [%{"name" => "Fresh", "count" => 0}] = data["records"]["new_items"]
-      assert [%{"name" => "Old", "state" => "done"}] = data["records"]["done_items"]
+      assert [%{"name" => "Old", "state" => "Done"}] = data["records"]["done_items"]
 
       assert %{"new_items" => %{"page" => 1, "totalCount" => 1}} = data["query"]
       refute Map.has_key?(data["query"], "done_items")

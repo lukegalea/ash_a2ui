@@ -378,7 +378,9 @@ defmodule AshA2ui.EncoderTest do
                "price" => "9.99",
                "birthday" => "2020-01-02",
                "scheduled_at" => "2026-01-02T03:04:05Z",
-               "status" => "published",
+               # Enum values carry their display label, the same one the form
+               # picker for this field has always shown.
+               "status" => "Published",
                "inserted_at" => "2026-07-10T12:00:00.000000Z"
              }
     end
@@ -452,11 +454,11 @@ defmodule AshA2ui.EncoderTest do
       assert first["price"] == "1.50"
       assert first["birthday"] == "2021-03-04"
       assert first["scheduled_at"] == "2026-02-03T04:05:06Z"
-      assert first["status"] == "draft"
+      assert first["status"] == "Draft"
       assert is_binary(first["id"])
       assert is_binary(first["inserted_at"])
 
-      assert Enum.find(records, &(&1["name"] == "Second"))["status"] == "archived"
+      assert Enum.find(records, &(&1["name"] == "Second"))["status"] == "Archived"
     end
 
     test "build_data_model/2 output is schema-valid and contains the records" do

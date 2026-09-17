@@ -2828,8 +2828,43 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # record key directly.
   defp field_value(view, record, name) do
     case view.fields[name] do
-      %{source: [_ | _] = source} -> record |> walk_source(source) |> source_safe()
-      _plain -> record |> Map.get(name) |> json_safe()
+      %{source: [_ | _] = source} ->
+        record |> walk_source(source) |> source_safe()
+
+      _plain ->
+        record |> Map.get(name) |> json_safe() |> humanize_choice(view.resource, name)
+    end
+  end
+
+  # An enum reaches the wire as its bare atom name, so a grid cell read
+  # `direct_user_and_team` while the form picker for the SAME field, on the same
+  # surface, read "Direct user and team" -- `choice_options/2` has always
+  # labelled these. This is that treatment on the display side: one vocabulary
+  # per field rather than two.
+  #
+  # `Ash.Type.Enum.label/1` first, so an enum that declares its own words keeps
+  # them; humanized underscores otherwise. Only values the field actually
+  # declares are rewritten, so anything unrecognised passes through untouched
+  # rather than being mangled by a guess.
+  defp humanize_choice(value, resource, name) when is_binary(value) do
+    case choice_labels(resource, name) do
+      %{^value => label} -> label
+      _ -> value
+    end
+  end
+
+  defp humanize_choice(value, _resource, _name), do: value
+
+  defp choice_labels(resource, name) do
+    type = attribute_type(resource, name)
+
+    if AshA2ui.TypeMapper.enum_type?(type) do
+      Map.new(type.values(), &{to_string(&1), enum_label(type, &1)})
+    else
+      resource
+      |> attribute_constraints(name)
+      |> Keyword.get(:one_of, [])
+      |> Map.new(&{to_string(&1), humanize(&1)})
     end
   end
 
