@@ -29,7 +29,26 @@ defmodule AshA2ui.Canvas.Registry do
   """
   @callback label(target :: :application | module() | struct()) :: String.t() | nil
 
-  @optional_callbacks [label: 1]
+  @doc """
+  Optional projection override. Receives a resource module or a record
+  struct together with the projections the library derived from the
+  resource's own actions, and returns the list the object should carry;
+  `nil` (or not implementing the callback) keeps the derived list.
+
+  This exists because some projections cannot be derived from action shape
+  at all. `:diagram` and `:history` are in the vocabulary precisely for
+  things like a process definition and a running instance, and no amount of
+  reading a resource's actions reveals that one of them is drawable — only
+  the host knows it ships a renderer for it.
+
+  The returned list is filtered against the declared vocabulary, so a host
+  cannot introduce a projection kind the experience compiler has no meaning
+  for. Returning `[]` is allowed and means "no projections", which is not
+  the same as returning `nil`.
+  """
+  @callback projections(target :: module() | struct(), derived :: [atom()]) :: [atom()] | nil
+
+  @optional_callbacks [label: 1, projections: 2]
 
   @doc false
   # The registry's domain list, with a fail-loud check: a registry that does
@@ -52,6 +71,22 @@ defmodule AshA2ui.Canvas.Registry do
       registry.label(target)
     else
       nil
+    end
+  end
+
+  @doc false
+  # The host's projections for `target`, defaulting to the library's derived
+  # list. The caller re-filters against the declared vocabulary; this only
+  # decides whose list is used.
+  def projections(registry, target, derived) do
+    if Code.ensure_loaded?(registry) and function_exported?(registry, :projections, 2) do
+      case registry.projections(target, derived) do
+        nil -> derived
+        list when is_list(list) -> list
+        _not_a_list -> derived
+      end
+    else
+      derived
     end
   end
 

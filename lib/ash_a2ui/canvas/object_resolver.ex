@@ -182,7 +182,7 @@ defmodule AshA2ui.Canvas.ObjectResolver do
       ref: ref,
       label: Registry.label(registry, resource) || humanize(resource_short(resource)),
       description: nil,
-      projections: resource_projections(resource),
+      projections: host_projections(registry, resource, resource_projections(resource)),
       capabilities: resource_capabilities(ref, resource),
       provenance: %{domain: domain, resource: resource}
     }
@@ -200,7 +200,7 @@ defmodule AshA2ui.Canvas.ObjectResolver do
         ref: ref,
         label: Registry.label(registry, record) || default_record_label(record),
         description: nil,
-        projections: record_projections(capabilities),
+        projections: host_projections(registry, record, record_projections(capabilities)),
         capabilities: capabilities,
         provenance: %{domain: domain, resource: resource, record: record}
       }
@@ -328,6 +328,17 @@ defmodule AshA2ui.Canvas.ObjectResolver do
   end
 
   # --- projections ------------------------------------------------------------
+
+  # The host may replace the derived list -- `:diagram` and `:history` cannot be
+  # read off a resource's actions, so only the host knows it ships a renderer.
+  # Re-filtered through `declared/1` afterwards, so a host overriding this
+  # cannot introduce a projection kind the experience compiler has no meaning
+  # for; the override chooses among the vocabulary, it does not extend it.
+  defp host_projections(registry, target, derived) do
+    registry
+    |> Registry.projections(target, derived)
+    |> declared()
+  end
 
   defp resource_projections(resource) do
     actions = ResourceInfo.actions(resource)
