@@ -58,6 +58,18 @@ defmodule AshA2ui.DynamicTest do
 
   @allowlist Dynamic.allowlist([KitchenSink, Minimal, Guarded])
 
+  setup do
+    # These assertions cover the exact v1 message shapes; v2 is the default,
+    # so the legacy emission is pinned (and restored) per test.
+    Application.put_env(:ash_a2ui, :experience_version, 1)
+
+    on_exit(fn ->
+      Application.delete_env(:ash_a2ui, :experience_version)
+    end)
+
+    :ok
+  end
+
   defp resolve!(spec, opts \\ []) do
     {:ok, surface} = Dynamic.resolve(spec, Keyword.put_new(opts, :allowlist, @allowlist))
     surface

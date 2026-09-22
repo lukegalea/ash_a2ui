@@ -1,9 +1,10 @@
 defmodule AshA2ui.Experience.CompatV1Test do
   @moduledoc """
-  A2UI-101/AC-17: under the default configuration (experience_version unset
-  or 1) output is byte-compatible with the previous release — the "Save"
-  submit, the "Select" row control, always-present pagination, and the
-  select_row handling all behave exactly as before.
+  A2UI-101/AC-17: with `experience_version` pinned to 1 output is
+  byte-compatible with the pre-v2 release — the "Save" submit, the "Select"
+  row control, always-present pagination, and the select_row handling all
+  behave exactly as before. (The unpinned default is v2 — asserted below;
+  the pin is the escape hatch.)
   """
 
   use ExUnit.Case, async: false
@@ -14,11 +15,12 @@ defmodule AshA2ui.Experience.CompatV1Test do
   alias AshA2ui.Test.Paginated
 
   setup do
-    # the default is 1 either way; make it explicit and restore on exit
+    # the legacy emission is opt-in now; make the pin explicit and restore
+    # on exit
     Application.put_env(:ash_a2ui, :experience_version, 1)
 
     on_exit(fn ->
-      Application.put_env(:ash_a2ui, :experience_version, 1)
+      Application.delete_env(:ash_a2ui, :experience_version)
     end)
 
     :ok
@@ -41,6 +43,18 @@ defmodule AshA2ui.Experience.CompatV1Test do
     messages
     |> Enum.filter(&Map.has_key?(&1, "updateDataModel"))
     |> Map.new(&{&1["updateDataModel"]["path"], &1["updateDataModel"]["value"]})
+  end
+
+  test "the unpinned default is experience v2" do
+    Application.delete_env(:ash_a2ui, :experience_version)
+
+    assert AshA2ui.Experience.version() == 2
+    assert AshA2ui.Experience.v2?()
+  end
+
+  test "hosts can pin experience v1 (the escape hatch)" do
+    assert AshA2ui.Experience.version() == 1
+    refute AshA2ui.Experience.v2?()
   end
 
   @tag ac: "A2UI-101/AC-17"

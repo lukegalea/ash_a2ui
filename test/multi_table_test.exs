@@ -6,13 +6,25 @@ defmodule AshA2ui.MultiTableTest do
   multi-table `query` action.
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.ReviewItem
+
+  setup do
+    # This suite asserts the v1 wire shapes; v2 is the default, so the
+    # legacy emission is pinned (and restored) per test.
+    Application.put_env(:ash_a2ui, :experience_version, 1)
+
+    on_exit(fn ->
+      Application.delete_env(:ash_a2ui, :experience_version)
+    end)
+
+    :ok
+  end
 
   defp envelope(name, context) do
     %{

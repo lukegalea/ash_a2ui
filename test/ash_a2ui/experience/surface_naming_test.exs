@@ -29,7 +29,7 @@ defmodule AshA2ui.Experience.SurfaceNamingTest do
     Application.put_env(:ash_a2ui, :catalog, :admin_v1)
 
     on_exit(fn ->
-      Application.put_env(:ash_a2ui, :experience_version, 1)
+      Application.delete_env(:ash_a2ui, :experience_version)
       Application.put_env(:ash_a2ui, :catalog, :basic)
     end)
 

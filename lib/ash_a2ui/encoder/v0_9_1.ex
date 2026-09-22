@@ -120,7 +120,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   ## Experience v2
 
-  With `config :ash_a2ui, :experience_version, 2` the shapes above change
+  With experience v2 (the default; pin
+  `config :ash_a2ui, :experience_version, 1` for the shapes above) the
+  shapes change
   behind the `AshA2ui.Experience` module: the form is gated behind the
   `/ui/panel/visible` sentinel with a task heading and a bound primary
   label, row controls become View/Edit, a create affordance appears, the

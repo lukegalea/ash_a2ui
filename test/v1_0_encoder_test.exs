@@ -21,7 +21,7 @@ defmodule AshA2ui.V10EncoderTest do
       snake_case, a strict subset of `XID_Start`/`XID_Continue`).
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import AshA2ui.Test.SchemaHelper
 
@@ -29,6 +29,19 @@ defmodule AshA2ui.V10EncoderTest do
   alias AshA2ui.Encoder.V1_0
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.{KitchenSink, KitchenSinkV1UI}
+
+  setup do
+    # This suite asserts the v1 wire shapes (upgraded to the v1.0 envelope);
+    # v2 is the default, so the legacy emission is pinned (and restored)
+    # per test.
+    Application.put_env(:ash_a2ui, :experience_version, 1)
+
+    on_exit(fn ->
+      Application.delete_env(:ash_a2ui, :experience_version)
+    end)
+
+    :ok
+  end
 
   @catalog_id "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
 

@@ -1,14 +1,14 @@
 defmodule AshA2ui.Experience do
   @moduledoc """
-  The opt-in "experience v2" layer: explicit task modes (browse / create /
+  The "experience v2" layer: explicit task modes (browse / create /
   view / edit), conditional pagination, semantic action labels, typed
-  feedback, and data-driven empty states.
+  feedback, and data-driven empty states. **This is the default experience.**
 
-  Enabled per application:
+  Hosts pin the previous behavior per application:
 
-      config :ash_a2ui, :experience_version, 2
+      config :ash_a2ui, :experience_version, 1
 
-  The default (`1`, or any non-`2` value) is the pre-existing behavior byte
+  The pinned version (`1`, or any non-`2` value) is the pre-v2 behavior byte
   for byte: nothing in the encoders or the action handler consults this
   module unless `v2?/0` is true.
 
@@ -61,11 +61,12 @@ defmodule AshA2ui.Experience do
   @type mode :: :create | :view | :edit | :hidden
 
   @doc """
-  The configured experience version: `1` (default, byte-identical behavior)
-  or `2` (the experience layer).
+  The configured experience version: `2` (the default — the experience
+  layer) or `1` (the pinned legacy behavior, byte-identical to the
+  pre-v2 release).
   """
   @spec version() :: 1 | 2
-  def version, do: Application.get_env(:ash_a2ui, :experience_version, 1)
+  def version, do: Application.get_env(:ash_a2ui, :experience_version, 2)
 
   @doc """
   Whether the experience v2 layer is enabled.

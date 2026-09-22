@@ -8,7 +8,7 @@ defmodule AshA2ui.SectionsTest do
   Schema-validated on both v0.9.1 and v1.0.
   """
 
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import AshA2ui.Test.SchemaHelper
 
@@ -19,6 +19,18 @@ defmodule AshA2ui.SectionsTest do
   alias AshA2ui.Test.BucketWord
   alias AshA2ui.Test.BucketWordsUI
   alias AshA2ui.Test.BucketWordsV1UI
+
+  setup do
+    # This suite asserts the v1 wire shapes; v2 is the default, so the
+    # legacy emission is pinned (and restored) per test.
+    Application.put_env(:ash_a2ui, :experience_version, 1)
+
+    on_exit(fn ->
+      Application.delete_env(:ash_a2ui, :experience_version)
+    end)
+
+    :ok
+  end
 
   defp envelope(name, context, version \\ "v0.9.1", surface \\ "bucket_words") do
     %{

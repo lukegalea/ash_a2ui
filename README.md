@@ -431,19 +431,27 @@ Records are loaded through the resource's read action with `authorize?: true`
 and your `actor:`/`tenant:` — policies apply exactly as everywhere else in
 Ash.
 
-### Experience v2
+### Experience v2 (the default)
 
-By default surfaces render exactly as documented above. Setting
-`config :ash_a2ui, :experience_version, 2` opts the whole library into the
-experience v2 layer (`AshA2ui.Experience`): rows get semantic **View** /
-**Edit** controls instead of **Select**, a **Create <Resource>** affordance
-appears for create-capable surfaces, the form renders inside a task panel
-with an explicit heading and a mode-aware primary label (open via the new
-`start_create` / `view_record` / `start_edit` client actions, closed by
-`cancel_record_task`), pagination hides when it has nothing to do, empty
-tables render a data-driven empty state, and action outcomes carry typed
-feedback (`/ui/feedback` kind + message). The default version `1` is
-byte-identical to the previous release.
+> **Breaking change:** experience v2 is now the default. Hosts upgrading from
+> an earlier release get the v2 layer without any configuration: rows show
+> semantic **View** / **Edit** controls instead of **Select**, a gated
+> **Create <Resource>** affordance appears on create-capable surfaces (the
+> form renders inside a task panel with an explicit heading and a mode-aware
+> primary label), pagination hides when it has nothing to do, empty tables
+> render a data-driven empty state, and action outcomes carry typed feedback
+> (`/ui/feedback` kind + message). To keep the previous rendering
+> byte-identical, pin the legacy experience in your config:
+>
+>     config :ash_a2ui, :experience_version, 1
+>
+> Under the pin the v2 task-mode client actions (`start_create`,
+> `view_record`, `start_edit`, `cancel_record_task`) are rejected like any
+> unknown action.
+
+The experience v2 layer is `AshA2ui.Experience`; every detail of the
+reserved `/ui/*` state, the sentinels, and the task modes is documented on
+its moduledoc.
 
 ### Admin catalog
 

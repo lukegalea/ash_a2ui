@@ -16,7 +16,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
     Application.put_env(:ash_a2ui, :experience_version, 2)
 
     on_exit(fn ->
-      Application.put_env(:ash_a2ui, :experience_version, 1)
+      Application.delete_env(:ash_a2ui, :experience_version)
     end)
 
     :ok

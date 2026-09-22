@@ -13,6 +13,18 @@ defmodule AshA2ui.Wave6EncoderTest do
   alias AshA2ui.Test.{KitchenSink, Promotion}
 
   setup do
+    # These assertions cover the exact v1 message shapes; v2 is the default,
+    # so the legacy emission is pinned (and restored) per test.
+    Application.put_env(:ash_a2ui, :experience_version, 1)
+
+    on_exit(fn ->
+      Application.delete_env(:ash_a2ui, :experience_version)
+    end)
+
+    :ok
+  end
+
+  setup do
     on_exit(fn ->
       for resource <- [Promotion, KitchenSink] do
         Ets.stop(resource)

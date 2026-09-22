@@ -91,9 +91,8 @@ defmodule AshA2ui.ActionHandler do
 
     * `"start_create"` / `"view_record"` / `"start_edit"` /
       `"cancel_record_task"` — the experience v2 task-mode actions (see
-      `AshA2ui.Experience`; only accepted when
-      `config :ash_a2ui, :experience_version` is `2` — under v1 they are
-      rejected like any unknown action). `start_create` opens the record
+      `AshA2ui.Experience`; accepted by default and rejected under an
+      `experience_version: 1` pin like any unknown action). `start_create` opens the record
       panel in create mode over a fresh `/form`; `view_record`/`start_edit`
       take `%{"recordId" => id}`, fetch the record through an authorized
       read (`start_edit` additionally pre-flights the update authorization,

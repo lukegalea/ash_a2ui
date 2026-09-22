@@ -16,6 +16,14 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     @endpoint AshA2ui.Test.Endpoint
 
     setup do
+      # These assertions cover the exact v1 emission; v2 is the default, so
+      # the legacy behavior is pinned (and restored) per test.
+      Application.put_env(:ash_a2ui, :experience_version, 1)
+
+      on_exit(fn ->
+        Application.delete_env(:ash_a2ui, :experience_version)
+      end)
+
       Application.put_env(:ash_a2ui, :live_renderer_test_listener, self())
 
       on_exit(fn ->
