@@ -35,8 +35,12 @@ if Code.ensure_loaded?(Plug.Conn) do
       case AshA2ui.Actor.load(conn.query_params["id"] || "") do
         %AshA2ui.Actor{id: id} ->
           # A raw 302 rather than Phoenix.Controller.redirect/2: this module
-          # must work in any Plug host, Phoenix or not.
+          # must work in any Plug host, Phoenix or not. The session is
+          # fetched here because the plug may run before the host's own
+          # fetch_session (at the endpoint, not in a pipeline); fetch_session
+          # is idempotent if a host already fetched it.
           conn
+          |> fetch_session()
           |> put_session(AshA2ui.Actor.session_key(), id)
           |> put_resp_header("location", back(conn))
           |> send_resp(302, "")
