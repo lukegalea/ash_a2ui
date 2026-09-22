@@ -10,12 +10,20 @@ defmodule AshA2ui.Action do
   * `visible_when` is a keyword list of per-record equality conditions
     (`nil` means `is_nil`, a list means membership) that gate whether the row
     action is offered — and, mandatorily, whether the handler accepts it.
+  * `via` delegates a row action to a host-provided function instead of
+    running the mapped Ash action directly: the row button still emits the
+    ordinary `invoke` event, but the handler calls
+    `apply(module, function, [context | extra_args])` and renders whatever
+    the function returns through the standard success/error channels (see
+    the `via` option docs on `AshA2ui` for the exact contract). `nil` (the
+    default) dispatches to the Ash action named by the row action, as before.
   """
 
   defstruct [
     :name,
     :refreshes,
     :prompt_title,
+    :via,
     prompt_fields: [],
     visible_when: [],
     __spark_metadata__: nil
@@ -26,6 +34,7 @@ defmodule AshA2ui.Action do
           refreshes: [atom] | nil,
           prompt_fields: [atom],
           prompt_title: String.t() | nil,
-          visible_when: [{atom, term}]
+          visible_when: [{atom, term}],
+          via: {module, atom, [term]} | nil
         }
 end

@@ -17,7 +17,10 @@ defmodule AshA2ui.Verifiers.VerifyActions do
     * `visible_when` may only be declared on row actions; its keys must be
       public attributes or public expression calculations, and its values
       must cast to the field's type (`nil` and per-member list values
-      included).
+      included),
+    * `via` (host-delegated dispatch) may only be declared on row actions,
+      and is mutually exclusive with `prompt_fields` — the prompt collects
+      values cast against the direct Ash action, which `via` bypasses.
 
   Raises `Spark.Error.DslError` (surfaced by Spark as a compile-time
   diagnostic) on failure. Skipped when no resource can be resolved (standalone
@@ -144,13 +147,15 @@ defmodule AshA2ui.Verifiers.VerifyActions do
   defp verify_action_setting(setting, row_action_names, target, module) do
     with :ok <- verify_row_action_only(setting, :prompt_fields, row_action_names, module),
          :ok <- verify_row_action_only(setting, :visible_when, row_action_names, module),
+         :ok <- verify_row_action_only(setting, :via, row_action_names, module),
+         :ok <- verify_via_exclusivity(setting, module),
          :ok <- verify_prompt_fields(setting, target, module) do
       verify_visible_when(setting, target, module)
     end
   end
 
   defp verify_row_action_only(setting, option, row_action_names, module) do
-    if Map.fetch!(setting, option) == [] or MapSet.member?(row_action_names, setting.name) do
+    if Map.fetch!(setting, option) in [nil, []] or MapSet.member?(row_action_names, setting.name) do
       :ok
     else
       {:error,
@@ -162,6 +167,25 @@ defmodule AshA2ui.Verifiers.VerifyActions do
              "any table's row_actions — #{option} only applies to row actions"
        )}
     end
+  end
+
+  # `via` reroutes the dispatch away from the direct Ash invocation;
+  # prompt_fields configures exactly that invocation (its Modal values are
+  # cast against the Ash action), so the two cannot coexist.
+  defp verify_via_exclusivity(%{via: nil}, _module), do: :ok
+
+  defp verify_via_exclusivity(%{prompt_fields: []}, _module), do: :ok
+
+  defp verify_via_exclusivity(setting, module) do
+    {:error,
+     DslError.exception(
+       module: module,
+       path: [:a2ui, :action, setting.name, :via],
+       message:
+         "action #{inspect(setting.name)} declares both via and prompt_fields — they are " <>
+           "mutually exclusive: prompt_fields collects values for the direct Ash action, " <>
+           "which via bypasses"
+     )}
   end
 
   # Prompt values are cast against the Ash action's arguments and accepted

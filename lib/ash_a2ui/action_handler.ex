@@ -64,7 +64,16 @@ defmodule AshA2ui.ActionHandler do
       placed at `/ui/action_result` and a human-readable rendering (one
       "Humanized key: value" line per key) at `/ui/action_result_text`
       (handler-defined conventions, not part of the A2UI spec). Both paths
-      are cleared by every subsequent successful action.
+      are cleared by every subsequent successful action. When the action's
+      `action` entity declares `via`, the dispatch is delegated to the
+      host-provided MFA instead of running the Ash action (see the `via`
+      option docs on `AshA2ui`): the record is fetched as the direct path
+      fetches it and passed in the delegate context with the actor, tenant,
+      action name, surface id, and context selections; whatever the delegate
+      returns — `:ok`, `{:ok, term}`, or `{:error, Ash.Error.t()}` — renders
+      through the standard channels (refreshes honoring `refreshes`, status
+      text, `/errors/<field>` mapping, v2 `/ui/feedback`) unchanged. The
+      client neither knows nor needs to know `via` exists.
 
     * `"prompt"` — context `%{"action" => name, "recordId" => id}`. Sent by
       the trigger button of a prompt Modal (see `AshA2ui.Encoder.V0_9_1`)
@@ -1144,26 +1153,104 @@ defmodule AshA2ui.ActionHandler do
 
     case enforce_visibility(view, setting, record_id, env.ash_opts) do
       :ok ->
-        params = prompt_params(view, setting, action_name, values)
+        case setting do
+          %{via: {module, function, extra_args}} when not is_nil(module) ->
+            invoke_via(module, function, extra_args, record_id, env)
 
-        case ResourceInfo.action(view.resource, action_name) do
-          %{type: :destroy} ->
-            invoke_destroy(action_name, record_id, params, env)
+          _direct ->
+            params = prompt_params(view, setting, action_name, values)
 
-          %{type: :update} ->
-            invoke_update(action_name, record_id, params, env)
+            case ResourceInfo.action(view.resource, action_name) do
+              %{type: :destroy} ->
+                invoke_destroy(action_name, record_id, params, env)
 
-          %{type: :action} = action ->
-            invoke_generic(action, record_id, params, env)
+              %{type: :update} ->
+                invoke_update(action_name, record_id, params, env)
 
-          _other ->
-            {:error,
-             [status(view, "Action #{inspect(action_name)} cannot be invoked as a row action.")]}
+              %{type: :action} = action ->
+                invoke_generic(action, record_id, params, env)
+
+              _other ->
+                {:error,
+                 [
+                   status(
+                     view,
+                     "Action #{inspect(action_name)} cannot be invoked as a row action."
+                   )
+                 ]}
+            end
         end
 
       {:error, messages} ->
         {:error, messages}
     end
+  end
+
+  # A `via` row action delegates to a host-provided MFA instead of running
+  # the mapped Ash action (see the `via` option docs on `AshA2ui`): the
+  # record is fetched exactly as the direct path fetches it, the MFA
+  # receives the dispatch context plus its extra args, and its return value
+  # — the same shapes a direct invocation produces — renders through the
+  # standard channels (status text, refreshes honoring the action entity,
+  # typed /ui/feedback under v2) unchanged.
+  defp invoke_via(_module, _function, _extra_args, nil, %{view: view, invoked: action_name}) do
+    {:error,
+     [
+       status(
+         view,
+         "Action #{inspect(to_string(action_name))} declares via and " <>
+           ~s(requires a "recordId" to fetch the record it delegates with.)
+       )
+     ]}
+  end
+
+  defp invoke_via(
+         module,
+         function,
+         extra_args,
+         record_id,
+         %{view: view, ash_opts: ash_opts} = env
+       ) do
+    case fetch_record(view, record_id, ash_opts) do
+      {:ok, record} ->
+        context = %{
+          record: record,
+          actor: ash_opts[:actor],
+          tenant: ash_opts[:tenant],
+          action: env.invoked,
+          surface_id: view.surface_id,
+          selected: env.selected
+        }
+
+        module
+        |> apply(function, [context | List.wrap(extra_args)])
+        |> via_result(env)
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  defp via_result(:ok, %{invoked: action_name} = env),
+    do: after_write(:ok, env, "Action #{inspect(to_string(action_name))} completed.")
+
+  defp via_result({:ok, _result}, %{invoked: action_name} = env),
+    do: after_write(:ok, env, "Action #{inspect(to_string(action_name))} completed.")
+
+  defp via_result({:error, error}, env),
+    do: after_write({:error, error}, env, "")
+
+  # A malformed return is a host bug; report it through the error channel
+  # rather than crashing the renderer.
+  defp via_result(other, %{view: view, invoked: action_name}) do
+    {:error,
+     [
+       status(
+         view,
+         "Via delegate for action #{inspect(to_string(action_name))} returned an invalid " <>
+           "result (expected :ok, {:ok, term}, or {:error, Ash.Error.t()}): " <> inspect(other)
+       )
+     ]}
   end
 
   # Handler-side visible_when enforcement (mandatory — rendering hides

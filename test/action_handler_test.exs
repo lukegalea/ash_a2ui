@@ -15,7 +15,7 @@ defmodule AshA2ui.ActionHandlerTest do
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
-  alias AshA2ui.ActionHandlerTest.{Gadget, Protected, Widget}
+  alias AshA2ui.ActionHandlerTest.{CheckInFacade, Gadget, Protected, Ticket, Widget}
   alias AshA2ui.Test.{KitchenSink, Minimal, MinimalUI}
 
   @actor %{id: "test-actor"}
@@ -234,6 +234,78 @@ defmodule AshA2ui.ActionHandlerTest do
 
       assert value_at(messages, "/ui/action_result") == %{}
       assert value_at(messages, "/ui/action_result_text") == ""
+    end
+  end
+
+  describe "invoke (via delegation)" do
+    test "delegates to the host MFA with the record and actor, and renders the standard success channel" do
+      record = Ash.create!(Ticket, %{name: "Waitlisted"}, authorize?: false)
+
+      env = envelope("invoke", "ticket", %{"action" => "check_in", "recordId" => record.id})
+
+      assert {:ok, messages} = ActionHandler.handle(Ticket, env, actor: @actor)
+      assert_all_valid(messages)
+
+      # the delegate — not the direct dispatch — ran the resource action,
+      # under the actor the host passed to the handler
+      assert Ash.get!(Ticket, record.id, authorize?: false).status == "checked_in"
+
+      assert [row] = value_at(messages, "/records")
+      assert row["status"] == "checked_in"
+      assert value_at(messages, "/ui/status") =~ "check_in"
+
+      call = Process.get({CheckInFacade, :last_call})
+      assert call.source == :board
+      assert call.context.record.id == record.id
+      assert call.context.actor == @actor
+      assert call.context.action == :check_in
+      assert call.context.tenant == nil
+      assert call.context.surface_id == "ticket"
+      assert call.context.selected == %{}
+    end
+
+    test "a delegate that does not write leaves the record untouched (the direct action never runs)" do
+      record = Ash.create!(Ticket, %{name: "stale"}, authorize?: false)
+
+      env = envelope("invoke", "ticket", %{"action" => "check_in", "recordId" => record.id})
+
+      assert {:ok, messages} = ActionHandler.handle(Ticket, env)
+      assert_all_valid(messages)
+
+      assert Ash.get!(Ticket, record.id, authorize?: false).status == "open"
+      assert value_at(messages, "/ui/status") =~ "check_in"
+    end
+
+    test "propagates a delegate error into /errors/<field> and /ui/status" do
+      record = Ash.create!(Ticket, %{name: "completed"}, authorize?: false)
+
+      env = envelope("invoke", "ticket", %{"action" => "check_in", "recordId" => record.id})
+
+      assert {:error, messages} = ActionHandler.handle(Ticket, env)
+      assert_all_valid(messages)
+
+      assert value_at(messages, "/errors/status") =~ "task already completed"
+      assert is_binary(value_at(messages, "/ui/status"))
+    end
+
+    test "propagates Ash.Error.Forbidden as the not-authorized status" do
+      record = Ash.create!(Ticket, %{name: "locked"}, authorize?: false)
+
+      env = envelope("invoke", "ticket", %{"action" => "check_in", "recordId" => record.id})
+
+      assert {:error, messages} = ActionHandler.handle(Ticket, env)
+      assert_all_valid(messages)
+
+      assert value_at(messages, "/ui/status") =~ "not authorized"
+    end
+
+    test "a via action without a recordId is rejected" do
+      env = envelope("invoke", "ticket", %{"action" => "check_in"})
+
+      assert {:error, messages} = ActionHandler.handle(Ticket, env)
+      assert_all_valid(messages)
+
+      assert value_at(messages, "/ui/status") =~ "recordId"
     end
   end
 

@@ -667,6 +667,76 @@ defmodule AshA2ui.VerifierTest do
       refute result =~ ~r/row action/
       refute result =~ ~r/does not exist/
     end
+
+    test "via on a non-row action does not compile cleanly" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule ViaOnNonRowAction do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read, :destroy, create: :*]
+            end
+
+            a2ui do
+              component :table do
+                fields [:name]
+              end
+
+              component :form do
+                fields [:name]
+              end
+
+              action :create do
+                via({String, :upcase, []})
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/declares via, but it is not listed in any table's row_actions/
+    end
+
+    test "via and prompt_fields are mutually exclusive" do
+      result =
+        capture_io(:stderr, fn ->
+          defmodule ViaWithPromptFields do
+            @moduledoc false
+            use Ash.Resource, domain: nil, extensions: [AshA2ui]
+
+            attributes do
+              uuid_primary_key :id
+              attribute :name, :string, public?: true
+            end
+
+            actions do
+              defaults [:read, :destroy]
+            end
+
+            a2ui do
+              component :table do
+                fields [:name]
+                read_action :read
+                row_actions [:destroy]
+              end
+
+              action :destroy do
+                via({String, :upcase, []})
+                prompt_fields [:name]
+              end
+            end
+          end
+        end)
+
+      assert result =~ ~r/declares both via and prompt_fields/
+      assert result =~ ~r/mutually exclusive/
+    end
   end
 
   defmodule CompositeDest do
