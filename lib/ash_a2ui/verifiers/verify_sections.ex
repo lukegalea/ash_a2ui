@@ -85,7 +85,8 @@ defmodule AshA2ui.Verifiers.VerifySections do
         :ok
 
       resource ->
-        if public_attribute?(resource, component.sections.scope_by) do
+        if public_attribute?(resource, component.sections.scope_by) or
+             public_calculation?(resource, component.sections.scope_by) do
           :ok
         else
           {:error,
@@ -94,7 +95,7 @@ defmodule AshA2ui.Verifiers.VerifySections do
              path: [:a2ui, :component, key, :sections, :scope_by],
              message:
                "scope_by #{inspect(component.sections.scope_by)} is not a public " <>
-                 "attribute of #{inspect(resource_name(resource))}"
+                 "attribute or calculation of #{inspect(resource_name(resource))}"
            )}
         end
     end
@@ -177,6 +178,14 @@ defmodule AshA2ui.Verifiers.VerifySections do
 
   defp public_attribute?(resource, name) do
     match?(%{public?: true}, ResourceInfo.attribute(resource, name))
+  end
+
+  # A public calculation can scope sections too: the runtime filter
+  # (`scope_by == value`) works for calculations the same way it does for
+  # attributes, and a derived lane key — a status-to-board-column mapping,
+  # say — is a calculation by nature.
+  defp public_calculation?(resource, name) do
+    match?(%{public?: true}, ResourceInfo.calculation(resource, name))
   end
 
   # The resource whose attributes scope_by must exist on: for_resource in a
