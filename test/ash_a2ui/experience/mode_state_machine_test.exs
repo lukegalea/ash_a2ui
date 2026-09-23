@@ -10,6 +10,7 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
+  alias AshA2ui.Test.Experience.NoUpdate
   alias AshA2ui.Test.Experience.Task
 
   setup do
@@ -53,6 +54,9 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert ui["intent"] == "browse"
       assert ui["panel"]["visible"] == []
       assert ui["panel"]["submit_visible"] == []
+      # neither panel content mode is showing in browse
+      assert ui["panel"]["form_visible"] == []
+      assert ui["panel"]["view_visible"] == []
       assert ui["panel"]["mode"] == nil
 
       comps = components_by_id(components)
@@ -81,6 +85,8 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert ui["intent"] == "browse"
       assert ui["panel"]["visible"] == []
       assert ui["panel"]["submit_visible"] == []
+      assert ui["panel"]["form_visible"] == []
+      assert ui["panel"]["view_visible"] == []
       assert ui["feedback"] == %{"kind" => nil, "message" => ""}
 
       assert %{"status" => "", "message" => "", "result" => %{}, "resultText" => ""} =
@@ -103,16 +109,21 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert values["/ui/intent"] == "create"
 
       assert %{
-               "visible" => visible,
-               "mode" => "create",
-               "title" => "Create Task",
-               "primary_label" => "Create Task",
-               "record_id" => nil,
-               "submit_visible" => submit
-             } = values["/ui/panel"]
+                "visible" => visible,
+                "mode" => "create",
+                "title" => "Create Task",
+                "primary_label" => "Create Task",
+                "record_id" => nil,
+                "submit_visible" => submit,
+                "form_visible" => form,
+                "view_visible" => view
+              } = values["/ui/panel"]
 
       assert visible != []
       assert submit != []
+      # create shows the editable form, never the read-only display
+      assert form != []
+      assert view == []
 
       # the form is reset to its initial (empty) values and feedback cleared
       assert values["/form"] == %{}
@@ -135,7 +146,7 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
 
   describe "view task" do
     @tag ac: "A2UI-101/AC-8"
-    test "view_record populates read-only panel" do
+    test "view_record populates the read-only display, never the form buffer" do
       record = Ash.create!(Task, %{name: "Read me"}, authorize?: false)
 
       assert {:ok, messages} =
@@ -154,9 +165,19 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert panel["submit_visible"] == []
       assert panel["record_id"] == record.id
 
-      # the record's values show in the panel form
-      assert values["/form"]["name"] == "Read me"
-      assert values["/form"]["id"] == record.id
+      # the read-only half of the state machine: the derived display shows,
+      # the editable form does not
+      assert panel["view_visible"] != []
+      assert panel["form_visible"] == []
+
+      # the record's values ride the derived display path...
+      assert values["/ui/panel/record"]["name"] == "Read me"
+      assert values["/ui/panel/record"]["id"] == record.id
+
+      # ...and /form — the edit buffer — is NEVER written in view mode.
+      # This is the "view-opens-edit" fix: viewing must not populate the
+      # buffer an edit task would submit.
+      refute Map.has_key?(values, "/form")
     end
   end
 
@@ -177,10 +198,37 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert panel["mode"] == "edit"
       assert panel["title"] == "Edit Task"
       assert panel["primary_label"] == "Save changes"
+      # the save/cancel pair together, over the editable form
       assert panel["submit_visible"] != []
+      assert panel["form_visible"] != []
+      assert panel["view_visible"] == []
 
       assert values["/form"]["name"] == "Edit me"
       assert values["/form"]["id"] == record.id
+
+      # no stale view display values ride along
+      refute Map.has_key?(values, "/ui/panel/record")
+    end
+
+    @tag ac: "A2UI-101/AC-9"
+    test "start_edit is rejected on surfaces without a declared update action" do
+      record = Ash.create!(NoUpdate, %{name: "Read only"}, authorize?: false)
+
+      assert {:error, messages} =
+               ActionHandler.handle(NoUpdate, envelope("start_edit", %{"recordId" => record.id}))
+
+      assert Enum.any?(messages, fn
+               %{"updateDataModel" => %{"path" => "/ui/status", "value" => value}} ->
+                 value =~ "does not declare an update action"
+
+               _other ->
+                 false
+             end)
+
+      # and nothing was written: browse stays browse
+      values = by_path(messages)
+      refute Map.has_key?(values, "/form")
+      refute Map.has_key?(values, "/ui/panel")
     end
   end
 
@@ -198,6 +246,8 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert panel["visible"] == []
       assert panel["mode"] == nil
       assert panel["submit_visible"] == []
+      assert panel["form_visible"] == []
+      assert panel["view_visible"] == []
 
       assert values["/form"] == %{}
       assert values["/ui/feedback"] == %{"kind" => nil, "message" => ""}

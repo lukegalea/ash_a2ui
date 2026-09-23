@@ -19,13 +19,39 @@ defmodule AshA2ui.Experience do
 
     * `"intent"` — the client-facing task intent: `"browse"`, `"create"`,
       `"view"`, or `"edit"`.
-    * `"panel"` — the record task panel: `"visible"` and `"submit_visible"`
-      are zero-or-one visibility sentinels (`[]` hidden, one item visible —
-      the exact technique the row-action `visible_when` slots use, see
-      `AshA2ui.Conditions`), plus `"mode"`, `"title"`, `"primary_label"`,
-      and `"record_id"`.
+    * `"panel"` — the record task panel: `"visible"`, `"submit_visible"`,
+      `"form_visible"` and `"view_visible"` are zero-or-one visibility
+      sentinels (`[]` hidden, one item visible — the exact technique the
+      row-action `visible_when` slots use, see `AshA2ui.Conditions`),
+      plus `"mode"`, `"title"`, `"primary_label"`, and `"record_id"`.
     * `"feedback"` — the last action outcome: `"kind"` (`nil`, `"success"`,
       or `"error"`) and `"message"`.
+
+  ## The task state machine (v2)
+
+  The panel is a three-mode machine over the record buffer:
+
+    * **browse** (the start state) — the panel is closed, `/form` is empty,
+      no population happens. Nothing about a row is rendered into the panel.
+    * **create** (`"start_create"`, gated on a declared create action) —
+      the panel opens over a fresh `/form`; the editable form shows
+      (`form_visible`), the submit (create label) and Cancel show.
+    * **view** (`"view_record"`) — READ-ONLY: the record is rendered as a
+      derived display bound to `/ui/panel/record/<field>` (`view_visible`),
+      **`/form` is never written**, no submit is offered, and Cancel is the
+      exit. Viewing no longer means "edit minus the save button".
+    * **edit** (`"start_edit"`, gated on a **declared** `update_action`) —
+      the explicit transition onto the form buffer: `/form` is populated,
+      the editable form shows, and the save/cancel pair appears together
+      (`submit_visible` + Cancel). The handler rejects `start_edit` on
+      surfaces with no declared update action (the encoder never offers the
+      affordance there either).
+    * **save/cancel pair, mode-gated** — the submit and Cancel appear
+      together only in create/edit; view offers only Cancel; browse
+      neither (the panel itself is hidden).
+
+  `"cancel_record_task"` returns to browse from any mode: panel closed,
+  `/form` and `/errors` reset, feedback cleared.
 
   ## Query-state sentinels (v2)
 
@@ -117,8 +143,8 @@ defmodule AshA2ui.Experience do
   @doc """
   The initial `/ui/*` state as a flat `%{path => value}` map (paths keyed
   exactly like the `updateDataModel` writes the action handler emits).
-  `/ui/panel/visible` and `/ui/panel/submit_visible` hold the hidden
-  sentinel — a fresh surface is in browse mode with the record panel closed.
+  `/ui/panel/visible` and every mode sentinel hold the hidden value — a
+  fresh surface is in browse mode with the record panel closed.
   """
   @spec initial_ui_state(ResolvedView.t()) :: %{String.t() => term}
   def initial_ui_state(_view) do
@@ -130,6 +156,8 @@ defmodule AshA2ui.Experience do
       "/ui/panel/primary_label" => "",
       "/ui/panel/record_id" => nil,
       "/ui/panel/submit_visible" => sentinel(false),
+      "/ui/panel/form_visible" => sentinel(false),
+      "/ui/panel/view_visible" => sentinel(false),
       "/ui/feedback/kind" => nil,
       "/ui/feedback/message" => ""
     }
@@ -239,9 +267,16 @@ defmodule AshA2ui.Experience do
   The `/ui/panel` value for the task panel in `mode`:
 
     * `:hidden` — the closed state (empty sentinels, everything blank).
-    * `:create` — visible, primary label = `create_label/1`.
-    * `:view` — visible, no primary label (the submit stays hidden).
-    * `:edit` — visible, primary label = `save_changes_label/0`.
+    * `:create` — visible, editable form showing (`form_visible`), primary
+      label = `create_label/1`.
+    * `:view` — visible, the read-only record display showing
+      (`view_visible`), no primary label, no submit — Cancel is the exit.
+    * `:edit` — visible, editable form showing, primary label =
+      `save_changes_label/0` — the save/cancel pair together.
+
+  Only `form_visible`/`view_visible` ever differ from the submit gate: the
+  panel content is either the editable form (create/edit) or the derived
+  read-only display (view), never both.
   """
   @spec panel_state(mode, ResolvedView.t(), term) :: map
   def panel_state(:hidden) do
@@ -251,7 +286,9 @@ defmodule AshA2ui.Experience do
       "title" => "",
       "primary_label" => "",
       "record_id" => nil,
-      "submit_visible" => sentinel(false)
+      "submit_visible" => sentinel(false),
+      "form_visible" => sentinel(false),
+      "view_visible" => sentinel(false)
     }
   end
 
@@ -269,7 +306,9 @@ defmodule AshA2ui.Experience do
       "title" => panel_title(mode, view),
       "primary_label" => primary_label,
       "record_id" => (record_id && to_string(record_id)) || nil,
-      "submit_visible" => sentinel(primary_label != "")
+      "submit_visible" => sentinel(primary_label != ""),
+      "form_visible" => sentinel(mode in [:create, :edit]),
+      "view_visible" => sentinel(mode == :view)
     }
   end
 

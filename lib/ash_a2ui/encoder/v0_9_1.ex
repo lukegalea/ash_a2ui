@@ -1702,19 +1702,20 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     field_children = form_field_children(view, form)
     nested_children = Enum.map(form.nested_forms, &"nested_#{&1.name}")
 
+    # v2 splits the panel's content by task mode: the editable form fields
+    # live behind the /ui/panel/form_visible gate (create/edit), the
+    # read-only record display behind /ui/panel/view_visible (view) — so a
+    # view task renders the derived display, never an empty editable form.
     children =
       if AshA2ui.Experience.v2?() do
-        ["form_title"] ++
-          field_children ++ nested_children ++ ["form_submit_slot", "form_cancel_button"]
+        ["form_title", "panel_view_slot", "form_fields_slot", "form_submit_slot", "form_cancel_button"]
       else
         field_children ++ nested_children ++ ["form_submit_button"]
       end
 
     form_column = %{"id" => "form", "component" => "Column", "children" => children}
 
-    # v2 gates the whole form behind the /ui/panel/visible sentinel (the
-    # zero-or-one List over the panel state — the form only renders inside
-    # an open create/view/edit task). v1 keeps the always-rendered form.
+    # v1 keeps the always-rendered form.
     if AshA2ui.Experience.v2?() do
       [
         %{
@@ -1723,10 +1724,68 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "children" => %{"componentId" => "form", "path" => "/ui/panel/visible"}
         },
         form_column
+        | panel_mode_slots(view, form, field_children, nested_children)
       ] ++ group_components(view, form)
     else
       [form_column] ++ group_components(view, form)
     end
+  end
+
+  # The v2 mode-gated panel content: the read-only record display (view
+  # task) and the editable form fields (create/edit tasks), each behind its
+  # zero-or-one sentinel — exactly one of them renders at a time. The
+  # submit/cancel pair keeps its own gating (submit_visible / the open
+  # panel), so view offers Cancel alone while edit offers the pair.
+  defp panel_mode_slots(view, form, field_children, nested_children) do
+    List.flatten([
+      %{
+        "id" => "panel_view_slot",
+        "component" => "List",
+        "children" => %{"componentId" => "panel_view", "path" => "/ui/panel/view_visible"}
+      },
+      panel_view(view, form),
+      %{
+        "id" => "form_fields_slot",
+        "component" => "List",
+        "children" => %{"componentId" => "form_fields", "path" => "/ui/panel/form_visible"}
+      },
+      %{
+        "id" => "form_fields",
+        "component" => "Column",
+        "children" => field_children ++ nested_children
+      }
+    ])
+  end
+
+  # The view task's derived display: one caption/value pair per form field,
+  # bound to the `/ui/panel/record` values the handler writes on
+  # view_record — the same values the form would have shown, but as bound
+  # Texts (nothing editable). Nested-form rows are edit machinery and stay
+  # out of the display.
+  defp panel_view(view, form) do
+    rows =
+      Enum.flat_map(form.fields, fn field ->
+        [
+          %{
+            "id" => "panel_view_#{field}",
+            "component" => "Row",
+            "children" => ["panel_view_#{field}_label", "panel_view_#{field}_value"]
+          },
+          %{
+            "id" => "panel_view_#{field}_label",
+            "component" => "Text",
+            "text" => view.fields[field].label,
+            "variant" => "caption"
+          },
+          %{
+            "id" => "panel_view_#{field}_value",
+            "component" => "Text",
+            "text" => %{"path" => "/ui/panel/record/#{field}"}
+          }
+        ]
+      end)
+
+    [%{"id" => "panel_view", "component" => "Column", "children" => Enum.map(form.fields, &"panel_view_#{&1}")} | rows]
   end
 
   defp field_anchor_ids(view, field) do

@@ -615,7 +615,7 @@ defmodule AshA2ui.ActionHandler do
         result =
           with {:ok, record} <-
                  fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)) do
-            {:ok, task_open_messages(view, :view, record) ++ form_population(view, record)}
+            {:ok, task_open_messages(view, :view, record) ++ panel_record_population(view, record)}
           end
 
         case result do
@@ -625,33 +625,37 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  # start_edit pre-flights the update authorization (the write itself only
-  # happens on the subsequent submit_form): a record the actor may read but
-  # not update is rejected here, so the edit panel never opens on a task the
-  # server would refuse to commit.
+  # start_edit is the EXPLICIT transition onto the form buffer, gated on a
+  # declared update action: no declared update, no edit mode (the encoder
+  # never offers the affordance either, and a hand-crafted event gets this
+  # rejection instead of the primary-action fallback — or a crash on
+  # resources without any update action at all).
   defp start_edit(%{view: view, ash_opts: ash_opts} = _env, context) do
-    case Map.get(context, "recordId") do
-      nil ->
-        {:error, [status(view, ~s(Malformed start_edit action: context is missing "recordId".))]}
+    if view.update_action do
+      case Map.get(context, "recordId") do
+        nil ->
+          {:error, [status(view, ~s(Malformed start_edit action: context is missing "recordId".))]}
 
-      record_id ->
-        result =
-          with {:ok, record} <-
-                 fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)),
-               :ok <- authorize_update(view, record, ash_opts) do
-            {:ok, task_open_messages(view, :edit, record) ++ form_population(view, record)}
+        record_id ->
+          result =
+            with {:ok, record} <-
+                   fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)),
+                 :ok <- authorize_update(view, record, ash_opts) do
+              {:ok, task_open_messages(view, :edit, record) ++ form_population(view, record)}
+            end
+
+          case result do
+            {:ok, messages} -> {:ok, messages}
+            {:error, error} -> {:error, error_messages(view, error)}
           end
-
-        case result do
-          {:ok, messages} -> {:ok, messages}
-          {:error, error} -> {:error, error_messages(view, error)}
-        end
+      end
+    else
+      {:error, [status(view, "This surface does not declare an update action.")]}
     end
   end
 
   defp authorize_update(view, record, ash_opts) do
-    action = view.update_action || primary_action(view.resource, :update)
-    changeset = Ash.Changeset.for_update(record, action, %{}, ash_opts)
+    changeset = Ash.Changeset.for_update(record, view.update_action, %{}, ash_opts)
 
     if Ash.can?(changeset, ash_opts[:actor]) do
       :ok
@@ -1444,8 +1448,8 @@ defmodule AshA2ui.ActionHandler do
   end
 
   # The shared /form population for select_row (v1's row-select) and the v2
-  # view_record/start_edit tasks: the record's field values plus nested rows,
-  # then the searchable selects' label rewrite.
+  # start_edit task: the record's field values plus nested rows, then the
+  # searchable selects' label rewrite.
   defp form_population(view, record) do
     form =
       view
@@ -1453,6 +1457,21 @@ defmodule AshA2ui.ActionHandler do
       |> Map.merge(nested_row_values(view, record))
 
     [update_data_model(view, "/form", form) | select_state_messages(view, record)]
+  end
+
+  # The VIEW task's population — the read-only half of the state machine.
+  # The record is rendered from the derived `/ui/panel/record` display
+  # values; `/form` (the edit buffer) is never written, so view mode cannot
+  # masquerade as edit-minus-save. Same field values the form would have
+  # shown (nested-form rows are edit machinery and stay out of the display).
+  defp panel_record_population(view, record) do
+    [
+      update_data_model(
+        view,
+        "/ui/panel/record",
+        record_values(view, record, form_fields(view))
+      )
+    ]
   end
 
   # The /form/<argument> rows of the record's currently-related records:
