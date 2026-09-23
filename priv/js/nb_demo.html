@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<!--
+  NB component playground — a static, dependency-free page for eyeballing
+  and probing the Lane D component layer (no host app build required).
+
+  Drive it with any static server:
+
+      (cd priv/js && python3 -m http.server 4173)
+      CHROME=/usr/bin/google-chrome \
+      PLAYWRIGHT_NODE_MODULES=/path/to/node_modules \
+      node priv/js/probe/nb_probe.mjs http://127.0.0.1:4173/nb_demo.html
+
+  Every component event lands in the #log list (aria-live=polite), which is
+  what the probe asserts against — behavior is observed through the same
+  seam a host LiveView would use.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NB components — playground</title>
+    <link rel="stylesheet" href="./nb_motion.css" />
+    <script type="module">
+      import {defineNbComponents} from "./nb_components.js";
+      defineNbComponents();
+
+      // The host seam: everything the components emit lands in #log.
+      addEventListener("load", () => {
+        const log = document.getElementById("log");
+        const record = (type, detail) => {
+          const entry = document.createElement("li");
+          entry.textContent = `${type} ${JSON.stringify(detail)}`;
+          entry.dataset.event = type;
+          log.appendChild(entry);
+        };
+        for (const type of [
+          "nb-select",
+          "nb-close",
+          "nb-change",
+          "nb-month-change",
+          "nb-pinned-change",
+        ]) {
+          document.addEventListener(type, (event) => record(type, event.detail));
+        }
+
+        // Demo drivers (buttons the probe also pokes).
+        document.getElementById("open-sheet").addEventListener("click", () => {
+          document.getElementById("demo-sheet").setAttribute("open", "");
+        });
+        document.getElementById("append-msg").addEventListener("click", () => {
+          const scroller = document.getElementById("demo-scroller");
+          const message = document.createElement("p");
+          message.textContent = `Message ${scroller.children.length + 1} — appended live`;
+          scroller.appendChild(message);
+        });
+      });
+    </script>
+    <style>
+      /* Playground chrome: the demo page itself uses the token sheet, so
+       * the components render on their intended page color. */
+      :root {
+        --a2ui-color-background: #d6ebfc;
+        --a2ui-color-surface: #ffffff;
+        --a2ui-color-border: #141414;
+        --a2ui-color-primary: #3b82f6;
+        font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: var(--a2ui-color-background);
+        color: #141414;
+        padding: 1.5rem;
+      }
+      section {
+        margin-bottom: 2rem;
+      }
+      h2 {
+        font-size: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: flex-start;
+      }
+      #log {
+        max-height: 12rem;
+        overflow: auto;
+        font-size: 0.8125rem;
+      }
+      .demo-btn {
+        font: inherit;
+        font-weight: 500;
+        padding: 0.375rem 0.75rem;
+        background: #fff;
+        border: 2px solid #141414;
+        border-radius: 5px;
+        box-shadow: 2px 2px 0 0 #141414;
+        cursor: pointer;
+      }
+      .demo-btn:hover {
+        transform: translate(-1px, -1px);
+        box-shadow: 4px 4px 0 0 #141414;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>NB components</h1>
+
+    <section id="items">
+      <h2>nb-item</h2>
+      <div class="row">
+        <nb-item id="item-booked" status="booked" label="Rex — annual check" meta="09:00 · Bay 2" selectable></nb-item>
+        <nb-item status="high" label="Bella — vomiting" meta="10:30 · Bay 1"></nb-item>
+        <nb-item status="discharged" label="Milo — sutures out" meta="done · 08:15"></nb-item>
+      </div>
+    </section>
+
+    <section id="menu">
+      <h2>nb-menu</h2>
+      <nb-menu id="demo-menu" label="Actions">
+        <nb-menu-item label="Check in" value="check_in"></nb-menu-item>
+        <nb-menu-item label="Triage" value="triage" selected></nb-menu-item>
+        <nb-menu-item label="Reschedule" value="reschedule" disabled></nb-menu-item>
+        <nb-menu-item label="Discharge" value="discharge"></nb-menu-item>
+      </nb-menu>
+    </section>
+
+    <section id="tabs">
+      <h2>nb-tabs</h2>
+      <nb-tabs id="demo-tabs" label="Visit views">
+        <nb-tab id="tab-board" label="Board">Board panel — lanes and cards.</nb-tab>
+        <nb-tab id="tab-day" label="Day">Day panel — the calendar day.</nb-tab>
+        <nb-tab id="tab-log" label="Log">Log panel — every event.</nb-tab>
+      </nb-tabs>
+    </section>
+
+    <section id="table">
+      <h2>nb-table</h2>
+      <nb-table id="demo-table">
+        <nb-column label="Patient" width="40%"></nb-column>
+        <nb-column label="When"></nb-column>
+        <nb-column label="Urgency" align="end"></nb-column>
+        <nb-row id="row-1"><nb-cell>Rex</nb-cell><nb-cell>09:00</nb-cell><nb-cell>routine</nb-cell></nb-row>
+        <nb-row id="row-2"><nb-cell>Bella</nb-cell><nb-cell>10:30</nb-cell><nb-cell>urgent</nb-cell></nb-row>
+        <nb-row id="row-3"><nb-cell>Milo</nb-cell><nb-cell>11:15</nb-cell><nb-cell>soon</nb-cell></nb-row>
+      </nb-table>
+    </section>
+
+    <section id="calendar">
+      <h2>nb-calendar</h2>
+      <nb-calendar
+        id="demo-calendar"
+        month="2026-09"
+        today="2026-09-23"
+        selected="2026-09-24"
+        items="2026-09-24, 2026-09-28"
+      ></nb-calendar>
+    </section>
+
+    <section id="scroller">
+      <h2>nb-scroller</h2>
+      <div class="row">
+        <nb-scroller id="demo-scroller" style="flex: 1; min-width: 16rem">
+          <p>Message 1 — stick to bottom while pinned.</p>
+          <p>Message 2 — scroll up to detach.</p>
+          <p>Message 3 — the pill appears when detached.</p>
+          <p>Message 4 — append more while detached: no yank.</p>
+        </nb-scroller>
+        <button type="button" class="demo-btn" id="append-msg">Append message</button>
+      </div>
+    </section>
+
+    <section id="pagination">
+      <h2>nb-pagination</h2>
+      <nb-pagination id="demo-pagination" page="5" total-pages="12"></nb-pagination>
+    </section>
+
+    <section id="sheet">
+      <h2>nb-sheet</h2>
+      <button type="button" class="demo-btn" id="open-sheet">Open sheet</button>
+      <nb-sheet id="demo-sheet" label="Visit details" side="right">
+        <p>The sheet traps focus, closes on Escape and backdrop press, and can be cancelled by the host.</p>
+        <p><input placeholder="focus trap reaches slotted inputs" /></p>
+        <p><a href="#sheet-demo-anchor">…and slotted links</a></p>
+      </nb-sheet>
+    </section>
+
+    <section id="motion">
+      <h2>motion utilities</h2>
+      <div class="row">
+        <button type="button" class="demo-btn nb-pressable">.nb-pressable</button>
+        <span class="demo-btn nb-spring-in">.nb-spring-in</span>
+        <div class="demo-btn nb-move-container" data-nb-origin="right">.nb-move-container</div>
+      </div>
+    </section>
+
+    <section id="events">
+      <h2>event log</h2>
+      <ol id="log" aria-live="polite"></ol>
+    </section>
+  </body>
+</html>

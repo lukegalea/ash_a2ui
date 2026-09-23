@@ -1,0 +1,272 @@
+/*
+ * NB motion — the M3E layer in neobrutalist terms (Lane D).
+ *
+ * Import from any host page (plain <link> or from CSS: `@import`) to get
+ * the public --nb-* token defaults plus the six surgical moves as utility
+ * classes and keyframes. The NB web components (nb_components.js) read the
+ * same tokens through their shadow stylesheets with these literals as
+ * fallbacks — importing this sheet is optional, but it is the way to theme
+ * motion centrally and to use the moves on host-rendered (light-DOM)
+ * chrome.
+ *
+ * The translation rule, stated once: Material 3 Expressive's moves are
+ * built from easing, travel and opacity. In this system the primary
+ * channels are TRAVEL and SHADOW — an element arriving grows its hard
+ * shadow into place; an element leaving collapses it; opacity only
+ * accents, never carries. No soft fades, no blurs, no glows.
+ *
+ * The six moves (research brief: M3E for Phoenix LiveView; reconstructed
+ * against the public M3 spec):
+ *
+ *   1. Container transform — a panel arrives from its trigger: translate
+ *      from the origin direction + shadow grows. (.nb-move-container,
+ *      [data-nb-origin] picks the direction; nb-sheet/nb-menu use this.)
+ *   2. Shared axis — peer content swaps along ONE axis; outgoing exits to
+ *      one side, incoming enters from the other. (.nb-axis-x/y/z-in/out;
+ *      nb-tabs panel swaps use axis X.)
+ *   3. Fade-through — sequential surface swap (out fully, then in), used
+ *      when content is unrelated rather than siblings on an axis.
+ *      (.nb-fade-through-out / -in; opacity is 90ms of accent, travel does
+ *      the work.)
+ *   4. Emphasized easing — the curve tokens. Everything animated reads one
+ *      of the three; nothing invents its own.
+ *   5. Press ripple substitute — the hover-lift/active-press pair on hard
+ *      shadows, standing in for M3's ripple. (.nb-pressable; every NB
+ *      control uses it.)
+ *   6. Spring arrival — M3E spring physics, approximated as a single
+ *      small overshoot with the shadow landing a beat behind.
+ *      (.nb-spring-in; the scroller's jump pill uses it.)
+ *
+ * All of it is guarded: under prefers-reduced-motion every utility's
+ * animation and transition collapses to nothing — state changes land
+ * instantly, only the travel is dropped.
+ */
+
+:root {
+  /* --- Move 4: emphasized easing + duration tokens -------------------
+   * M3 emphasized curves, pinned; durations from the M3 short/medium
+   * bands. Components and utilities read ONLY these. */
+  --nb-ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --nb-ease-emphasized-decel: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --nb-ease-emphasized-accel: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --nb-dur-short: 120ms; /* micro: hover, press, chips */
+  --nb-dur-medium: 250ms; /* contained: panels, sheets, tabs */
+  --nb-dur-long: 400ms; /* whole-surface: page-level swaps */
+
+  /* --- The hard-shadow trio (rest / lift / press) ---------------------
+   * Public defaults so light-DOM chrome can share the vocabulary; the
+   * components carry the same literals internally. */
+  --nb-border: var(--a2ui-color-border, #141414);
+  --nb-shadow: 2px 2px 0 0 var(--nb-border);
+  --nb-shadow-lift: 4px 4px 0 0 var(--nb-border);
+  --nb-shadow-press: 1px 1px 0 0 var(--nb-border);
+
+  /* --- Colored lifts (accent pattern; see the clinic palette) -------- */
+  --nb-shadow-primary: 4px 4px 0 0 var(--nb-primary, var(--a2ui-color-primary, #3b82f6));
+  --nb-shadow-yellow: 4px 4px 0 0 var(--nb-yellow, #ffd83d);
+  --nb-shadow-violet: 4px 4px 0 0 var(--nb-violet, #b78aff);
+
+  /* --- The travel distances ------------------------------------------- */
+  --nb-travel-s: 4px; /* popups, pills */
+  --nb-travel-m: 12px; /* panel content, tabs */
+  --nb-travel-l: 16px; /* sheets, page surfaces */
+}
+
+/* --- Move 1: container transform ------------------------------------------
+ * Apply to a panel that opens from a trigger. data-nb-origin picks the
+ * arrival direction ("top" default, "left" | "right" | "bottom"); the
+ * element also grows its shadow from rest to lift while it lands. */
+.nb-move-container {
+  --nb-origin-x: 0;
+  --nb-origin-y: calc(-1 * var(--nb-travel-s));
+  animation: nb-container-in var(--nb-dur-medium) var(--nb-ease-emphasized-decel);
+}
+[data-nb-origin="left"] {
+  --nb-origin-x: calc(-1 * var(--nb-travel-l));
+  --nb-origin-y: 0;
+}
+[data-nb-origin="right"] {
+  --nb-origin-x: var(--nb-travel-l);
+  --nb-origin-y: 0;
+}
+[data-nb-origin="bottom"] {
+  --nb-origin-x: 0;
+  --nb-origin-y: var(--nb-travel-s);
+}
+@keyframes nb-container-in {
+  from {
+    transform: translate(var(--nb-origin-x), var(--nb-origin-y));
+    box-shadow: var(--nb-shadow);
+  }
+  to {
+    transform: translate(0, 0);
+    box-shadow: var(--nb-shadow-lift);
+  }
+}
+
+/* --- Move 2: shared axis ----------------------------------------------------
+ * Peer swaps. Outgoing: leave along the axis. Incoming: arrive from the
+ * opposite side. Apply -out to the leaving element and -in to the entering
+ * one at swap time (host or component choreographs the sequence). */
+.nb-axis-x-out,
+.nb-axis-y-out,
+.nb-axis-z-out {
+  animation-duration: var(--nb-dur-short);
+  animation-timing-function: var(--nb-ease-emphasized-accel);
+  animation-fill-mode: both;
+}
+.nb-axis-x-in,
+.nb-axis-y-in,
+.nb-axis-z-in {
+  animation-duration: var(--nb-dur-medium);
+  animation-timing-function: var(--nb-ease-emphasized-decel);
+  animation-fill-mode: both;
+}
+.nb-axis-x-out {
+  animation-name: nb-axis-x-out-kf;
+}
+.nb-axis-x-in {
+  animation-name: nb-axis-x-in-kf;
+}
+.nb-axis-y-out {
+  animation-name: nb-axis-y-out-kf;
+}
+.nb-axis-y-in {
+  animation-name: nb-axis-y-in-kf;
+}
+.nb-axis-z-out {
+  animation-name: nb-axis-z-out-kf;
+}
+.nb-axis-z-in {
+  animation-name: nb-axis-z-in-kf;
+}
+@keyframes nb-axis-x-out-kf {
+  to {
+    transform: translateX(calc(-1 * var(--nb-travel-m)));
+    opacity: 0;
+  }
+}
+@keyframes nb-axis-x-in-kf {
+  from {
+    transform: translateX(var(--nb-travel-m));
+    opacity: 0;
+  }
+}
+@keyframes nb-axis-y-out-kf {
+  to {
+    transform: translateY(calc(-1 * var(--nb-travel-m)));
+    opacity: 0;
+  }
+}
+@keyframes nb-axis-y-in-kf {
+  from {
+    transform: translateY(var(--nb-travel-m));
+    opacity: 0;
+  }
+}
+@keyframes nb-axis-z-out-kf {
+  to {
+    transform: scale(0.98);
+    opacity: 0;
+  }
+}
+@keyframes nb-axis-z-in-kf {
+  from {
+    transform: scale(1.02);
+    opacity: 0;
+  }
+}
+
+/* --- Move 3: fade-through ---------------------------------------------------
+ * Sequential swap for UNRELATED content: outgoing leaves fast (90ms of
+ * accel), incoming lands after it (220ms of decel). Travel carries the
+ * read; opacity only accents. */
+.nb-fade-through-out {
+  animation: nb-fade-through-out-kf 90ms var(--nb-ease-emphasized-accel) both;
+}
+.nb-fade-through-in {
+  animation: nb-fade-through-in-kf 220ms var(--nb-ease-emphasized-decel) both;
+}
+@keyframes nb-fade-through-out-kf {
+  to {
+    transform: translateY(calc(-1 * var(--nb-travel-s)));
+    opacity: 0;
+  }
+}
+@keyframes nb-fade-through-in-kf {
+  from {
+    transform: translateY(var(--nb-travel-s));
+    opacity: 0;
+  }
+}
+
+/* --- Move 5: press ripple substitute ----------------------------------------
+ * The interaction default for any hard-shadowed control: hover lifts one
+ * pixel with the shadow at 4px; active sinks with the shadow at 1px;
+ * focus is a hard ring with a white offset. */
+.nb-pressable {
+  border: var(--a2ui-border-width, 2px) solid var(--nb-border);
+  border-radius: var(--a2ui-border-radius, 5px);
+  box-shadow: var(--nb-shadow);
+  transition:
+    transform var(--nb-dur-short) var(--nb-ease-emphasized),
+    box-shadow var(--nb-dur-short) var(--nb-ease-emphasized);
+}
+.nb-pressable:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--nb-shadow-lift);
+}
+.nb-pressable:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: var(--nb-shadow-press);
+}
+.nb-pressable:focus-visible {
+  outline: var(--a2ui-border-width, 2px) solid var(--nb-border);
+  outline-offset: 2px;
+}
+
+/* --- Move 6: spring arrival --------------------------------------------------
+ * M3E spring physics as one overshoot: the element lands slightly past
+ * its mark and settles, the shadow catching up a beat behind. For pills,
+ * badges and other arrivals that should feel thrown, not placed. */
+.nb-spring-in {
+  animation: nb-spring-in-kf var(--nb-dur-medium) var(--nb-ease-emphasized);
+}
+@keyframes nb-spring-in-kf {
+  0% {
+    transform: translateY(var(--nb-travel-s)) scale(0.92);
+    box-shadow: var(--nb-shadow-press);
+  }
+  70% {
+    transform: translateY(-1px) scale(1.03);
+    box-shadow: var(--nb-shadow-lift);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: var(--nb-shadow);
+  }
+}
+
+/* --- The guard ---------------------------------------------------------------
+ * Reduced motion is not "less motion" here — it is no travel. Every
+ * utility and animation collapses; state changes still land instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .nb-move-container,
+  .nb-axis-x-out,
+  .nb-axis-x-in,
+  .nb-axis-y-out,
+  .nb-axis-y-in,
+  .nb-axis-z-out,
+  .nb-axis-z-in,
+  .nb-fade-through-out,
+  .nb-fade-through-in,
+  .nb-spring-in {
+    animation: none !important;
+  }
+  .nb-pressable,
+  .nb-pressable:hover:not(:disabled),
+  .nb-pressable:active:not(:disabled) {
+    transition: none !important;
+    transform: none !important;
+  }
+}
