@@ -57,11 +57,13 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
       assert comps["root"]["component"] == "entityPage"
       assert comps["root"]["title"] == "Task"
 
+      # zero jank: the record-task panel is the FIRST root child — an open
+      # create/view/edit task is front-and-center, not below the tables
       assert comps["root"]["children"] == [
+               "record_panel",
                "query_controls",
                "create_button",
                "data_grid",
-               "record_panel",
                "status_banner",
                "action_result_panel"
              ]

@@ -37,7 +37,9 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       test "connected mount pushes schema-valid a2ui:messages", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/stubbed")
 
-        assert_push_event(view, "a2ui:messages", %{messages: messages})
+        # The bootstrap now lands via the mount's async task — allow it
+        # a generous window on slow CI.
+        assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
 
         assert length(messages) == 3
         Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
@@ -118,7 +120,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     describe "PubSub live refresh" do
       test "a notification broadcast triggers a debounced data-model push", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/pubsub")
-        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         notification = %Ash.Notifier.Notification{resource: AshA2ui.Test.Minimal}
 
@@ -139,7 +141,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         conn: conn
       } do
         {:ok, view, _html} = live(conn, "/live-renderer/pubsub")
-        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         Phoenix.PubSub.broadcast(
           AshA2ui.Test.PubSub,
@@ -180,14 +182,14 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       test "mount with default surface_fn pushes schema-valid messages", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/defaults")
 
-        assert_push_event(view, "a2ui:messages", %{messages: messages})
+        assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
         assert messages != []
         Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
       end
 
       test "a query action round-trips through the LiveView transport", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/query")
-        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         envelope = %{
           "version" => "v0.9.1",
@@ -219,7 +221,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         conn: conn
       } do
         {:ok, view, _html} = live(conn, "/live-renderer/query-pubsub")
-        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         envelope = %{
           "version" => "v0.9.1",
@@ -257,7 +259,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         conn: conn
       } do
         {:ok, view, _html} = live(conn, "/live-renderer/context-pubsub")
-        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         envelope = %{
           "version" => "v0.9.1",
@@ -292,7 +294,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
       test "a PubSub refresh on a multi-table surface rebuilds every table", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/multi-table")
-        assert_push_event(view, "a2ui:messages", %{messages: _initial})
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         Phoenix.PubSub.broadcast(
           AshA2ui.Test.PubSub,

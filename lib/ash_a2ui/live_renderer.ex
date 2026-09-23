@@ -12,12 +12,18 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
             actor_fn: &(&1.assigns.current_admin)
         end
 
-    - `mount/3` derives the actor/tenant (via `:actor_fn` / `:tenant_fn`),
-      builds the surface via `AshA2ui.Info.build_surface/2` and pushes the
-      messages as the `"a2ui:messages"` event to the shipped JS hook
-      (`priv/js/ash_a2ui_hook.js`) hosting `<a2ui-surface>`. On the static
-      (disconnected) render only the introspection assigns are set — the
-      surface is built once, on the connected mount.
+    - `mount/3` derives the actor/tenant (via `:actor_fn` / `:tenant_fn`) and,
+      on the connected mount, starts the surface build as an async task —
+      the LiveView process stays free (coordinator, not worker) and the
+      container renders instantly, so the shipped JS hook's bootstrap
+      skeleton (`priv/js/ash_a2ui_hook.js`) is visible from the first paint.
+      When the task completes, the surface messages are pushed as the
+      `"a2ui:messages"` event to the hook (`priv/js/ash_a2ui_hook.js`)
+      hosting `<a2ui-surface>`, hydrating the surface over the skeleton. On
+      the static (disconnected) render only the introspection assigns are
+      set — the surface is built once, on the connected mount. A failed
+      bootstrap crashes the LiveView, matching the synchronous behavior
+      (a silent no-op would leave the skeleton up forever).
     - `render/1` renders the hook container
       (`<div id="ash-a2ui-surface" phx-hook="AshA2ui" phx-update="ignore">`).
     - `handle_event("a2ui:action", envelope, socket)` routes the client
@@ -29,7 +35,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       pushes debounced `AshA2ui.Info.build_data_model/2` refreshes when
       broadcasts arrive (see "PubSub live refresh" below).
 
-    All injected callbacks are `defoverridable`.
+    All injected callbacks (`mount/3`, `render/1`, `handle_event/3`,
+    `handle_info/2`, `handle_async/3`) are `defoverridable`. If you override
+    `handle_async/3`, delegate the `:ash_a2ui_surface` key to
+    `AshA2ui.LiveRenderer.handle_async/4` — it delivers the bootstrap
+    messages; dropping it strands the client on the skeleton.
 
     ## Options
 
@@ -97,7 +107,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
     use Phoenix.Component
 
-    import Phoenix.LiveView, only: [connected?: 1, push_event: 3]
+    import Phoenix.LiveView, only: [connected?: 1, push_event: 3, start_async: 3]
 
     @messages_event "a2ui:messages"
     @refresh_message {:ash_a2ui, :refresh}
@@ -137,7 +147,17 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           AshA2ui.LiveRenderer.handle_notification(__ash_a2ui_config__(), message, socket)
         end
 
-        defoverridable mount: 3, render: 1, handle_event: 3, handle_info: 2
+        @impl true
+        def handle_async(:ash_a2ui_surface, result, socket) do
+          AshA2ui.LiveRenderer.handle_async(
+            __ash_a2ui_config__(),
+            :ash_a2ui_surface,
+            result,
+            socket
+          )
+        end
+
+        defoverridable mount: 3, render: 1, handle_event: 3, handle_info: 2, handle_async: 3
       end
     end
 
@@ -173,12 +193,14 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       socket =
         if connected?(socket) do
           subscribe(config.pubsub)
-          messages = config.surface_fn.(config.ui, actor: actor, tenant: tenant)
 
-          socket
-          |> track_query_state(messages)
-          |> track_context_state(messages)
-          |> push_messages(messages)
+          # Zero jank: the surface build is a DB read (records + options +
+          # contexts) and must not block the mount — the container renders
+          # now, the JS hook shows its skeleton, and the bootstrap messages
+          # hydrate the surface when the task lands.
+          start_async(socket, :ash_a2ui_surface, fn ->
+            config.surface_fn.(config.ui, actor: actor, tenant: tenant)
+          end)
         else
           socket
         end
@@ -219,6 +241,26 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     """
     def handle_function_response(_config, _payload, socket) do
       {:noreply, socket}
+    end
+
+    @doc """
+    Delivers the async surface bootstrap started by `mount/3`. On `{:ok,
+    messages}` the messages are tracked (query/context state) and pushed to
+    the hook; on `{:exit, reason}` the LiveView exits with the same reason —
+    a failed bootstrap must crash loudly, not strand the client on the
+    skeleton.
+    """
+    def handle_async(_config, :ash_a2ui_surface, {:ok, messages}, socket) do
+      socket =
+        socket
+        |> track_query_state(messages)
+        |> track_context_state(messages)
+
+      {:noreply, push_messages(socket, messages)}
+    end
+
+    def handle_async(_config, :ash_a2ui_surface, {:exit, reason}, _socket) do
+      exit(reason)
     end
 
     @doc false

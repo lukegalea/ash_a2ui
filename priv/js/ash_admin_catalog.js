@@ -63,6 +63,17 @@
  *     resolved and dispatched with pageDelta ∓1/±1; a derivation fallback
  *     covers envelope-less emissions.
  *
+ * ## Zero jank: instant action acknowledgement
+ *
+ * Dispatching components acknowledge clicks at 0 RTT: the ActionBar primary
+ * button and every DataGrid row-action button render disabled + spinner the
+ * moment they dispatch, and settle when the surface's data model next
+ * reports an outcome write (`/ui/feedback/message`, `/ui/status`, or
+ * `/ui/response` — at least one is written by every AshA2ui action
+ * follow-up, on both wire versions and experience pins). No styling round
+ * trip and no `phx-*-loading`: these components own their shadow DOM, and
+ * host CSS cannot reach inside it.
+ *
  * ## A11y-hardened basic inputs
  *
  * The core basic-catalog inputs render adjacent validation errors but do not
@@ -539,6 +550,46 @@ function defineAdminElements(deps, {adminApis}) {
   const {html, css, nothing} = lit;
   const {shared, buttons} = createAdminStyles(css);
 
+  // --- zero jank: instant action acknowledgement -----------------------------
+  //
+  // Components that dispatch action envelopes acknowledge the click at 0 RTT
+  // (disabled + spinner), then settle when the surface's data model next
+  // reports an outcome. Every AshA2ui action follow-up writes at least one
+  // of /ui/feedback (experience v2), /ui/status (v0.9.1 wire) or /ui/response
+  // (v1.0 wire), so subscribing to all three settles on the first outcome
+  // whatever wire/experience combination the host runs. No styling round
+  // trip, no phx-*-loading — these components own their shadow DOM.
+  const SETTLE_PATHS = ["/ui/feedback/message", "/ui/status", "/ui/response"];
+
+  function markActionBusy(component) {
+    if (component._amSettleUnsubscribes) return;
+    const surface = component.surface;
+    if (!surface || !surface.dataModel || typeof surface.dataModel.subscribe !== "function") {
+      return;
+    }
+    component._amSettleUnsubscribes = SETTLE_PATHS.map((path) =>
+      surface.dataModel.subscribe(path, () => settleActionBusy(component)),
+    );
+  }
+
+  function settleActionBusy(component) {
+    dropActionBusySubscriptions(component);
+    if (typeof component.onActionSettled === "function") component.onActionSettled();
+    component.requestUpdate();
+  }
+
+  function dropActionBusySubscriptions(component) {
+    if (!component._amSettleUnsubscribes) return;
+    for (const unsubscribe of component._amSettleUnsubscribes) {
+      try {
+        unsubscribe();
+      } catch {
+        // The data model may already be gone (surface torn down).
+      }
+    }
+    component._amSettleUnsubscribes = null;
+  }
+
   // Shared styles for the a11y-hardened inputs. Declared BEFORE the define
   // calls: class static field initializers evaluate eagerly, so anything
   // their `static styles` arrays reference must already be initialized.
@@ -725,6 +776,10 @@ function defineAdminElements(deps, {adminApis}) {
         // {envelope, basePath, label}
         this.pendingConfirm = null;
         this._confirmEl = null;
+        // Zero jank: the row action whose envelope is in flight —
+        // {row, label} — disabled + spinner from click to outcome write.
+        this._amBusyRowAction = null;
+        this._amSettleUnsubscribes = null;
       }
 
       static styles = [
@@ -860,9 +915,14 @@ function defineAdminElements(deps, {adminApis}) {
 
       disconnectedCallback() {
         super.disconnectedCallback();
+        dropActionBusySubscriptions(this);
         if (this._confirmEl && this._confirmEl.parentNode) {
           this._confirmEl.parentNode.removeChild(this._confirmEl);
         }
+      }
+
+      onActionSettled() {
+        this._amBusyRowAction = null;
       }
 
       get surface() {
@@ -1004,15 +1064,23 @@ function defineAdminElements(deps, {adminApis}) {
       }
 
       renderRowActions(row, index, rowActions) {
+        const rowIdentity = this.rowIdentity(row, index);
         return rowActions.map((action) => {
           const label = str(action?.label);
           const destructive = action?.destructive === true;
+          const busy =
+            this._amBusyRowAction !== null &&
+            this._amBusyRowAction.row === rowIdentity &&
+            this._amBusyRowAction.label === label;
           return html`
             <button
               type="button"
               class="am-btn am-btn-quiet am-btn-sm ${destructive ? "am-btn-danger" : ""}"
+              ?disabled=${busy}
+              aria-busy=${busy ? "true" : "false"}
               @click=${() => this.onRowAction(action, index)}
             >
+              ${busy ? html`<span class="am-spinner" aria-hidden="true"></span>` : nothing}
               ${label}
             </button>
           `;
@@ -1051,12 +1119,27 @@ function defineAdminElements(deps, {adminApis}) {
             envelope,
             basePath: this.rowBasePath(index),
             label: str(action.label),
+            rowIdentity: this.rowIdentity((this.controller?.props?.rows || [])[index], index),
           };
           this.requestUpdate();
           return;
         }
 
+        this.markRowActionBusy(action, index);
         this.dispatchRowAction(envelope, this.rowBasePath(index));
+      }
+
+      /** Zero jank: the clicked button acknowledges at 0 RTT; the data
+       * model's next outcome write (SETTLE_PATHS) re-enables it. */
+      markRowActionBusy(action, index) {
+        const rows = this.controller?.props?.rows || [];
+        this.markRowActionBusyByIdentity(action, this.rowIdentity(rows[index], index));
+      }
+
+      markRowActionBusyByIdentity(action, rowIdentity) {
+        this._amBusyRowAction = {row: rowIdentity, label: str(action?.label)};
+        markActionBusy(this);
+        this.requestUpdate();
       }
 
       dispatchRowAction(envelope, basePath) {
@@ -1088,7 +1171,10 @@ function defineAdminElements(deps, {adminApis}) {
             const current = this.pendingConfirm;
             this.pendingConfirm = null;
             this.requestUpdate();
-            if (current) this.dispatchRowAction(current.envelope, current.basePath);
+            if (current) {
+              this.markRowActionBusyByIdentity({label: current.label}, current.rowIdentity);
+              this.dispatchRowAction(current.envelope, current.basePath);
+            }
           });
           this._confirmEl.addEventListener("cancel", () => {
             this.pendingConfirm = null;
@@ -1811,6 +1897,14 @@ function defineAdminElements(deps, {adminApis}) {
     if (customElements.get(tag)) return;
 
     class AshAdminActionBar extends A2uiLitElement {
+      constructor() {
+        super();
+        // Zero jank: set at submit time (0 RTT), cleared when the data
+        // model reports the action's outcome (see SETTLE_PATHS above).
+        this._amOptimisticBusy = false;
+        this._amSettleUnsubscribes = null;
+      }
+
       static styles = [
         shared,
         buttons,
@@ -1844,9 +1938,22 @@ function defineAdminElements(deps, {adminApis}) {
         return new A2uiController(this, adminApis.actionBar);
       }
 
+      get surface() {
+        return this.context?.dataContext?.surface;
+      }
+
       willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         applyWeight(this, this.controller?.props);
+      }
+
+      disconnectedCallback() {
+        super.disconnectedCallback();
+        dropActionBusySubscriptions(this);
+      }
+
+      onActionSettled() {
+        this._amOptimisticBusy = false;
       }
 
       render() {
@@ -1854,7 +1961,7 @@ function defineAdminElements(deps, {adminApis}) {
         if (!props) return nothing;
 
         const label = str(props.primaryLabel ?? "");
-        const busy = props.busy === true;
+        const busy = this._amOptimisticBusy || props.busy === true;
         const destructive = props.destructive === true;
         const children = childRefs(props.children);
 
@@ -1895,6 +2002,9 @@ function defineAdminElements(deps, {adminApis}) {
         if (!props) return;
 
         if (typeof props.action === "function") {
+          this._amOptimisticBusy = true;
+          markActionBusy(this);
+          this.requestUpdate();
           props.action();
           return;
         }
@@ -1908,6 +2018,14 @@ function defineAdminElements(deps, {adminApis}) {
           surface.dataModel,
           "/",
         );
+
+        // Zero jank: the click is acknowledged before the envelope leaves
+        // the browser — disabled + spinner now, settled by the outcome
+        // write (or the encoder-driven `busy` prop) later.
+        this._amOptimisticBusy = true;
+        markActionBusy(this);
+        this.requestUpdate();
+
         surface.dispatchAction(resolved, context.componentModel.id);
       }
     }

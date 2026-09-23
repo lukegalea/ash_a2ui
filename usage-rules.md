@@ -33,6 +33,11 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
 - `ash_a2ui:reports` — `:report` components (aggregate/report queries over
   generic actions) and `export` blocks (CSV file export via the v1.0
   `downloadFile` callFunction).
+- `ash_a2ui:zero-jank` — the Zero Jank Manifesto translated to A2UI
+  surfaces: instant feedback is client-side (optimistic data-model writes,
+  typed feedback, in-flight action buttons, the bootstrap skeleton), what
+  the framework guarantees, and what hosts must still do for their own
+  chrome.
 
 ## Protocol versions
 

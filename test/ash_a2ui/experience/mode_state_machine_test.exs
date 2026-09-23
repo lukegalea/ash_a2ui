@@ -65,6 +65,10 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
                comps["form_slot"]
 
       assert "form_slot" in comps["root"]["children"]
+
+      # zero jank: the gated panel is the FIRST root child, so an open
+      # create/view/edit task is front-and-center above the tables
+      assert hd(comps["root"]["children"]) == "form_slot"
     end
 
     @tag ac: "A2UI-101/AC-6"

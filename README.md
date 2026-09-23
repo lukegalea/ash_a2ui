@@ -92,8 +92,8 @@ DSL:
 
 AshA2ui ships LLM usage rules (`usage-rules.md` plus `usage-rules/actions.md`,
 `usage-rules/liveview.md`, `usage-rules/queries.md`,
-`usage-rules/relationships.md`, `usage-rules/layout.md`, and
-`usage-rules/contexts.md` sub-rules)
+`usage-rules/relationships.md`, `usage-rules/layout.md`,
+`usage-rules/contexts.md`, and `usage-rules/zero-jank.md` sub-rules)
 compatible with
 [`usage_rules`](https://hexdocs.pm/usage_rules). To sync them into your
 project's AGENTS.md, add `{:usage_rules, "~> 1.1", only: [:dev]}` and
@@ -483,10 +483,13 @@ defmodule MyAppWeb.TicketA2uiLive do
 end
 ```
 
-That's the whole LiveView. On mount it builds the surface and pushes the
-messages to the shipped JS hook (`priv/js/ash_a2ui_hook.js`) hosting
-`<a2ui-surface>`; client `action` envelopes arrive as the `"a2ui:action"`
-event and are routed through `AshA2ui.ActionHandler`; and if the resource has
+That's the whole LiveView. On mount it subscribes (when `:pubsub` is
+configured), builds the surface as an async task — the page renders
+immediately and the shipped JS hook's skeleton shows until the first tree
+hydrates — and pushes the messages to the shipped JS hook
+(`priv/js/ash_a2ui_hook.js`) hosting `<a2ui-surface>`; client `action`
+envelopes arrive as the `"a2ui:action"` event and are routed through
+`AshA2ui.ActionHandler`; and if the resource has
 `Ash.Notifier.PubSub` configured, the LiveView subscribes on mount and pushes
 `updateDataModel` refreshes when records change — live refresh across browser
 tabs for free.
@@ -589,7 +592,8 @@ Shipped beyond the v0 core:
   [External Transports](documentation/topics/external-transports.md)).
 - ✅ **`usage_rules` support** — the package ships `usage-rules.md` plus
   `usage-rules/actions.md`, `usage-rules/liveview.md`, `usage-rules/queries.md`,
-  `usage-rules/relationships.md`, and `usage-rules/contexts.md` sub-rules,
+  `usage-rules/relationships.md`, `usage-rules/contexts.md`, and
+  `usage-rules/zero-jank.md` sub-rules,
   syncable into a consumer's
   AGENTS.md via [`mix usage_rules.sync`](https://hexdocs.pm/usage_rules) (see
   [Agent usage rules](#agent-usage-rules)).

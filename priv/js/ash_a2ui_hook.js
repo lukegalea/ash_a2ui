@@ -82,12 +82,34 @@
  *     `surfaceId`, `sourceComponentId`, `context`) — in v0.9 there is no
  *     public action DOM event on the surface element.
  *
- * FIXME(@a2ui/lit API, verify in POC): the `a2uiaction` DOM listener below is
- * a defensive fallback from the v0.8-era API kept in case a renderer build
- * dispatches DOM events instead of (or in addition to) calling the
- * MessageProcessor action handler; if both fire we would double-push. Docs:
+ * Actions flow through exactly one path: the `actionHandler` callback passed
+ * to the `MessageProcessor` constructor (an `A2uiClientAction` with `name`,
+ * `surfaceId`, `sourceComponentId`, `context`). A v0.8-era DOM-event
+ * fallback (`a2uiaction` listener) was removed: verified against
+ * @a2ui/lit 0.10.x sources, the v0_9 renderer does not dispatch a public
+ * action DOM event, so the listener could only ever double-push an action
+ * when a renderer build fired both paths. Docs:
  * https://www.npmjs.com/package/@a2ui/lit and
  * https://a2ui.org/guides/client-setup/.
+ *
+ * ## Zero jank: bootstrap skeleton and panel reveal
+ *
+ * Between the LiveView mount and the first component tree there is nothing
+ * to show, so `mounted()` immediately renders a lightweight skeleton
+ * (heading bar + row bars) inside the hook container, styled only with the
+ * `--a2ui-*` custom properties (hosts theme it with everything else). The
+ * skeleton is removed the moment the first surface render lands — the
+ * removal waits for the surface element's first update (Lit
+ * `updateComplete`) so there is no blank frame between the two. On a
+ * LiveView reconnect the hook remounts and the skeleton reappears until the
+ * fresh bootstrap hydrates: a torn-down surface never shows stale content
+ * dressed up as live data.
+ *
+ * When a record-task panel opens (`start_create` / `view_record` /
+ * `start_edit` flip `/ui/panel/visible`), the hook scrolls the panel into
+ * view and focuses its first field — client-side, zero roundtrip. The
+ * admin catalog's `recordPanel` manages its own focus; the reveal stays out
+ * of the way when focus has already moved inside the panel.
  *
  * v0 limitation: a single surface per hook — the last surface created by the
  * processor wins the `<a2ui-surface>` element.
@@ -195,6 +217,165 @@ function randomActionId() {
   return `a2ui-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// --- zero-jank: bootstrap skeleton -------------------------------------------
+
+// Rendered inside the hook container the moment the hook attaches (the gap
+// between LiveView mount and the first component tree otherwise shows a
+// blank rectangle). Colors, radii, spacing, and shadows come only from the
+// `--a2ui-*` custom properties, so hosts theme the skeleton along with the
+// surfaces; the fallbacks keep it legible before any theme loads.
+const SKELETON_MARKUP = `
+<style>
+  .ash-a2ui-skeleton {
+    box-sizing: border-box;
+    max-width: 42rem;
+    padding: var(--a2ui-card-padding, 1rem);
+    background: var(--a2ui-color-surface, transparent);
+    border: 1px solid var(--a2ui-color-border, transparent);
+    border-radius: var(--a2ui-card-border-radius, 0.75rem);
+    box-shadow: var(--a2ui-card-box-shadow, none);
+    display: flex;
+    flex-direction: column;
+    gap: var(--a2ui-list-gap, 0.75rem);
+  }
+  .ash-a2ui-skeleton__bar {
+    height: 0.875rem;
+    border-radius: var(--a2ui-border-radius, 0.5rem);
+    background-color: var(--a2ui-color-secondary, rgba(148, 163, 184, 0.25));
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--a2ui-color-surface, #ffffff) 65%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: ash-a2ui-skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+  .ash-a2ui-skeleton__bar--heading {
+    height: 1.375rem;
+    width: 38%;
+    background-color: var(--a2ui-color-secondary, rgba(148, 163, 184, 0.4));
+  }
+  .ash-a2ui-skeleton__bar--short {
+    width: 62%;
+  }
+  @keyframes ash-a2ui-skeleton-shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ash-a2ui-skeleton__bar { animation: none; }
+  }
+</style>
+<div class="ash-a2ui-skeleton" role="status" aria-busy="true" aria-label="Loading surface">
+  <div class="ash-a2ui-skeleton__bar ash-a2ui-skeleton__bar--heading"></div>
+  <div class="ash-a2ui-skeleton__bar"></div>
+  <div class="ash-a2ui-skeleton__bar ash-a2ui-skeleton__bar--short"></div>
+  <div class="ash-a2ui-skeleton__bar"></div>
+  <div class="ash-a2ui-skeleton__bar ash-a2ui-skeleton__bar--short"></div>
+</div>
+`;
+
+// --- zero-jank: shadow-piercing DOM helpers ----------------------------------
+
+// querySelector stops at shadow boundaries; the surface tree is a stack of
+// them, so the panel reveal walks every shadowRoot recursively.
+function queryDeep(root, selector) {
+  const search = (node) => {
+    if (!node || typeof node.querySelector !== "function") return null;
+    try {
+      const direct = node.querySelector(selector);
+      if (direct) return direct;
+    } catch {
+      return null;
+    }
+    const scopes = [...(node.children || [])];
+    if (node.shadowRoot) scopes.push(node.shadowRoot);
+    for (const scope of scopes) {
+      const hit = search(scope);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  return search(root);
+}
+
+function laidOut(element) {
+  try {
+    return element.getBoundingClientRect().height > 0;
+  } catch {
+    return false;
+  }
+}
+
+function firstFieldDeep(root) {
+  const field =
+    queryDeep(
+      root,
+      "input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])",
+    ) ||
+    queryDeep(root, "button:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])");
+  return field;
+}
+
+// Whether the composed active element (through nested shadow roots) is
+// already inside `panel` — the signal that another component (the admin
+// recordPanel) owns focus for this reveal.
+function activeInside(panel) {
+  let active = document.activeElement;
+  while (active) {
+    if (containsAcrossRoots(panel, active)) return true;
+    const next = active.shadowRoot && active.shadowRoot.activeElement;
+    if (!next || next === active) return false;
+    active = next;
+  }
+  return false;
+}
+
+function containsAcrossRoots(ancestor, node) {
+  let current = node;
+  while (current) {
+    if (current === ancestor) return true;
+    if (current.host) {
+      current = current.host;
+      continue;
+    }
+    current = current.parentNode;
+  }
+  return false;
+}
+
+// --- zero-jank: record-task panel state --------------------------------------
+
+// The panel visibility sentinel is a zero-or-one list (`[]` hidden,
+// `[...]` visible — AshA2ui.Experience.sentinel/1).
+function panelVisibleSentinel(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
+// Extracts the panel state a server->client message carries, if any:
+// `/ui/panel` writes from the action handler, or the full data model under
+// "/" (bootstrap, data-only refreshes). Returns true | false | null
+// (message carries no panel state).
+function panelStateOf(message) {
+  if (!message || !message.updateDataModel) return null;
+  const {path, value} = message.updateDataModel;
+
+  if (path === "/ui/panel") {
+    return panelVisibleSentinel(value && value.visible);
+  }
+
+  if (path === "/") {
+    const panel = value && value.ui && value.ui.panel;
+    return panel ? panelVisibleSentinel(panel.visible) : null;
+  }
+
+  return null;
+}
+
+const PANEL_IDS = ["record_panel", "form_slot", "form"];
+
 export const AshA2ui = {
   mounted() {
     const deps = resolveDeps();
@@ -205,6 +386,13 @@ export const AshA2ui = {
     // actionId -> {surfaceId, timer} entries awaiting an actionResponse.
     this.v1Surfaces = new Set();
     this.pendingActions = new Map();
+
+    // Zero-jank state: the bootstrap skeleton, and whether the record-task
+    // panel is currently open (reveal fires on the hidden -> visible flip
+    // only — background refreshes must not yank scroll/focus).
+    this.skeletonEl = null;
+    this.panelVisible = false;
+    this.renderSkeleton();
 
     // Provide the markdown renderer to Text components (which consume the
     // `Context.markdown` Lit context) from the hook container, an ancestor
@@ -230,16 +418,13 @@ export const AshA2ui = {
     if (typeof this.processor.onSurfaceCreated === "function") {
       this.surfaceSubscription = this.processor.onSurfaceCreated((surface) => {
         this.surfaceEl.surface = surface;
+        this.dismissSkeleton();
       });
     }
 
     this.handleEvent("a2ui:messages", ({messages}) => {
       this.processMessages(messages || []);
     });
-
-    // Defensive fallback: see FIXME in the header comment.
-    this.onDomAction = (event) => this.forwardAction(event.detail);
-    this.el.addEventListener("a2uiaction", this.onDomAction);
   },
 
   destroyed() {
@@ -252,9 +437,10 @@ export const AshA2ui = {
       this.surfaceSubscription.unsubscribe();
     }
 
-    if (this.onDomAction) {
-      this.el.removeEventListener("a2uiaction", this.onDomAction);
+    if (this.skeletonEl && this.skeletonEl.parentNode) {
+      this.skeletonEl.parentNode.removeChild(this.skeletonEl);
     }
+    this.skeletonEl = null;
 
     if (this.surfaceEl && this.surfaceEl.parentNode) {
       this.surfaceEl.parentNode.removeChild(this.surfaceEl);
@@ -280,6 +466,100 @@ export const AshA2ui = {
     }
 
     this.feedProcessor(adapted);
+
+    // Belt and braces for the skeleton: onSurfaceCreated dismisses it, but
+    // a processor without that hook still boots a surface through a
+    // createSurface message here.
+    if (this.skeletonEl && adapted.some((message) => message && message.createSurface)) {
+      this.dismissSkeleton();
+    }
+
+    // Zero-jank panel reveal: only on the hidden -> visible flip, so
+    // background data refreshes never yank scroll or focus.
+    for (const message of adapted) {
+      const visible = panelStateOf(message);
+      if (visible === null) continue;
+      const wasVisible = this.panelVisible;
+      this.panelVisible = visible;
+      if (visible && !wasVisible) this.schedulePanelReveal();
+    }
+  },
+
+  /**
+   * Removes the bootstrap skeleton once the first component tree is on
+   * screen: wait for the surface element's first update (Lit
+   * `updateComplete`) so no blank frame appears between skeleton and tree,
+   * falling back to the next frame for renderers without that API.
+   */
+  dismissSkeleton() {
+    const skeleton = this.skeletonEl;
+    if (!skeleton) return;
+    this.skeletonEl = null;
+
+    const remove = () => {
+      if (skeleton.parentNode) skeleton.parentNode.removeChild(skeleton);
+    };
+
+    const host = this.surfaceEl;
+    if (host && host.updateComplete && typeof host.updateComplete.then === "function") {
+      host.updateComplete.then(remove, remove);
+    } else {
+      requestAnimationFrame(remove);
+    }
+  },
+
+  /** Renders the bootstrap skeleton (see "Zero jank" in the header). */
+  renderSkeleton() {
+    if (this.skeletonEl) return;
+    const skeleton = document.createElement("div");
+    skeleton.setAttribute("data-ash-a2ui-skeleton", "");
+    skeleton.innerHTML = SKELETON_MARKUP;
+    this.el.appendChild(skeleton);
+    this.skeletonEl = skeleton;
+  },
+
+  /**
+   * Scrolls the freshly opened record-task panel into view and focuses its
+   * first field — client-side, zero roundtrip. Waits for the surface's
+   * pending render plus a frame so the panel's DOM exists and has layout.
+   */
+  schedulePanelReveal() {
+    const run = () => this.revealPanel();
+    const host = this.surfaceEl;
+    if (host && host.updateComplete && typeof host.updateComplete.then === "function") {
+      host.updateComplete.then(() => requestAnimationFrame(run), run);
+    } else {
+      requestAnimationFrame(() => requestAnimationFrame(run));
+    }
+  },
+
+  revealPanel() {
+    const host = this.surfaceEl;
+    if (!host) return;
+
+    const panel = PANEL_IDS.map((id) => queryDeep(host, `#${id}`)).find(
+      (element) => element && laidOut(element),
+    );
+    if (!panel) return;
+
+    try {
+      panel.scrollIntoView({block: "start", behavior: "instant"});
+    } catch {
+      panel.scrollIntoView();
+    }
+
+    // The admin recordPanel moves focus itself (heading on open, restore on
+    // close) — stay out of the way when focus already lives in the panel.
+    if (activeInside(panel)) return;
+
+    const field = firstFieldDeep(panel);
+    if (field) {
+      try {
+        field.focus({preventScroll: false});
+      } catch {
+        field.focus();
+      }
+    }
   },
 
   feedProcessor(messages) {
@@ -460,9 +740,9 @@ export const AshA2ui = {
   },
 
   /**
-   * Wraps a renderer action (A2uiClientAction or a DOM event detail) in the
-   * A2UI client->server envelope of the surface's protocol version and
-   * pushes it to the LiveView.
+   * Wraps a renderer action (the A2uiClientAction delivered to the
+   * MessageProcessor's action handler) in the A2UI client->server envelope
+   * of the surface's protocol version and pushes it to the LiveView.
    *
    * For v1.0 surfaces the action carries a generated `actionId` +
    * `wantResponse: true`, an optimistic `{status: "pending"}` is written to
