@@ -50,6 +50,7 @@ defmodule AshA2ui.Dynamic.Importer do
   end
 
   alias AshA2ui.Component
+  alias Spark.Dsl.Extension
 
   @doc """
   Imports `resource_or_ui_module`'s declared `a2ui` section into a spec.
@@ -112,7 +113,7 @@ defmodule AshA2ui.Dynamic.Importer do
   # shapes a declared surface lives outside the spec vocabulary — named
   # visibly, with where it belongs instead.
   defp put_title(spec, module) do
-    case Spark.Dsl.Extension.get_opt(module, [:a2ui], :title, nil) do
+    case Extension.get_opt(module, [:a2ui], :title, nil) do
       title when is_binary(title) -> Map.put(spec, "title", title)
       _ -> spec
     end
@@ -123,11 +124,11 @@ defmodule AshA2ui.Dynamic.Importer do
     # schema default ("0.9.1"), so only a value that differs from the default
     # is a real declaration worth rejecting — the default is silence.
     notes = [
-      {:surface_id, Spark.Dsl.Extension.get_opt(module, [:a2ui], :surface_id, nil),
+      {:surface_id, Extension.get_opt(module, [:a2ui], :surface_id, nil),
        "surface ids are resolve/deploy metadata — pass it as the resolve :surface_id option"},
-      {:record_label, Spark.Dsl.Extension.get_opt(module, [:a2ui], :record_label, nil),
+      {:record_label, Extension.get_opt(module, [:a2ui], :record_label, nil),
        "record labels drive the v2 task labels and have no spec key — keep them in the promoted module"},
-      {:spec_version, Spark.Dsl.Extension.get_opt(module, [:a2ui], :spec_version, "0.9.1"),
+      {:spec_version, Extension.get_opt(module, [:a2ui], :spec_version, "0.9.1"),
        "the wire version is a resolve option (:spec_version), not part of the spec"}
     ]
 
