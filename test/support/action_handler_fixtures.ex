@@ -121,13 +121,15 @@ defmodule AshA2ui.ActionHandlerTest.CheckInFacade do
     * "locked" — return `Ash.Error.Forbidden`
   """
 
+  alias Ash.Error.Changes.InvalidArgument
+
   def complete(%{record: %{name: "stale"}}, _source), do: {:ok, :accepted}
 
   def complete(%{record: %{name: "completed"}}, _source) do
     {:error,
      %Ash.Error.Invalid{
        errors: [
-         Ash.Error.Changes.InvalidArgument.exception(
+          InvalidArgument.exception(
            field: :status,
            message: "task already completed"
          )

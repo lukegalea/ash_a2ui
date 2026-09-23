@@ -58,6 +58,7 @@ spark_locals_without_parens = [
   query: 2,
   range_filters: 1,
   read_action: 1,
+  record_label: 1,
   refreshes: 1,
   relationship: 1,
   require_context: 1,
@@ -78,6 +79,7 @@ spark_locals_without_parens = [
   title: 1,
   update_action: 1,
   value: 1,
+  via: 1,
   visible_when: 1,
   widget: 1
 ]

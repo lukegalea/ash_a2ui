@@ -1,4 +1,6 @@
 defmodule AshA2ui.Actor do
+  alias Ash.Resource.Info
+
   @label_candidates [:full_name, :name, :title, :username, :email]
 
   defstruct [:id, :label]
@@ -111,7 +113,7 @@ defmodule AshA2ui.Actor do
   end
 
   defp label_attribute(resource) do
-    Enum.find(@label_candidates, &Ash.Resource.Info.attribute(resource, &1)) ||
+    Enum.find(@label_candidates, &Info.attribute(resource, &1)) ||
       raise ArgumentError,
         message:
           "AshA2ui.Actor: #{inspect(resource)} has none of " <>

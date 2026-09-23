@@ -1158,30 +1158,35 @@ defmodule AshA2ui.ActionHandler do
 
           _direct ->
             params = prompt_params(view, setting, action_name, values)
-
-            case ResourceInfo.action(view.resource, action_name) do
-              %{type: :destroy} ->
-                invoke_destroy(action_name, record_id, params, env)
-
-              %{type: :update} ->
-                invoke_update(action_name, record_id, params, env)
-
-              %{type: :action} = action ->
-                invoke_generic(action, record_id, params, env)
-
-              _other ->
-                {:error,
-                 [
-                   status(
-                     view,
-                     "Action #{inspect(action_name)} cannot be invoked as a row action."
-                   )
-                 ]}
-            end
+            dispatch_by_action_type(view, action_name, record_id, params, env)
         end
 
       {:error, messages} ->
         {:error, messages}
+    end
+  end
+
+  # The direct path dispatches on the mapped Ash action's type: destroy and
+  # update get dedicated invokers, generic actions the parameterized one.
+  defp dispatch_by_action_type(view, action_name, record_id, params, env) do
+    case ResourceInfo.action(view.resource, action_name) do
+      %{type: :destroy} ->
+        invoke_destroy(action_name, record_id, params, env)
+
+      %{type: :update} ->
+        invoke_update(action_name, record_id, params, env)
+
+      %{type: :action} = action ->
+        invoke_generic(action, record_id, params, env)
+
+      _other ->
+        {:error,
+         [
+           status(
+             view,
+             "Action #{inspect(action_name)} cannot be invoked as a row action."
+           )
+         ]}
     end
   end
 

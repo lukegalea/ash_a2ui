@@ -13,6 +13,31 @@ Use it directly on a resource:
 
 or in a standalone UI module (see `AshA2ui.Standalone`).
 
+## Delegating a row action to the host
+
+A row action dispatches 1:1 to the Ash action named in `row_actions`. When
+the click must instead run through a host-provided function — e.g. an
+engine facade that completes an external task and invokes the Ash action
+itself — declare `via` on the action's `action` entity:
+
+    a2ui do
+      component :table do
+        fields [:name, :status]
+        row_actions [:check_in]
+      end
+
+      action :check_in do
+        via {MyApp.Tasks, :check_in, ["board"]}
+      end
+    end
+
+At click time the handler calls
+`apply(MyApp.Tasks, :check_in, [context, "board"])` with the record, actor,
+tenant, action name, surface id, and context selections in `context`, and
+renders the returned `:ok` / `{:ok, term}` / `{:error, Ash.Error.t()}`
+through the standard success/error channels. The client is unaware `via`
+exists — see the `via` option docs above for the full contract.
+
 
 ## a2ui
 Declare an A2UI surface for this resource (or, in a standalone UI module,
@@ -65,6 +90,8 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`surface_id`](#a2ui-surface_id){: #a2ui-surface_id } | `String.t` |  | Unique id of the A2UI surface. Defaults to the underscored short name of the resource. |
+| [`title`](#a2ui-title){: #a2ui-title } | `String.t` |  | The surface's heading — what this page is a page *of*. Defaults to the humanized resource short name, which is singular and named after a module rather than after the thing: a surface over `Legacy.User` is headed "User" though it is a list of users from another application's estate. Set it to the words the host already uses in its own navigation. |
+| [`record_label`](#a2ui-record_label){: #a2ui-record_label } | `String.t` |  | The singular noun for one record, used by the derived task labels — "Create <record_label>", "Edit <record_label>", "No <record_label> records yet." Defaults to the humanized resource short name. Set it where the module name is not the word a reader would use. |
 | [`spec_version`](#a2ui-spec_version){: #a2ui-spec_version } | `"0.9.1" \| "1.0"` | `"0.9.1"` | The A2UI protocol version the surface speaks: "0.9.1" - the default - or "1.0" recommended for new surfaces — inline createSurface, per-action actionResponse feedback; requires a v1.0-capable renderer or the shipped hook. See the A2UI 1.0 topic. |
 | [`for_resource`](#a2ui-for_resource){: #a2ui-for_resource } | `module` |  | The Ash resource this surface renders. Only used (and required) in standalone UI modules (`use AshA2ui.Standalone`). |
 | [`add_render_action?`](#a2ui-add_render_action?){: #a2ui-add_render_action? } | `boolean` | `true` | Whether to automatically add a generic `render_a2ui` action returning the surface's A2UI messages. Ignored in standalone UI modules. |
@@ -683,8 +710,8 @@ action name
 ```
 
 
-Per-action metadata: refresh targets, argument prompts, and per-row
-visibility conditions.
+Per-action metadata: refresh targets, argument prompts, per-row
+visibility conditions, and host-delegated dispatch (`via`).
 
 
 
@@ -706,6 +733,15 @@ end
 
 ```
 
+```
+action :check_in do
+  # The host's engine facade completes the work (it invokes the Ash
+  # action itself); the surface only renders the outcome.
+  via {MyApp.Tasks, :check_in, ["board"]}
+end
+
+```
+
 
 
 ### Arguments
@@ -721,6 +757,7 @@ end
 | [`prompt_fields`](#a2ui-action-prompt_fields){: #a2ui-action-prompt_fields } | `list(atom)` | `[]` | Arguments/accepts of the Ash action collected from the user in a per-row Modal prompt before the action is invoked (row actions only). Clicking the row button opens the Modal instead of invoking directly; its confirm button sends `invoke` with a `"values"` map. |
 | [`prompt_title`](#a2ui-action-prompt_title){: #a2ui-action-prompt_title } | `String.t` |  | Heading shown inside the prompt Modal. Defaults to the humanized action name. |
 | [`visible_when`](#a2ui-action-visible_when){: #a2ui-action-visible_when } | `keyword` | `[]` | Per-record conditions gating this row action, ANDed together (`visible_when status: :pending`). Keys are public attributes or public expression calculations; `nil` values mean `is_nil`, list values mean membership, anything else is equality. Enforced server-side on every invoke; rendering hides the button per row. |
+| [`via`](#a2ui-action-via){: #a2ui-action-via } | `mfa` |  | Delegate this row action to a host-provided function instead of running the mapped Ash action directly (`via {MyApp.Tasks, :check_in, ["board"]}`). The framework knows nothing about the host's engine: at click time the handler fetches the row's record (with any `visible_when` condition calculations loaded, enforced as always) and calls     apply(module, function, [context \| extra_args]) where `context` is a map carrying the dispatch state:   * `:record` — the row's record, loaded as the surface loads it   * `:actor` — the actor the host passed to the handler (`nil` when none)   * `:tenant` — the tenant the host passed to the handler   * `:action` — the row-action name (atom)   * `:surface_id` — the surface's id   * `:selected` — the surface's context selections (see     `AshA2ui.ContextRunner.selected/2`; `%{}` without contexts) The MFA returns the same shape the direct path does — `:ok` \| `{:ok, term}` \| `{:error, Ash.Error.t()}` (any Ash error class or exception; mapped exactly like a direct invocation's failure: `Ash.Error.Forbidden` to a not-authorized status, validation errors to `/errors/<field>`) — and the result renders through the standard success/error channels unchanged: success refreshes the tables (honoring `refreshes`) and reports the action's status text; errors go to `/ui/status` (and typed `/ui/feedback` under experience v2). The client is unaware `via` exists: the emitted button is the ordinary `invoke` row action, addressed by the same action name. The named Ash action must still exist (it remains the row-action allowlist entry and the button's label source); `via` only reroutes the dispatch. Mutually exclusive with `prompt_fields` (the prompt exists to collect values cast against the direct Ash action); row actions only. |
 
 
 
