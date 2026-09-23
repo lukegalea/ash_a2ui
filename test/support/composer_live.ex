@@ -1,0 +1,25 @@
+# The composer's configured fixture LiveViews (the `live` router macro's
+# __checks__ verifies the module at router compile time, so the fixtures must
+# compile with test/support — before the router). Guarded like endpoint.ex for
+# the NO_PHOENIX CI job.
+if Code.ensure_loaded?(Phoenix.LiveView) do
+  defmodule AshA2ui.Test.NoSurface do
+    @moduledoc false
+    # A plain module: hosts may list one; browse shows it honestly and import
+    # reports that there is nothing to import.
+    def present, do: true
+  end
+
+  defmodule AshA2ui.Test.ComposerLive do
+    @moduledoc """
+    The composer fixture: one standalone UI module (MinimalUI, the honest
+    surface_id rejection), one on-resource surface (Ticket, the nested-form
+    rejections), and one plain module (nothing to import), with the export
+    module pinned for assertions.
+    """
+
+    use AshA2ui.Web.ComposerLive,
+      surfaces: [AshA2ui.Test.MinimalUI, AshA2ui.Test.Ticket, AshA2ui.Test.NoSurface],
+      export_module: "AshA2ui.Test.ComposedSurface"
+  end
+end

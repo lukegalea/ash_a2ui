@@ -145,7 +145,8 @@ defmodule AshA2ui.MixProject do
           AshA2ui.LiveRenderer,
           AshA2ui.Presence,
           AshA2ui.PresenceBar,
-          AshA2ui.Combobox
+          AshA2ui.Combobox,
+          AshA2ui.Web.ComposerLive
         ],
         "External Transports": [
           AshA2ui.AgUi

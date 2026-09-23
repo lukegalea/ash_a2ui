@@ -49,6 +49,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
       # The presence surface fixture (AshA2ui.Presence + PresenceBar).
       live("/presence", AshA2ui.Test.PresenceLive)
+
+      # The surface composer (AshA2ui.Web.ComposerLive), configured with one
+      # standalone UI module fixture and one on-resource surface.
+      live("/composer", AshA2ui.Test.ComposerLive)
     end
   end
 
