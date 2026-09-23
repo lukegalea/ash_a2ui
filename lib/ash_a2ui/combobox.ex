@@ -147,11 +147,26 @@ defmodule AshA2ui.Combobox do
     ids = ids(opts)
 
     id_attrs =
-      [:body, :label, :selected, :options, :option_button, :clear_button, :search_input, :search_button]
+      [
+        :body,
+        :label,
+        :selected,
+        :options,
+        :option_button,
+        :clear_button,
+        :search_input,
+        :search_button
+      ]
       |> Enum.flat_map(fn key ->
         case Map.fetch!(ids, key) do
-          nil -> []
-          value -> [{"data-ash-a2ui-combobox-#{key |> to_string() |> String.replace("_", "-")}-id", value}]
+          nil ->
+            []
+
+          value ->
+            [
+              {"data-ash-a2ui-combobox-#{key |> to_string() |> String.replace("_", "-")}-id",
+               value}
+            ]
         end
       end)
       |> Map.new()
@@ -199,7 +214,8 @@ defmodule AshA2ui.Combobox do
   defp validate_searchable!(searchable) when is_boolean(searchable), do: searchable
 
   defp validate_searchable!(searchable) do
-    raise ArgumentError, "AshA2ui.Combobox: :searchable must be a boolean, got: #{inspect(searchable)}"
+    raise ArgumentError,
+          "AshA2ui.Combobox: :searchable must be a boolean, got: #{inspect(searchable)}"
   end
 
   # The composite base id of the frozen wire contract: context pickers
