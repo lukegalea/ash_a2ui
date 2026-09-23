@@ -2905,7 +2905,32 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp json_safe(value) when is_atom(value) and not is_boolean(value) and not is_nil(value),
     do: to_string(value)
 
+  # A struct whose type has no Jason implementation (a MapSet from a custom
+  # Ash type, a value type a host lib introduced...) and any tuple (an
+  # Ash.Type.Tuple value) cannot reach the JSON wire. Rather than crashing
+  # the transport with a Jason.EncodeError — or silently vanishing — render
+  # a readable placeholder naming the type, so the surface author can pick a
+  # renderable field or add a Jason implementation. (Jason's fallback Any
+  # implementation is exactly the one that raises for unimplemented structs,
+  # so an explicit implementation — derived or hand-written — is honored.)
+  # Nested positions inside maps/lists are not walked: those shapes are the
+  # reserved-path contract.
+  defp json_safe(value) when is_struct(value) do
+    if Jason.Encoder.impl_for(value) == Jason.Encoder.Any do
+      unsupported_type(value)
+    else
+      value
+    end
+  end
+
+  defp json_safe(value) when is_tuple(value), do: unsupported_type(value)
+
   defp json_safe(value), do: value
+
+  defp unsupported_type(value) when is_struct(value),
+    do: "unsupported type: #{value.__struct__ |> Module.split() |> List.last()}"
+
+  defp unsupported_type(_value), do: "unsupported type: tuple"
 
   defp humanize_resource(resource) do
     resource

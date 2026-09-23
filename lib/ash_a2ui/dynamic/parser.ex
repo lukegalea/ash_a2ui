@@ -72,20 +72,29 @@ defmodule AshA2ui.Dynamic.Parser do
     end
   end
 
+  # The spec linter: unknown top-level keys are a visible validation error —
+  # one per key, sorted for deterministic tool loops — never silently
+  # ignored. An LLM that mistyped several keys gets every correction in a
+  # single round trip, matching the "every verifier runs" philosophy of
+  # resolve/2's validation pipeline.
   defp check_unknown_keys(spec) do
-    case Enum.find(Map.keys(spec), &(&1 not in @top_level_keys)) do
-      nil ->
+    spec
+    |> Map.keys()
+    |> Enum.reject(&(&1 in @top_level_keys))
+    |> Enum.sort_by(&to_string/1)
+    |> case do
+      [] ->
         :ok
 
       unknown ->
         {:error,
-         [
+         Enum.map(unknown, fn key ->
            Error.new(
-             to_string(unknown),
-             "unknown spec key #{inspect(unknown)} — the spec supports: " <>
+             to_string(key),
+             "unknown spec key #{inspect(key)} — the spec supports: " <>
                Enum.join(@top_level_keys, ", ")
            )
-         ]}
+         end)}
     end
   end
 

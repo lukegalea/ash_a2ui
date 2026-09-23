@@ -28,6 +28,13 @@ defmodule AshA2ui.EncoderTest do
 
   @catalog_id "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
 
+  # A struct with NO Jason implementation anywhere — what a custom Ash type
+  # (or a host lib's value type) might drop into an attribute.
+  defmodule UnsupportedValue do
+    @moduledoc false
+    defstruct [:payload]
+  end
+
   defmodule NoRead do
     @moduledoc false
     use Ash.Resource,
@@ -395,6 +402,36 @@ defmodule AshA2ui.EncoderTest do
                "status" => "Published",
                "inserted_at" => "2026-07-10T12:00:00.000000Z"
              }
+    end
+
+    test "values no Jason implementation covers render a readable placeholder, not a crash" do
+      # A struct without a Jason implementation (what a custom Ash type might
+      # return) and a tuple (an Ash.Type.Tuple value) cannot be JSON-encoded:
+      # the encoder degrades them to readable placeholders instead of raising
+      # a Jason.EncodeError at the transport.
+      record = %KitchenSink{
+        id: "018f0000-0000-7000-8000-000000000002",
+        name: %UnsupportedValue{payload: "secret"},
+        count: {:from, :to}
+      }
+
+      [_, _, message] = encode_kitchen_sink([record])
+      # the placeholder is a plain string, so the message stays schema-valid
+      assert_valid_server_message(message)
+
+      assert [row] = message["updateDataModel"]["value"]["records"]
+      assert row["name"] == "unsupported type: UnsupportedValue"
+      assert row["count"] == "unsupported type: tuple"
+    end
+
+    test "structs WITH a Jason implementation keep it (no placeholder)" do
+      ordered = Jason.OrderedObject.new([{"kept", "as-is"}])
+      record = %KitchenSink{id: "018f0000-0000-7000-8000-000000000003", name: ordered}
+
+      [_, _, message] = encode_kitchen_sink([record])
+
+      assert [row] = message["updateDataModel"]["value"]["records"]
+      assert row["name"] == ordered
     end
 
     test "encode_data_model/3 emits a full-model updateDataModel by default" do

@@ -337,6 +337,25 @@ defmodule AshA2ui.DynamicTest do
       assert text =~ ~s(unknown spec key "layout")
     end
 
+    test "the spec linter reports EVERY unknown top-level key, not just the first" do
+      assert [%Error{path: "layout", message: layout_message}, %Error{path: "theme"}] =
+               errors(%{
+                 "resource" => "Minimal",
+                 "components" => [%{"kind" => "table"}],
+                 "theme" => "dark",
+                 "layout" => "wide"
+               })
+
+      assert layout_message =~ ~s(unknown spec key "layout")
+      assert layout_message =~ "resource, title, components, queries, fields, actions, contexts"
+
+      # Unknown keys never reach the parsed entities: a spec that carries
+      # ONLY unknown keys still fails with the linter's error (not a
+      # missing-components error from silently dropping them).
+      assert [%Error{path: "bogus"}] =
+               errors(%{"resource" => "Minimal", "bogus" => true})
+    end
+
     test "rejects components without a kind, or with an unsupported kind" do
       assert [text] = error_texts(%{"resource" => "Minimal", "components" => [%{}]})
       assert text =~ ~s(each component must declare a "kind")
