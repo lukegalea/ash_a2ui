@@ -382,6 +382,23 @@ defmodule AshA2ui.DynamicTest do
       assert [text] = error_texts(spec, allowlist: Dynamic.allowlist([AshA2ui.Test.BucketWord]))
       assert text =~ ~s(resource "KitchenSink" is not available to dynamic surfaces)
     end
+
+    test "a nested form argument without a manage_relationship change is rejected" do
+      assert [text] =
+               error_texts(%{
+                 "resource" => "Minimal",
+                 "components" => [
+                   %{
+                     "kind" => "form",
+                     "fields" => ["name"],
+                     "create_action" => "create",
+                     "nested_forms" => [%{"name" => "bogus"}]
+                   }
+                 ]
+               })
+
+      assert text =~ "nested_form :bogus requires a manage_relationship change"
+    end
   end
 
   describe "resolve/2 — encoding parity with an equivalent DSL surface" do
@@ -776,6 +793,103 @@ defmodule AshA2ui.DynamicTest do
                %{"updateDataModel" => %{"path" => "/errors/name"}} -> true
                _other -> false
              end)
+    end
+  end
+
+  describe "resolve/2 — via delegation (the RCE guard)" do
+    defp via_spec(mfa, args) do
+      %{
+        "resource" => "Ticket",
+        "components" => [
+          %{
+            "kind" => "table",
+            "fields" => ["name", "status"],
+            "read_action" => "read",
+            "row_actions" => ["check_in"]
+          }
+        ],
+        "actions" => [%{"name" => "check_in", "via" => %{"mfa" => mfa, "args" => args}}]
+      }
+    end
+
+    @via_allowlist [AshA2ui.ActionHandlerTest.CheckInFacade]
+    @ticket_allowlist Dynamic.allowlist([AshA2ui.ActionHandlerTest.Ticket])
+
+    test "a delegate module outside :via_allowlist is rejected (default: all via)" do
+      assert {:error, [%Error{path: "actions[0].via", message: message}]} =
+               Dynamic.resolve(
+                 via_spec("AshA2ui.ActionHandlerTest.CheckInFacade.complete/2", ["board"]),
+                 allowlist: @ticket_allowlist
+               )
+
+      assert message =~ "not in the resolve's :via_allowlist"
+      assert message =~ "host configuration"
+    end
+
+    test "an unknown module or function is rejected at resolve, never called" do
+      assert {:error, errors} =
+               Dynamic.resolve(via_spec("AshA2ui.DynamicTest.NoSuchModule.explode/1", []),
+                 allowlist: @ticket_allowlist,
+                 via_allowlist: [AshA2ui.DynamicTest.NoSuchModule]
+               )
+
+      assert Enum.any?(Error.messages(errors), &(&1 =~ "is not loaded"))
+
+      assert {:error, errors} =
+               Dynamic.resolve(via_spec("AshA2ui.ActionHandlerTest.CheckInFacade.missing/1", []),
+                 allowlist: @ticket_allowlist,
+                 via_allowlist: @via_allowlist
+               )
+
+      assert Enum.any?(Error.messages(errors), &(&1 =~ "missing/1 is not exported"))
+
+      # a real exported function the host never sanctioned stays gated by the
+      # allowlist (existence alone is not authorization)
+      assert {:error, _errors} =
+               Dynamic.resolve(via_spec("System.cmd/2", ["ls"]),
+                 allowlist: @ticket_allowlist
+               )
+    end
+
+    test "arity must equal 1 + length(args)" do
+      assert {:error, errors} =
+               Dynamic.resolve(via_spec("AshA2ui.ActionHandlerTest.CheckInFacade.complete/2", []),
+                 allowlist: @ticket_allowlist,
+                 via_allowlist: @via_allowlist
+               )
+
+      assert Enum.any?(Error.messages(errors), &(&1 =~ "arity must be 1 + length(args)"))
+    end
+
+    test "handle_action delegates an allowlisted via action exactly as declared surfaces do" do
+      record =
+        Ash.create!(AshA2ui.ActionHandlerTest.Ticket, %{name: "fresh"}, authorize?: false)
+
+      surface =
+        resolve!(via_spec("AshA2ui.ActionHandlerTest.CheckInFacade.complete/2", ["board"]),
+          allowlist: @ticket_allowlist,
+          via_allowlist: @via_allowlist
+        )
+
+      envelope = %{
+        "name" => "invoke",
+        "context" => %{"action" => "check_in", "recordId" => record.id}
+      }
+
+      assert {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      # the delegate ran with the dispatch context and its declared extra arg
+      assert %{context: context, source: source} =
+               Process.get({AshA2ui.ActionHandlerTest.CheckInFacade, :last_call})
+
+      assert context.action == :check_in
+      assert context.record.id == record.id
+      assert source == "board"
+
+      # and the delegate's own Ash invocation did the work
+      assert %{status: "checked_in"} =
+               Ash.get!(AshA2ui.ActionHandlerTest.Ticket, record.id, authorize?: false)
     end
   end
 

@@ -38,6 +38,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       * `:export_module` (optional) — the module name shown in the Export
         pane's generated source. Defaults to the imported module name with
         `.Composed` appended (e.g. `MyApp.UI.FeedbackUI.Composed`).
+      * `:via_allowlist` (optional) — the modules a spec's `via`-delegated
+        row actions may dispatch to (as `AshA2ui.Dynamic.resolve/2`).
+        Defaults to none: a spec carrying `via` then resolves only after
+        the host opts the delegate module in.
 
     The editor's allowlist is derived from `:surfaces` (each surface's
     resource, named by short module name — `AshA2ui.Dynamic.allowlist/1`),
@@ -142,6 +146,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         surfaces: Enum.map(surfaces, &surface_entry/1),
         module_index: Map.new(surfaces, fn module -> {module_name(module), module} end),
         allowlist: build_allowlist(surfaces, Keyword.get(opts, :allowlist)),
+        via_allowlist: Keyword.get(opts, :via_allowlist, []),
         export_module: Keyword.get(opts, :export_module)
       }
     end
@@ -239,7 +244,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     defp apply_resolution(socket, spec, extra_errors) do
       config = socket.assigns.composer_config
 
-      case Dynamic.resolve(spec, allowlist: config.allowlist) do
+      resolve_opts = [
+        allowlist: config.allowlist,
+        via_allowlist: config.via_allowlist
+      ]
+
+      case Dynamic.resolve(spec, resolve_opts) do
         {:ok, surface} ->
           assign(socket,
             surface: surface,
@@ -259,7 +269,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     defp export_source(config, spec, module_name) do
       module = Module.concat(String.split(module_name, "."))
 
-      case Dynamic.to_dsl_source(spec, module: module, allowlist: config.allowlist) do
+      case Dynamic.to_dsl_source(spec,
+             module: module,
+             allowlist: config.allowlist,
+             via_allowlist: config.via_allowlist
+           ) do
         {:ok, source} -> source
         {:error, _errors} -> nil
       end
@@ -611,7 +625,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       texts =
         List.flatten([
           list_text("refreshes", action.refreshes),
-          list_text("prompt fields", action.prompt_fields)
+          list_text("prompt fields", action.prompt_fields),
+          opt_text("via", via_text(action))
         ])
 
       case texts do
@@ -619,6 +634,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         texts -> Enum.join(texts, " · ")
       end
     end
+
+    defp via_text(%{via: nil}), do: nil
+
+    defp via_text(%{via: {module, function, args}}),
+      do: "#{inspect(module)}.#{function}/#{1 + length(args)}"
 
     # The preview is structural by design: the wire payload and its
     # client-side rendering belong to the host's transport.

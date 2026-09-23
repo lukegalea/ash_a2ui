@@ -8,6 +8,7 @@ defmodule AshA2ui.DynamicImporterTest do
   use ExUnit.Case, async: true
 
   alias AshA2ui.Dynamic
+  alias AshA2ui.Dynamic.Error
   alias AshA2ui.Dynamic.Importer
 
   describe "import/1 — the happy path round-trips through resolve/2" do
@@ -64,17 +65,33 @@ defmodule AshA2ui.DynamicImporterTest do
   end
 
   describe "import/1 — declared features the spec cannot say are visible rejections" do
-    test "via-delegated actions are rejected, not silently re-pointed" do
+    test "via-delegated actions import their MFA (the host gates it at resolve)" do
       {:ok, spec, rejections} = Importer.import(AshA2ui.ActionHandlerTest.Ticket)
 
-      via = Enum.find(rejections, &(&1.feature == "via"))
-      assert via.path =~ "via"
-      assert via.reason =~ "rejects it"
+      # the delegation is spec vocabulary now: carried as "Mod.fun/arity"
+      # plus its extra args, with no rejection
+      refute Enum.any?(rejections, &(&1.feature == "via"))
 
-      # The action itself still imports (name, refreshes), minus the
-      # host-provided delegation.
-      assert action = Enum.find(spec["actions"], &(&1["name"] == "check_in"))
-      refute Map.has_key?(action, "via")
+      assert [%{"name" => "check_in", "via" => via}] = spec["actions"]
+
+      # args carry as terms (JSON has no atoms: a serialized spec
+      # normalizes them to strings)
+      assert via == %{
+               "mfa" => "AshA2ui.ActionHandlerTest.CheckInFacade.complete/2",
+               "args" => [:board]
+             }
+
+      allow = Dynamic.allowlist([AshA2ui.ActionHandlerTest.Ticket])
+
+      # resolving requires the host's :via_allowlist — the RCE guard
+      assert {:error, errors} = Dynamic.resolve(spec, allowlist: allow)
+      assert Enum.any?(Error.messages(errors), &(&1 =~ ":via_allowlist"))
+
+      assert {:ok, %Dynamic.Surface{}} =
+               Dynamic.resolve(spec,
+                 allowlist: allow,
+                 via_allowlist: [AshA2ui.ActionHandlerTest.CheckInFacade]
+               )
     end
 
     test "inline editing is rejected; sectioned tables import their sections config" do

@@ -81,3 +81,6 @@ end
   a dynamic surface on a policy-less resource is not access control.
 - ❌ Using dynamic specs for surfaces a human authors — write the DSL and
   get compile-time diagnostics instead.
+- ❌ `via` in specs without the host's `:via_allowlist` — delegates run host
+  code, so the callable modules are resolve-time host configuration (the
+  parser still rejects modules/functions that do not exist).

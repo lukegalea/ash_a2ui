@@ -94,7 +94,7 @@ defmodule AshA2ui.Dynamic do
   alias AshA2ui.Dynamic.Surface
   alias AshA2ui.Transformers.InferFields
 
-  @resolve_opts [:allowlist, :surface_id, :spec_version]
+  @resolve_opts [:allowlist, :surface_id, :spec_version, :via_allowlist]
 
   @doc """
   Resolves and validates a surface `spec` (a JSON-decoded, string-keyed map)
@@ -113,6 +113,14 @@ defmodule AshA2ui.Dynamic do
       dynamic surface bootstraps as a *single* inline `createSurface`
       message — exactly what agent-panel transports want (see the A2UI 1.0
       topic).
+    * `:via_allowlist` — the modules a spec's `via`-delegated row actions
+      may dispatch to (default: none — a spec carrying `via` is rejected
+      unless the host passes this). Via delegates run host code, so — unlike
+      declared surfaces, where the delegate is reviewed source — the set of
+      callable modules is host configuration, with the same discipline as
+      `:allowlist`. The parser still independently validates that each
+      delegate's module is loaded and exports the function at the applied
+      arity.
 
   Returns `{:ok, surface}` or `{:error, [%AshA2ui.Dynamic.Error{}]}`.
   """
@@ -121,6 +129,7 @@ defmodule AshA2ui.Dynamic do
     Keyword.validate!(opts, @resolve_opts)
     allowlist = Keyword.fetch!(opts, :allowlist)
     spec_version = Keyword.get(opts, :spec_version, "0.9.1")
+    via_allowlist = Keyword.get(opts, :via_allowlist, [])
 
     unless spec_version in ["0.9.1", "1.0"] do
       raise ArgumentError,
@@ -130,6 +139,7 @@ defmodule AshA2ui.Dynamic do
     with {:ok, resource} <- spec_resource(spec, allowlist),
          {:ok, title} <- spec_title(spec),
          {:ok, entities} <- Parser.parse(Map.drop(spec, ["resource", "title"]), allowlist),
+         :ok <- validate_via_allowlist(entities, via_allowlist),
          :ok <- require_component(entities),
          surface_id =
            Keyword.get_lazy(opts, :surface_id, fn -> generate_surface_id(resource) end),
@@ -264,17 +274,19 @@ defmodule AshA2ui.Dynamic do
       surface should have a stable id, not a per-resolve `dyn_` one).
     * `:spec_version` — as `resolve/2`; declared in the generated block
       when not the default.
+    * `:via_allowlist` — as `resolve/2`; required for specs whose actions
+      declare `via`, since promotion re-resolves the spec first.
   """
   @spec to_dsl_source(map | Surface.t(), keyword) :: {:ok, String.t()} | {:error, [Error.t()]}
   def to_dsl_source(spec_or_surface, opts) do
-    Keyword.validate!(opts, [:module, :allowlist, :surface_id, :spec_version])
+    Keyword.validate!(opts, [:module, :allowlist, :surface_id, :spec_version, :via_allowlist])
     module = Keyword.fetch!(opts, :module)
     allowlist = Keyword.fetch!(opts, :allowlist)
     spec = to_spec!(spec_or_surface)
 
     resolve_opts =
       opts
-      |> Keyword.take([:allowlist, :spec_version])
+      |> Keyword.take([:allowlist, :spec_version, :via_allowlist])
       |> Keyword.put(:surface_id, "promotion_check")
 
     with {:ok, surface} <- resolve(spec, resolve_opts) do
@@ -821,6 +833,32 @@ defmodule AshA2ui.Dynamic do
           "description" =>
             "Per-record conditions gating the row action (attribute -> value; null means " <>
               "is-nil, an array means membership)."
+        },
+        "via" => %{
+          "type" => "object",
+          "description" =>
+            "Host-delegated dispatch for a row action: instead of running the Ash action, " <>
+              "the handler calls the host's function with a dispatch context (record, actor, " <>
+              "action, surface id, context selections) prepended to \"args\". The module must " <>
+              "exist in the host runtime and be listed in the resolve's :via_allowlist; row " <>
+              "actions only, mutually exclusive with prompt_fields.",
+          "properties" => %{
+            "mfa" => %{
+              "type" => "string",
+              "pattern" => "^[A-Z][A-Za-z0-9_.]*\\.[a-zA-Z_][a-zA-Z0-9_?!]*/[0-9]+$",
+              "description" =>
+                "The delegate as \"Module.function/arity\". Arity is the delegate's full " <>
+                  "arity: the dispatch context is prepended to \"args\", so arity = 1 + " <>
+                  "length(args)."
+            },
+            "args" => %{
+              "type" => "array",
+              "maxItems" => 16,
+              "description" => "Extra arguments appended after the dispatch context."
+            }
+          },
+          "required" => ["mfa"],
+          "additionalProperties" => false
         }
       },
       "required" => ["name"],
@@ -891,6 +929,38 @@ defmodule AshA2ui.Dynamic do
       :ok
     else
       {:error, [Error.new("components", "the spec must declare at least one component")]}
+    end
+  end
+
+  # The RCE guard for spec-carried `via` delegations: a via MFA runs host
+  # code at action time, so the callable modules are host configuration —
+  # the same trust boundary as the resource allowlist. (The parser has
+  # already validated the delegate exists; this decides whether the host
+  # permits calling it.)
+  defp validate_via_allowlist(entities, via_allowlist) do
+    entities
+    |> Enum.filter(&is_struct(&1, AshA2ui.Action))
+    |> Enum.with_index()
+    |> Enum.flat_map(fn
+      {%AshA2ui.Action{via: nil}, _index} ->
+        []
+
+      {%AshA2ui.Action{via: {module, _function, _args}}, index} ->
+        if module in via_allowlist do
+          []
+        else
+          [
+            Error.new(
+              "actions[#{index}].via",
+              "module #{inspect(module)} is not in the resolve's :via_allowlist — " <>
+                "via delegates run host code, so the callable modules are host configuration"
+            )
+          ]
+        end
+    end)
+    |> case do
+      [] -> :ok
+      errors -> {:error, errors}
     end
   end
 

@@ -459,14 +459,168 @@ defmodule AshA2ui.Dynamic.Parser do
     "visible_when" => :visible_when
   }
 
+  @action_nested ~w(via)
+
   defp parse_action(entry, path) when is_map(entry) do
-    with {:ok, opts} <- convert_options(entry, @action_keys, [], path) do
+    with {:ok, opts} <- convert_options(entry, @action_keys, @action_nested, path),
+         {:ok, via} <- via_spec(Map.get(entry, "via"), path) do
+      opts = if via, do: opts ++ [{:via, via}], else: opts
       build_entity(:action, entity_def(:action), opts, [], path)
     end
   end
 
   defp parse_action(_entry, path),
     do: {:error, [Error.new(path, "each action must be a JSON object")]}
+
+  @via_regex ~r|\A(?<module>[A-Z][A-Za-z0-9_.]*)\.(?<function>[a-zA-Z_][a-zA-Z0-9_?!]*)/(?<arity>\d+)\z|
+  @max_via_module_bytes 255
+
+  @doc false
+  # The spec shape of a `via` delegation: {"mfa": "Mod.fun/arity", "args":
+  # [...]}. The arity is the delegate's full arity — the handler applies
+  # `fun` with the dispatch context prepended to `args`, so arity must be
+  # 1 + length(args). The module/function must already exist in the host
+  # runtime (compile-time-safe: validated here, at resolve, never called).
+  # Host TRUST is a separate gate: AshA2ui.Dynamic.resolve/2's
+  # :via_allowlist decides which modules a spec may delegate to.
+  def via_spec(entry, path)
+
+  def via_spec(nil, _path), do: {:ok, nil}
+
+  def via_spec(entry, path) when is_map(entry) do
+    via_path = "#{path}.via"
+
+    with {:ok, {module, function, arity}} <- via_mfa(Map.get(entry, "mfa"), via_path),
+         {:ok, args} <- via_args(entry, arity, via_path),
+         :ok <- via_exists?(module, function, arity, via_path) do
+      {:ok, {module, function, args}}
+    end
+  end
+
+  def via_spec(_entry, path) do
+    {:error,
+     [
+       Error.new(
+         "#{path}.via",
+         ~s(via must be an object with an "mfa" string like "Mod.fun/arity" and optional "args")
+       )
+     ]}
+  end
+
+  # Splits a validated "Mod.fun/arity" string into the MFA parts (the
+  # promoter reuses this to emit the DSL's tuple literal).
+  @doc false
+  @spec split_mfa_string(String.t()) :: {:ok, {String.t(), String.t(), non_neg_integer}} | :error
+  def split_mfa_string(mfa) when is_binary(mfa) do
+    case Regex.named_captures(@via_regex, mfa) do
+      %{"module" => module, "function" => function, "arity" => arity} ->
+        {:ok, {module, function, String.to_integer(arity)}}
+
+      nil ->
+        :error
+    end
+  end
+
+  def split_mfa_string(_mfa), do: :error
+
+  defp via_mfa(mfa, via_path) when is_binary(mfa) do
+    case split_mfa_string(mfa) do
+      {:ok, {module, function, arity}} ->
+        # Bounded by the regex and byte size before the atom is created; the
+        # existence check below then requires the atom to already exist.
+        # sobelow_skip ["DOS.StringToAtom"]
+        module_atom =
+          if byte_size(module) <= @max_via_module_bytes,
+            do: String.to_atom("Elixir." <> module),
+            else: nil
+
+        # sobelow_skip ["DOS.StringToAtom"]
+        function_atom =
+          if byte_size(function) <= @max_name_bytes,
+            do: String.to_atom(function),
+            else: nil
+
+        if module_atom && function_atom do
+          {:ok, {module_atom, function_atom, arity}}
+        else
+          via_mfa_error(mfa, via_path)
+        end
+
+      :error ->
+        via_mfa_error(mfa, via_path)
+    end
+  end
+
+  defp via_mfa(mfa, via_path), do: via_mfa_error(mfa, via_path)
+
+  defp via_mfa_error(mfa, via_path) do
+    {:error,
+     [
+       Error.new(
+         "#{via_path}.mfa",
+         "via #{inspect(mfa)} is not a valid \"Mod.fun/arity\" string — the delegate is " <>
+           "called with the dispatch context prepended to \"args\""
+       )
+     ]}
+  end
+
+  defp via_args(entry, arity, via_path) do
+    args = Map.get(entry, "args", [])
+
+    cond do
+      not is_list(args) ->
+        {:error, [Error.new("#{via_path}.args", "via args must be an array")]}
+
+      arity < 1 ->
+        {:error,
+         [
+           Error.new(
+             "#{via_path}.mfa",
+             "via arity must be at least 1 — the delegate receives the dispatch context"
+           )
+         ]}
+
+      length(args) != arity - 1 ->
+        {:error,
+         [
+           Error.new(
+             "#{via_path}.args",
+             "via declares arity #{arity} with #{length(args)} args — arity must be " <>
+               "1 + length(args) (the dispatch context is prepended)"
+           )
+         ]}
+
+      true ->
+        {:ok, args}
+    end
+  end
+
+  defp via_exists?(module, function, arity, via_path) do
+    cond do
+      not Code.ensure_loaded?(module) ->
+        {:error,
+         [
+           Error.new(
+             "#{via_path}.mfa",
+             "module #{inspect(module)} is not loaded — via delegates must already exist " <>
+               "in the host runtime"
+           )
+         ]}
+
+      not function_exported?(module, function, arity) ->
+        {:error,
+         [
+           Error.new(
+             "#{via_path}.mfa",
+             "#{inspect(module)}.#{function}/#{arity} is not exported — the handler applies " <>
+               "the delegate with the dispatch context prepended to its args"
+           )
+         ]}
+
+      true ->
+        :ok
+    end
+  end
 
   # --- contexts -------------------------------------------------------------------
 

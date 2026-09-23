@@ -596,6 +596,46 @@ defmodule AshA2ui.DynamicLifecycleTest do
       assert scrub(ResolvedView.resolve(module)) == scrub(ResolvedView.resolve(surface.dsl_state))
     end
 
+    test "round-trip: an imported via-delegated action promotes losslessly" do
+      {:ok, spec, rejections} = Importer.import(AshA2ui.ActionHandlerTest.Ticket)
+      assert [%{feature: "surface_id"}] = rejections
+
+      assert [%{"name" => "check_in", "via" => via}] = spec["actions"]
+
+      assert via == %{
+               "mfa" => "AshA2ui.ActionHandlerTest.CheckInFacade.complete/2",
+               "args" => [:board]
+             }
+
+      allowlist = Dynamic.allowlist([AshA2ui.ActionHandlerTest.Ticket])
+      via_allowlist = [AshA2ui.ActionHandlerTest.CheckInFacade]
+
+      assert {:ok, source} =
+               Dynamic.to_dsl_source(spec,
+                 module: AshA2ui.Promoted.ViaTicketUI,
+                 allowlist: allowlist,
+                 via_allowlist: via_allowlist,
+                 surface_id: "ticket"
+               )
+
+      assert source =~ "via {AshA2ui.ActionHandlerTest.CheckInFacade, :complete, [:board]}"
+
+      [{module, _binary} | _rest] = Code.compile_string(source)
+
+      {:ok, surface} =
+        Dynamic.resolve(spec,
+          allowlist: allowlist,
+          via_allowlist: via_allowlist,
+          surface_id: "ticket"
+        )
+
+      # the promoted module declares the same delegate tuple
+      assert %{via: {AshA2ui.ActionHandlerTest.CheckInFacade, :complete, [:board]}} =
+               ResolvedView.resolve(module).actions[:check_in]
+
+      assert scrub(ResolvedView.resolve(module)) == scrub(ResolvedView.resolve(surface.dsl_state))
+    end
+
     test "defaults the surface_id to the underscored module name and honors spec_version" do
       {:ok, source} =
         Dynamic.to_dsl_source(minimal_spec(),

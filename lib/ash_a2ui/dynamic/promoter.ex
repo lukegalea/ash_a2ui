@@ -15,6 +15,7 @@ defmodule AshA2ui.Dynamic.Promoter do
   Use through `AshA2ui.Dynamic.to_dsl_source/2`.
   """
 
+  alias AshA2ui.Dynamic.Parser
   alias AshA2ui.Dynamic.Serializer
 
   # Spec keys per entity, in emitted order, shaped like the parser's
@@ -94,7 +95,8 @@ defmodule AshA2ui.Dynamic.Promoter do
     refreshes: :name_list,
     prompt_fields: :name_list,
     prompt_title: :raw,
-    visible_when: :raw_keyword
+    visible_when: :raw_keyword,
+    via: :via
   ]
 
   @context_options [
@@ -293,6 +295,17 @@ defmodule AshA2ui.Dynamic.Promoter do
   end
 
   defp render(:raw, value), do: inspect(value)
+
+  # The spec's {"mfa": "Mod.fun/arity", "args": [...]} back to the DSL's
+  # tuple literal — the delegate exists (the parser validated it during the
+  # resolve that preceded promotion), so rendering the function name as an
+  # atom literal is safe.
+  defp render(:via, %{"mfa" => mfa, "args" => args}) do
+    {:ok, {module, function, _arity}} = Parser.split_mfa_string(mfa)
+
+    # sobelow_skip ["DOS.StringToAtom"]
+    "{#{inspect(String.to_atom("Elixir." <> module))}, :#{function}, #{inspect(args)}}"
+  end
 
   defp keyword(object, render_value) do
     object

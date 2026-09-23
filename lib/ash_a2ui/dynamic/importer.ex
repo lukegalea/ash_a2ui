@@ -8,12 +8,11 @@ defmodule AshA2ui.Dynamic.Importer do
   imported spec resolves to a surface that renders like the declared one.
 
   Import is honest about the spec's boundaries: a declared feature with no
-  spec vocabulary (`via`-delegated actions, inline editing, file export,
-  plus the section options that live outside the spec — `surface_id`,
-  `record_label`, `spec_version`) becomes a **visible rejection** carrying
-  the reason, never a silent drop. The composer shows rejections in the
-  inspector; the spec itself contains exactly what the dynamic stack can
-  honor.
+  spec vocabulary (inline editing, file export, plus the section options
+  that live outside the spec — `surface_id`, `record_label`,
+  `spec_version`) becomes a **visible rejection** carrying the reason,
+  never a silent drop. The composer shows rejections in the inspector; the
+  spec itself contains exactly what the dynamic stack can honor.
 
   The inverse direction (spec → DSL source) is
   `AshA2ui.Dynamic.to_dsl_source/2`.
@@ -364,16 +363,15 @@ defmodule AshA2ui.Dynamic.Importer do
       path = "actions[#{index}]"
 
       if MapSet.member?(reachable, action.name) do
-        {rejections, via_rejection} = via_rejection(action, path)
-
         spec =
           %{"name" => to_string(action.name)}
           |> put_list("refreshes", action.refreshes)
           |> put_list("prompt_fields", action.prompt_fields)
           |> put_value("prompt_title", action.prompt_title)
           |> put_keyword("visible_when", action.visible_when, :raw)
+          |> put_via(Map.get(action, :via))
 
-        {[spec], acc ++ rejections ++ via_rejection}
+        {[spec], acc}
       else
         # A compile-verified declared surface only carries reachable actions,
         # so this can only be an action whose reachability rode on a rejected
@@ -416,25 +414,20 @@ defmodule AshA2ui.Dynamic.Importer do
     |> Enum.reject(&is_nil/1)
   end
 
-  # `via` re-points a row action at a host-provided MFA; the spec's action
-  # would invoke the plain Ash action instead. That is not a faithful
-  # import, so it is rejected rather than silently re-pointed.
-  defp via_rejection(action, path) do
-    case Map.get(action, :via) do
-      nil ->
-        {[], []}
+  # `via` re-points a row action at a host-provided MFA. The spec carries it
+  # as "Mod.fun/arity" (the delegate's full arity — the handler prepends the
+  # dispatch context to the extra args) plus the args array. Resolving the
+  # spec requires the module in the host's :via_allowlist, so a stored spec
+  # never silently re-points an action at code the host has not sanctioned.
+  defp put_via(spec, nil), do: spec
 
-      via ->
-        {[
-           Rejection.new(
-             "#{path}.via",
-             "via",
-             "declared #{inspect(via)} — host-provided action delegation has no spec " <>
-               "vocabulary; a spec action would invoke the plain Ash action instead, so " <>
-               "import rejects it rather than silently re-pointing it"
-           )
-         ], []}
-    end
+  defp put_via(spec, {module, function, args}) do
+    arity = 1 + length(args)
+
+    Map.put(spec, "via", %{
+      "mfa" => "#{inspect(module)}.#{function}/#{arity}",
+      "args" => args
+    })
   end
 
   # --- contexts ----------------------------------------------------------------------
