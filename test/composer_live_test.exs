@@ -267,5 +267,27 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       assert assigns(view).page == :browse
       assert assigns(view).surface == nil
     end
+
+    describe "host-named allowlist map" do
+      test "a short-name import does not resolve until the resource is renamed", %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/composer/named")
+
+        html = render_click(view, "import", %{"module" => "AshA2ui.Test.MinimalUI"})
+
+        # the honest error names what IS available (quotes escape in HTML)
+        assert html =~ "is not available to dynamic surfaces"
+        assert html =~ "renamed"
+        refute assigns(view).surface
+
+        # renaming the resource to the host's name resolves the same spec
+        html =
+          render_change(view, "validate", %{
+            "spec" => %{"resource" => "renamed", "components" => %{"0" => %{"kind" => "table"}}}
+          })
+
+        assert html =~ "Preview — resolves"
+        assert %Dynamic.Surface{} = assigns(view).surface
+      end
+    end
   end
 end

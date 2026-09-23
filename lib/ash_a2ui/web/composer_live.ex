@@ -26,10 +26,15 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       * `:surfaces` (required) — the UI modules or resources offered for
         import: anything carrying an `a2ui` section (a standalone
         `AshA2ui.Standalone` module or a resource with the extension).
-      * `:allowlist` (optional) — extra resources the spec may reference
-        (e.g. context destinations): a list of modules or a
-        `%{"name" => module}` map, merged into the resources derived from
-        `:surfaces`.
+      * `:allowlist` (optional) — controls the resources the spec may
+        reference. A `%{"name" => module}` map is **the** allowlist, verbatim
+        — the escape hatch when two surfaces' resources collide on their
+        short module name (imports of those surfaces then resolve once the
+        operator picks the disambiguated name in the resource select). A
+        list of modules is extra resources (e.g. context destinations)
+        merged into the allowlist derived from `:surfaces`. Without it, the
+        allowlist is the surfaces' resources named by short module name
+        (`AshA2ui.Dynamic.allowlist/1`, raising on collisions).
       * `:export_module` (optional) — the module name shown in the Export
         pane's generated source. Defaults to the imported module name with
         `.Composed` appended (e.g. `MyApp.UI.FeedbackUI.Composed`).
@@ -295,16 +300,29 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       _not_a_spark_module -> nil
     end
 
-    defp build_allowlist(surfaces, extra) do
-      resources =
-        surfaces
-        |> Enum.map(&surface_resource/1)
-        |> Enum.reject(&is_nil/1)
-        |> Enum.uniq()
+    # The allowlist is host configuration:
+    #
+    #   * no `:allowlist` option — derive it from the surfaces' resources,
+    #     named by short module name;
+    #   * a `%{"name" => module}` map — THE allowlist, verbatim: the host
+    #     names everything (the escape hatch when two surfaces' resources
+    #     collide on their short name, e.g. two different `Definition`s —
+    #     imports of those surfaces then resolve once the operator picks the
+    #     disambiguated name in the resource select);
+    #   * a list of modules — extra resources merged into the derived ones.
+    defp build_allowlist(surfaces, nil), do: derive_allowlist(surfaces)
+    defp build_allowlist(_surfaces, %{} = named), do: Dynamic.allowlist(named)
 
-      base = Dynamic.allowlist(resources)
-      extras = normalize_allowlist(extra)
-      merge_allowlists(base, extras)
+    defp build_allowlist(surfaces, extras) when is_list(extras) do
+      merge_allowlists(derive_allowlist(surfaces), Dynamic.allowlist(extras))
+    end
+
+    defp derive_allowlist(surfaces) do
+      surfaces
+      |> Enum.map(&surface_resource/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Dynamic.allowlist()
     end
 
     defp surface_resource(module) do
@@ -312,10 +330,6 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     rescue
       _not_an_a2ui_surface -> nil
     end
-
-    defp normalize_allowlist(nil), do: %{}
-    defp normalize_allowlist(extras) when is_map(extras), do: Dynamic.allowlist(extras)
-    defp normalize_allowlist(extras) when is_list(extras), do: Dynamic.allowlist(extras)
 
     defp merge_allowlists(base, extras) do
       Enum.reduce(extras, base, fn {name, resource}, acc ->

@@ -53,6 +53,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       # The surface composer (AshA2ui.Web.ComposerLive), configured with one
       # standalone UI module fixture and one on-resource surface.
       live("/composer", AshA2ui.Test.ComposerLive)
+
+      # The same composer with a host-NAMED allowlist map (the escape hatch
+      # for colliding resource short names).
+      live("/composer/named", AshA2ui.Test.ComposerNamedAllowlistLive)
     end
   end
 

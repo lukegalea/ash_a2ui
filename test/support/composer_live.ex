@@ -22,4 +22,16 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       surfaces: [AshA2ui.Test.MinimalUI, AshA2ui.Test.Ticket, AshA2ui.Test.NoSurface],
       export_module: "AshA2ui.Test.ComposedSurface"
   end
+
+  defmodule AshA2ui.Test.ComposerNamedAllowlistLive do
+    @moduledoc """
+    The map-allowlist fixture: the host names the one resource "renamed", so
+    a short-name import does not resolve until the resource is renamed — the
+    documented escape hatch for colliding short names.
+    """
+
+    use AshA2ui.Web.ComposerLive,
+      surfaces: [AshA2ui.Test.MinimalUI],
+      allowlist: %{"renamed" => AshA2ui.Test.Minimal}
+  end
 end
