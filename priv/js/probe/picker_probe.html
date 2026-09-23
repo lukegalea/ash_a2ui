@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!--
+  Picker composite probe page — the client-side half; drive it with
+  priv/js/probe/picker_probe.mjs (which assembles a web root with a
+  node_modules tree, serves it, and asserts).
+
+  Query params:
+    payload=ticket            load fixtures/ticket_search_payload.json
+                              (the searchable author_id select composite)
+    payload=ticket&open=1     then feed fixtures/ticket_search_open_payload.json
+                              (the create panel opening — what makes the
+                              composite materialize)
+    payload=ticket&broken=1   same, but the boot payload is surgically
+                              broken (the _option_button component is
+                              removed) — the degradation path: plain
+                              rendering + a named console warning
+    payload=post              load fixtures/post_payload.json (the plain,
+                              non-searchable ChoicePicker select path; the
+                              runner feeds fixtures/post_open_payload.json
+                              to open the form panel)
+  Exposes for the runner:
+    window.__feed(messages)       feed more wire messages (rounds, replies)
+    window.__dispatched           every action the surface dispatched
+    window.__surfaceId            the id of the created surface
+    window.__boot.stage           where the boot got to
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>picker composite probe</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "lit": "./nm/lit/index.js",
+          "lit/": "./nm/lit/",
+          "lit-html": "./nm/lit-html/lit-html.js",
+          "lit-html/": "./nm/lit-html/",
+          "@lit/reactive-element": "./nm/@lit/reactive-element/reactive-element.js",
+          "@lit/reactive-element/": "./nm/@lit/reactive-element/",
+          "@lit/context": "./nm/@lit/context/index.js",
+          "@lit/context/": "./nm/@lit/context/",
+          "lit-element": "./nm/lit-element/index.js",
+          "lit-element/": "./nm/lit-element/",
+          "@a2ui/web_core/": "./nm/@a2ui/web_core/src/",
+          "@a2ui/web_core/v0_9": "./nm/@a2ui/web_core/src/v0_9/index.js",
+          "@a2ui/web_core/v0_9/basic_catalog": "./nm/@a2ui/web_core/src/v0_9/basic_catalog/index.js",
+          "@a2ui/lit/": "./nm/@a2ui/lit/src/",
+          "@a2ui/lit/v0_9": "./nm/@a2ui/lit/src/v0_9/index.js",
+          "zod": "./nm/zod/index.js",
+          "zod/v3": "./nm/zod/v3/index.js",
+          "zod/v4": "./nm/zod/v4/index.js",
+          "zod/v4-mini": "./nm/zod/v4-mini/index.js",
+          "zod/mini": "./nm/zod/mini/index.js",
+          "zod/": "./nm/zod/",
+          "@preact/signals-core": "./nm/@preact/signals-core/dist/signals-core.mjs",
+          "signal-utils": "./nm/signal-utils/dist/index.ts.js",
+          "signal-utils/": "./nm/signal-utils/dist/",
+          "@lit-labs/signals": "./nm/@lit-labs/signals/index.js",
+          "zod-to-json-schema": "./nm/zod-to-json-schema/dist/esm/index.js",
+          "date-fns": "./nm/date-fns/index.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import {html, css, nothing} from "lit";
+      import "@a2ui/lit/v0_9";
+      import {basicCatalog, A2uiLitElement, A2uiController} from "@a2ui/lit/v0_9";
+      import {MessageProcessor, Catalog} from "@a2ui/web_core/v0_9";
+      import {ChoicePickerApi, ColumnApi} from "@a2ui/web_core/v0_9/basic_catalog";
+      import {createAshA2uiCatalog} from "./catalog/ash_a2ui_catalog.js";
+
+      // Exactly a host's construction (clinic-demo's app.js), minus the
+      // markdown renderer — the composite does not need it to render.
+      const a2uiCatalog = createAshA2uiCatalog({
+        Catalog,
+        basicCatalog,
+        ChoicePickerApi,
+        ColumnApi,
+        A2uiLitElement,
+        A2uiController,
+        lit: {html, css, nothing},
+      });
+
+      window.__boot = {stage: "imports-done"};
+      window.__dispatched = [];
+
+      const params = new URLSearchParams(location.search);
+      const caseName = params.get("payload") || "ticket";
+
+      const surfaceEl = document.createElement("a2ui-surface");
+      document.getElementById("host").appendChild(surfaceEl);
+
+      const processor = new MessageProcessor([a2uiCatalog], (action) => {
+        window.__dispatched.push({
+          name: action.name,
+          context: action.context,
+          source: action.sourceComponentId,
+        });
+      });
+      processor.onSurfaceCreated((surface) => {
+        window.__boot.surfaceCreated = true;
+        surfaceEl.surface = surface;
+      });
+
+      window.__feed = (messages) => processor.processMessages(messages);
+
+      try {
+        const FIXTURES = {
+          ticket: "ticket_search_payload.json",
+          post: "post_payload.json",
+        };
+        const boot = await (await fetch(`./fixtures/${FIXTURES[caseName]}`)).json();
+        window.__surfaceId =
+          boot.messages.find((message) => message.createSurface)?.createSurface?.surfaceId ?? null;
+        if (params.get("broken") === "1") {
+          // Surgical degradation: drop the option-button template so the
+          // composite's structural verification must fail.
+          for (const message of boot.messages) {
+            if (!message.updateComponents) continue;
+            message.updateComponents.components = message.updateComponents.components.filter(
+              (component) => component.id !== "form_select_author_id_option_button",
+            );
+          }
+        }
+        processor.processMessages(boot.messages);
+        window.__boot.stage = "booted";
+        if (params.get("open") === "1" || params.get("broken") === "1") {
+          const open = await (await fetch("./fixtures/ticket_search_open_payload.json")).json();
+          processor.processMessages(open.messages);
+          window.__boot.stage = "panel-open";
+        }
+      } catch (error) {
+        window.__boot.stage = "error";
+        window.__boot.error = String(error);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="host"></div>
+  </body>
+</html>

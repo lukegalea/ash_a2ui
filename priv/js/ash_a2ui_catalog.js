@@ -334,6 +334,13 @@ const SEARCH_DEBOUNCE_MS = 250;
 // every structural piece it needs is present and correctly shaped, so an
 // encoder from a different version (or a hand-built surface reusing the id
 // prefix) degrades to the plain column rendering.
+//
+// Returns the picker descriptor on success, `{mismatch: [reasons]}` when
+// the id matches the frozen contract but a structural piece failed
+// verification (the caller warns — a contract-id composite that silently
+// degrades renders as the dead-end label + search-input composite and
+// reads as a finished feature; that silence cost a full integration lap
+// once), or null when the id is not a picker id at all (the common case).
 function detectPicker(surface, id) {
   const contextMatch = /^context_(.+)_body$/.exec(id);
   const selectMatch = /^form_select_(.+)$/.exec(id);
@@ -342,26 +349,27 @@ function detectPicker(surface, id) {
   const base = contextMatch ? `context_${contextMatch[1]}` : id;
   const get = (suffix) => surface.componentsModel.get(`${base}${suffix}`);
 
+  const missing = [];
   const options = get("_options");
   const optionButton = get("_option_button");
   const selected = get("_selected");
   const label = get("_label");
-  if (!options || !optionButton || !selected || !label) return null;
-
-  const optionsChildren = options.properties?.children;
-  const optionEvent = optionButton.properties?.action?.event;
-  const labelPath = selected.properties?.text?.path;
-  const labelText = label.properties?.text;
-
-  if (
-    options.type !== "List" ||
-    typeof optionsChildren?.path !== "string" ||
-    typeof optionEvent?.name !== "string" ||
-    typeof labelPath !== "string" ||
-    typeof labelText !== "string"
-  ) {
-    return null;
+  if (!options) missing.push("no _options component");
+  if (!optionButton) missing.push("no _option_button component");
+  if (!selected) missing.push("no _selected component");
+  if (!label) missing.push("no _label component");
+  if (missing.length === 0) {
+    if (options.type !== "List") missing.push("_options is not a List");
+    if (typeof options.properties?.children?.path !== "string")
+      missing.push("_options has no templated children path");
+    if (typeof optionButton.properties?.action?.event?.name !== "string")
+      missing.push("_option_button has no action event");
+    if (typeof selected.properties?.text?.path !== "string")
+      missing.push("_selected has no bound text path");
+    if (typeof label.properties?.text !== "string")
+      missing.push("_label has no literal text");
   }
+  if (missing.length > 0) return {mismatch: missing};
 
   const searchInput = get("_search_input");
   const searchButton = get("_search_button");
@@ -376,13 +384,13 @@ function detectPicker(surface, id) {
     base,
     // The v1.0 encoder emits heading Texts as Markdown ("### User"); the
     // picker renders its label as plain inline text, so strip the marker.
-    label: labelText.replace(/^#{1,6}\s+/, ""),
-    labelPath,
+    label: label.properties.text.replace(/^#{1,6}\s+/, ""),
+    labelPath: selected.properties.text.path,
     // The picker's selected value lives next to its label in the reserved
     // state shape ({value, label, search}).
-    valuePath: labelPath.replace(/\/label$/, "/value"),
-    optionsPath: optionsChildren.path,
-    optionEvent,
+    valuePath: selected.properties.text.path.replace(/\/label$/, "/value"),
+    optionsPath: options.properties.children.path,
+    optionEvent: optionButton.properties.action.event,
     optionButtonId: `${base}_option_button`,
     searchable,
     searchPath: searchable ? searchPath : null,
@@ -568,8 +576,27 @@ function defineColumnElement({A2uiLitElement, A2uiController, ColumnApi, lit}) {
       if (changedProperties.has("context") && this.context) {
         this.teardownPicker();
         try {
-          this.picker = detectPicker(this.surface, this.context.componentModel.id);
-        } catch {
+          const detected = detectPicker(this.surface, this.context.componentModel.id);
+          if (detected && detected.mismatch) {
+            // The id promised a picker composite but the tree did not
+            // verify. Rendering continues as the plain composite — the
+            // wire stays renderable — but the degradation is announced:
+            // silently, it renders a dead-end label + search input that
+            // reads as a finished feature (the trap behind the intake
+            // picker misdiagnosis).
+            console.warn(
+              `ash_a2ui: ${this.context.componentModel.id} matches the picker id contract ` +
+                `but did not verify (${detected.mismatch.join("; ")}); ` +
+                `rendering the plain composite.`,
+            );
+            this.picker = null;
+          } else {
+            this.picker = detected;
+          }
+        } catch (error) {
+          console.warn(
+            `ash_a2ui: picker detection threw for ${this.context.componentModel?.id}: ${error}`,
+          );
           this.picker = null;
         }
         if (this.picker) this.subscribePickerData();
