@@ -10,6 +10,29 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- **Dynamic-spec vocabulary for nested forms, sections, and `via`** — the
+  composer's Import now carries the common declared features losslessly
+  instead of rejecting them. Components gain a `nested_forms` key (mirroring
+  the `nested_form` entity: the managed action argument, sub-form `fields`,
+  and the pick-existing `option_*` vocabulary — resource checks stay with
+  `VerifyNestedForms`, which resolves run unchanged), a `sections` key (the
+  dynamic-section config verbatim, the `source` resolved through the
+  allowlist so a spec can only enumerate sections of offered resources), and
+  actions gain a `via` key (`"Mod.fun/arity"` + args, arity = 1 + length of
+  args since the dispatch context is prepended). `via` runs host code, so it
+  is guarded twice: the parser validates the delegate exists at resolve time
+  (module loaded, function exported at the applied arity — nothing is ever
+  called), and `AshA2ui.Dynamic.resolve/2` gains `:via_allowlist` (default:
+  none) — host configuration with the same discipline as the resource
+  allowlist; existence alone is not authorization. Import rejections for
+  these features are gone (rejections shrink to the truly unrepresentable:
+  editable, export, section options; an `action` entity reachable only
+  through a rejected `editable` block is rejected with it, since otherwise
+  the spec would not resolve). `to_dsl_source` emits all three back,
+  `spec_schema/1` documents them (composer editor rows follow
+  automatically), and spec diffs cover nested forms (named sub-entities) and
+  section options (flattened like `row_layout`).
+
 - **Admin catalog v1** (`config :ash_a2ui, :catalog, :admin_v1`) — a
   semantic admin component vocabulary for experience v2 surfaces, selected
   app-wide (requires `experience_version 2`; an `:admin_v1` selection under

@@ -108,6 +108,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert [_table, form] = socket.spec["components"]
         assert [%{"name" => "notes"}, %{"name" => "tags"}] = form["nested_forms"]
         assert %Dynamic.Surface{} = socket.surface
+
+        # the editor rows are schema-introspected: the new vocabulary gets
+        # its inputs (JSON textareas) without composer-specific code
+        assert html =~ "composer-components-1-nested_forms"
       end
 
       test "a module with no a2ui section shows the nothing-to-import rejection", %{conn: conn} do
