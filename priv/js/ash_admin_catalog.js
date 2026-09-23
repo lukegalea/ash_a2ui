@@ -21,8 +21,14 @@
  *     import {createAshAdminCatalog} from "../../deps/ash_a2ui/priv/js/ash_admin_catalog.js";
  *
  *     const adminCatalog = createAshAdminCatalog({
- *       Catalog, basicCatalog, A2uiLitElement, A2uiController, z,
+ *       Catalog, basicCatalog, A2uiLitElement, A2uiController,
  *       lit: {html, css, nothing},
+ *       // `z` is OPTIONAL since issue #5: binding-capable props are built
+ *       // from @a2ui/web_core's own exported schema builders (web_core's
+ *       // zod 3), so the host zod is no longer consumed. If you still pass
+ *       // `z`, it must be the same zod MAJOR as @a2ui/web_core (zod 3) —
+ *       // a foreign major throws immediately.
+ *       z,
  *     });
  *     configureAshA2ui({MessageProcessor, catalogs: [basicCatalog, adminCatalog]});
  *
@@ -81,8 +87,25 @@
  * ## Contract with the host bundle
  *
  * Same discipline as `ash_a2ui_catalog.js`: no bundled dependencies, the
- * host passes the single `lit` / `@a2ui` / `zod` instance in. Verified
- * against @a2ui/lit 0.10.1 / @a2ui/web_core 0.10.4 / zod 3.25.x / lit 3.x.
+ * host passes the single `lit` / `@a2ui` instance in. Verified against
+ * @a2ui/lit 0.10.1 / @a2ui/web_core 0.11.0 / lit 3.x.
+ *
+ * ## Schema provenance (issue #5)
+ *
+ * `@a2ui/web_core`'s GenericBinder classifies binding-capable props by
+ * introspecting **zod 3 internals** (`_def.typeName`, `_def.shape()` — see
+ * its `scrapeSchemaBehavior`). This file used to build its ten component
+ * schemas with the host's `z`; under a host zod 4 every node scraped as
+ * STATIC, so reserved-path bindings rendered `[object Object]` and grids
+ * stayed empty. The schemas are therefore now composed from web_core's own
+ * exported builders (`DynamicStringSchema`, `DynamicValueSchema`,
+ * `ActionSchema`, `ChildListSchema`, ... — imported from
+ * `@a2ui/web_core/v0_9`, the SAME module instance the binder uses):
+ * binder-visible under any host zod. Static (non-binding) props derive
+ * their primitives from web_core's exported schemas via public zod-3
+ * accessors, so the host's `z` is no longer consumed at all — passing it
+ * is optional, and when it IS passed its major is checked loudly (see the
+ * guard in `createAshAdminCatalog`).
  */
 
 import {
@@ -93,6 +116,26 @@ import {
   applyWeight,
   childRefs,
 } from "./ash_admin_tokens.js";
+
+// Schema builders from web_core's OWN zod (3.x) — the instance the
+// GenericBinder introspects. Importing the module directly (rather than
+// receiving builders through `deps`) guarantees instance identity: the
+// host bundle resolves the same specifier the renderer uses, so there is
+// no dual-zod hazard regardless of which zod the host itself bundles.
+import {
+  ActionSchema,
+  AnyComponentSchema,
+  CheckableSchema,
+  ChildListSchema,
+  ComponentIdSchema,
+  CreateSurfaceMessageSchema,
+  DataBindingSchema,
+  DynamicBooleanSchema,
+  DynamicNumberSchema,
+  DynamicStringSchema,
+  DynamicValueSchema,
+  FunctionCallSchema,
+} from "@a2ui/web_core/v0_9";
 
 /** The admin catalog id a surface must declare to resolve here. */
 const ADMIN_CATALOG_ID = "https://ash-a2ui.dev/catalogs/admin/v1";
@@ -136,6 +179,22 @@ void GRID_TABLE_MIN;
 export function createAshAdminCatalog(deps) {
   const {Catalog, basicCatalog, A2uiLitElement, A2uiController, lit, z} = deps || {};
 
+  // Loud guard (issue #5 defense): a foreign-zod `z` was the root cause of
+  // reserved-path bindings rendering "[object Object]" — the GenericBinder
+  // scrapes zod-3 internals, and under a different major every binding prop
+  // scrapes STATIC. Binding schemas are now built from web_core's own
+  // builders and `z` is optional, but any residual host-z usage must be
+  // same-major or the catalog refuses to build with a message naming the
+  // fix. (`z.string()._def?.typeName` is "ZodString" on zod 3; on zod 4
+  // there is no typeName, so the optional chain short-circuits to undefined.)
+  if (z && z.string()._def?.typeName !== "ZodString") {
+    throw new Error(
+      "createAshAdminCatalog: `z` must be the same zod major as @a2ui/web_core " +
+        "(zod 3); binding schemas are now built from web_core's own builders — " +
+        "upgrade or stop passing z for binding props",
+    );
+  }
+
   if (
     !Catalog ||
     !basicCatalog ||
@@ -144,18 +203,17 @@ export function createAshAdminCatalog(deps) {
     !lit ||
     !lit.html ||
     !lit.css ||
-    !lit.nothing ||
-    !z
+    !lit.nothing
   ) {
     throw new Error(
       "createAshAdminCatalog: missing deps. Pass {Catalog, basicCatalog, " +
-        "A2uiLitElement, A2uiController, z, lit: {html, css, nothing}} — Catalog is " +
-        "the @a2ui/web_core Catalog class and z the zod instance the host bundle " +
-        "shares with @a2ui/web_core.",
+        "A2uiLitElement, A2uiController, lit: {html, css, nothing}} — Catalog is " +
+        "the @a2ui/web_core Catalog class. `z` is optional (binding schemas are " +
+        "built from @a2ui/web_core's own builders); if passed it must be zod 3.",
     );
   }
 
-  const schemas = buildSchemas(z);
+  const schemas = buildSchemas();
   const adminApis = Object.fromEntries(
     Object.keys(TAGS).map((kind) => [kind, {name: kind, schema: schemas[kind], tagName: TAGS[kind]}]),
   );
@@ -186,76 +244,77 @@ export function createAshAdminCatalog(deps) {
 /**
  * Builds the zod schemas for the ten admin kinds.
  *
- * The GenericBinder detects binding/action/childlist behavior from the SHAPE
- * of the schema tree (union options carrying `{path}` / `{event}` /
- * `{componentId, path}` objects — see web_core `rendering/generic-binder.js`,
- * `scrapeSchemaBehavior`), so locally-built unions with the same shapes bind
- * identically to `CommonSchemas`. Schemas are deliberately NOT `.strict()`
- * and tolerate `nil` wherever the contract allows it, so the Elixir encoder
- * can add props without breaking component validation.
+ * Every BEHAVIOR-BEARING (binding-capable) prop is composed from
+ * `@a2ui/web_core`'s own exported builders — `DynamicStringSchema`,
+ * `DynamicNumberSchema`, `DynamicBooleanSchema`, `DynamicValueSchema`,
+ * `ChildListSchema`, `ActionSchema` — which are built on web_core's zod 3
+ * and stamped with the `REF:common_types.json#/$defs/...` descriptions the
+ * GenericBinder's `scrapeSchemaBehavior` keys on first. (The hand-built
+ * host-z unions this file used before classified only via the binder's
+ * zod-3 union-shape fallback, so they silently degraded to STATIC under a
+ * host zod 4 — the issue #5 root cause.) Static props (plain strings,
+ * numbers, booleans, enums, records) derive their primitives from
+ * web_core's exported schemas too, via public zod-3 accessors, so the
+ * whole schema tree is binder-visible regardless of the host zod.
+ *
+ * Exported for host-side verification (the binder classification repro).
+ *
+ * Schemas are deliberately NOT `.strict()` and tolerate `nil` wherever the
+ * contract allows it, so the Elixir encoder can add props without breaking
+ * component validation.
  */
-function buildSchemas(z) {
-  const DataBinding = z.object({path: z.string()});
-  const FunctionCall = z.object({
-    call: z.string(),
-    args: z.record(z.any()).optional(),
-    returnType: z.string().optional(),
-  });
-  const dynamic = (literal) => z.union([literal, DataBinding, FunctionCall]);
+export function buildSchemas() {
+  // --- static primitives on web_core's own zod ------------------------------
+  // Derived once from web_core's exported schemas via public zod-3
+  // accessors (`.shape`, `.unwrap()`, static `.create()`), so static props
+  // need no host `z`. Each primitive classifies STATIC in the binder (plain
+  // ZodString/Number/Boolean/Any/Record — `ComponentIdSchema` is a plain
+  // ZodString whose `component-id` child-ref stamp only matters inside
+  // ChildList classification, which these positions never reach).
+  const EmptyObject = DataBindingSchema.pick({});
+  const Str = ComponentIdSchema;
+  const Num = AnyComponentSchema.shape.weight.unwrap();
+  const Bool = CreateSurfaceMessageSchema.shape.createSurface.shape.sendDataModel.unwrap();
+  const Any = CreateSurfaceMessageSchema.shape.createSurface.shape.theme.unwrap();
+  const RecordAny = FunctionCallSchema.shape.args;
+  const ArrayOf = (element) => CheckableSchema.shape.checks.unwrap().constructor.create(element);
+  const EnumOf = (values) => CreateSurfaceMessageSchema.shape.version.constructor.create(values);
 
-  const DynamicString = dynamic(z.string());
-  const DynamicNumber = dynamic(z.number());
-  const DynamicBoolean = dynamic(z.boolean());
-  const DynamicValue = z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.any()),
-    z.record(z.any()),
-    DataBinding,
-    FunctionCall,
-  ]);
-  const ChildList = z.union([
-    z.array(z.string()),
-    // STRUCTURAL: the binder expands this into {id, basePath} refs.
-    z.object({componentId: z.string(), path: z.string()}),
-  ]);
-  // ACTION behavior: the binder turns this into a callable that resolves
-  // `{path}` leaves at dispatch time and dispatches — same as a basic
-  // Button. Used only for the ActionBar `action` prop, which the encoder
-  // wraps as `{"event": submit_event}`.
-  const ActionEnvelope = z.union([
-    z.object({
-      event: z.object({
-        name: z.string(),
-        context: z.record(DynamicValue).optional(),
-      }),
-    }),
-    z.object({functionCall: FunctionCall}),
-  ]);
+  const formatEnum = () => EnumOf(["text", "datetime", "boolean", "number"]).optional();
+
+  // Bare event objects exactly as `admin_page_action/3` emits them:
+  // {"name": "query", "context": {...}} with absolute path refs.
+  // Deliberately NOT a union with an event-shaped option — that would trip
+  // the GenericBinder's ACTION detection and silently mis-dispatch these
+  // values (dispatchAction drops payloads without an `event`).
+  const bareEvent = () => EmptyObject.extend({name: Str, context: RecordAny.optional()});
 
   return {
-    entityPage: z.object({
-      title: DynamicString,
-      description: DynamicString.nullable().optional(),
-      children: ChildList.optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    entityPage: EmptyObject.extend({
+      title: DynamicStringSchema,
+      description: DynamicStringSchema.nullable().optional(),
+      children: ChildListSchema.optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    dataGrid: z.object({
+    dataGrid: EmptyObject.extend({
       // `format` per column is optional (not pinned by the contract): when
       // the encoder provides it, cells format like FieldDisplay.
-      columns: z.array(
-        z.object({
-          label: z.string(),
-          path: z.string(),
-          format: z.enum(["text", "datetime", "boolean", "number"]).optional(),
+      columns: ArrayOf(
+        EmptyObject.extend({
+          label: Str,
+          path: Str,
+          format: formatEnum(),
         }),
       ),
-      rows: z.union([z.array(z.record(z.any())), DataBinding, FunctionCall]).optional(),
-      rowId: z.string().optional(),
-      label: DynamicString.nullable().optional(),
+      // Row arrays / a "/rows" binding / a function call — DynamicValue's
+      // union covers the literal array, the {path} binding and the
+      // {call} envelope, so the whole prop classifies DYNAMIC like the
+      // hand-built union did.
+      rows: DynamicValueSchema.optional(),
+      rowId: Str.optional(),
+      label: DynamicStringSchema.nullable().optional(),
       // Flat envelope shape the admin encoder emits (`admin_row_actions/2`):
       // `action` is the client action NAME string ("view_record",
       // "start_edit", "invoke") and `context` carries literal +
@@ -263,106 +322,96 @@ function buildSchemas(z) {
       // DataGrid resolves the context against each clicked row's base path
       // itself, which the binder's component-scoped ACTION resolution
       // cannot do.
-      rowActions: z
-        .array(
-          z.object({
-            label: DynamicString,
-            action: z.string(),
-            context: z.record(z.any()).optional(),
-            destructive: z.boolean().optional(),
-          }),
-        )
-        .optional(),
-      children: ChildList.optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+      rowActions: ArrayOf(
+        EmptyObject.extend({
+          label: DynamicStringSchema,
+          action: Str,
+          context: RecordAny.optional(),
+          destructive: Bool.optional(),
+        }),
+      ).optional(),
+      children: ChildListSchema.optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    emptyState: z.object({
-      message: DynamicString.nullable().optional(),
-      child: z.string().optional(),
-      children: ChildList.optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    emptyState: EmptyObject.extend({
+      message: DynamicStringSchema.nullable().optional(),
+      child: Str.optional(),
+      children: ChildListSchema.optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    pagination: z.object({
-      page: DynamicNumber.nullable().optional(),
-      pageSize: DynamicNumber.nullable().optional(),
-      total: DynamicNumber.nullable().optional(),
-      hasNext: DynamicBoolean.nullable().optional(),
-      visible: DynamicBoolean.nullable().optional(),
-      previousVisible: DynamicBoolean.nullable().optional(),
-      nextVisible: DynamicBoolean.nullable().optional(),
-      rangeText: DynamicString.nullable().optional(),
-      label: DynamicString.nullable().optional(),
-      // Bare event objects exactly as `admin_page_action/3` emits them:
-      // {"name": "query", "context": {...}} with absolute path refs.
-      // Deliberately NOT a union with an event-shaped option — that would
-      // trip the GenericBinder's ACTION detection and silently mis-dispatch
-      // these values (dispatchAction drops payloads without an `event`).
-      prevAction: z
-        .object({name: z.string(), context: z.record(z.any()).optional()})
-        .optional(),
-      nextAction: z
-        .object({name: z.string(), context: z.record(z.any()).optional()})
-        .optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    pagination: EmptyObject.extend({
+      page: DynamicNumberSchema.nullable().optional(),
+      pageSize: DynamicNumberSchema.nullable().optional(),
+      total: DynamicNumberSchema.nullable().optional(),
+      hasNext: DynamicBooleanSchema.nullable().optional(),
+      visible: DynamicBooleanSchema.nullable().optional(),
+      previousVisible: DynamicBooleanSchema.nullable().optional(),
+      nextVisible: DynamicBooleanSchema.nullable().optional(),
+      rangeText: DynamicStringSchema.nullable().optional(),
+      label: DynamicStringSchema.nullable().optional(),
+      prevAction: bareEvent().optional(),
+      nextAction: bareEvent().optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    recordPanel: z.object({
-      mode: DynamicString.nullable().optional(),
-      title: DynamicString.nullable().optional(),
-      recordId: DynamicValue.nullable().optional(),
-      children: ChildList.optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    recordPanel: EmptyObject.extend({
+      mode: DynamicStringSchema.nullable().optional(),
+      title: DynamicStringSchema.nullable().optional(),
+      recordId: DynamicValueSchema.nullable().optional(),
+      children: ChildListSchema.optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    fieldDisplay: z.object({
-      label: DynamicString,
-      value: DynamicValue.nullable().optional(),
-      format: z.enum(["text", "datetime", "boolean", "number"]).optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    fieldDisplay: EmptyObject.extend({
+      label: DynamicStringSchema,
+      value: DynamicValueSchema.nullable().optional(),
+      format: formatEnum(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    formSection: z.object({
-      title: DynamicString.nullable().optional(),
-      columns: z.number().int().min(1).max(6).optional(),
-      children: ChildList.optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    formSection: EmptyObject.extend({
+      title: DynamicStringSchema.nullable().optional(),
+      columns: Num.int().min(1).max(6).optional(),
+      children: ChildListSchema.optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    actionBar: z.object({
-      primaryLabel: DynamicString.nullable().optional(),
-      busy: DynamicBoolean.nullable().optional(),
-      destructive: z.boolean().optional(),
+    actionBar: EmptyObject.extend({
+      primaryLabel: DynamicStringSchema.nullable().optional(),
+      busy: DynamicBooleanSchema.nullable().optional(),
+      destructive: Bool.optional(),
       // Emitted as {"event": submit_event} — the frozen submit_form
-      // envelope, binder-resolved into a callable.
-      action: ActionEnvelope.optional(),
-      children: ChildList.optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+      // envelope, binder-resolved into a callable (ActionSchema classifies
+      // ACTION via its REF description and its {event} union option).
+      action: ActionSchema.optional(),
+      children: ChildListSchema.optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    statusBanner: z.object({
-      kind: DynamicString.nullable().optional(),
-      message: DynamicString.nullable().optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    statusBanner: EmptyObject.extend({
+      kind: DynamicStringSchema.nullable().optional(),
+      message: DynamicStringSchema.nullable().optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
 
-    confirmDialog: z.object({
-      title: DynamicString.nullable().optional(),
-      body: DynamicString.nullable().optional(),
-      confirmLabel: DynamicString.nullable().optional(),
-      destructive: z.boolean().optional(),
-      action: ActionEnvelope.optional(),
-      accessibility: z.any().optional(),
-      weight: z.number().optional(),
+    confirmDialog: EmptyObject.extend({
+      title: DynamicStringSchema.nullable().optional(),
+      body: DynamicStringSchema.nullable().optional(),
+      confirmLabel: DynamicStringSchema.nullable().optional(),
+      destructive: Bool.optional(),
+      action: ActionSchema.optional(),
+      accessibility: Any.optional(),
+      weight: Num.optional(),
     }),
   };
 }

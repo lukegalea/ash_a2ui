@@ -215,11 +215,15 @@ end
   emission around them.
 - `config :ash_a2ui, :catalog, :admin_v1` selects the semantic admin
   catalog **on top of** experience v2 (`effective_admin?/0` requires both).
-  ⚠️ Do not enable `:admin_v1` yet: the client-side hydration of the
-  reserved-path bindings is still open (issue #5, see
-  `notes/2026-09-07-admin-catalog-contract.md`). Until that lands, the
-  `:admin_v1` selection produces surfaces no shipped renderer can hydrate —
-  keep the default `:basic` catalog.
+  The catalog's binding schemas are built from `@a2ui/web_core`'s own
+  exported schema builders (issue #5 is fixed there), so a host zod 4 no
+  longer breaks reserved-path bindings — `createAshAdminCatalog` builds
+  without the host passing `z` at all, and throws a loud error if a
+  foreign-zod `z` is still passed. Hosts must still pin matching
+  `@a2ui/lit` / `@a2ui/web_core` versions (verified against
+  lit 0.10.1 / web_core 0.11.0 — the versions `priv/js` files were built
+  against). The Lit renderer registration ships in
+  `priv/js/ash_admin_catalog.js` (`createAshAdminCatalog(deps)`).
 
 ## Actors (hosts without authentication)
 
