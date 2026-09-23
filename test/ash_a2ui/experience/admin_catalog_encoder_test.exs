@@ -148,20 +148,13 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
 
       refute Map.has_key?(Enum.at(actions, 2), "destructive")
 
-      # read-only surface variant: View only — no Edit, no declared actions
+      # formless read-only surface variant: no row actions at all — View
+      # needs a record panel to open, and ReadOnly has no form component
+      # (the audit's dead-button finding)
       [_create, components, _data] = AshA2ui.Info.build_surface(ReadOnly, actor: nil)
       grid = components_by_id(components)["data_grid"]
 
-      assert grid["rowActions"] == [
-               %{
-                 "label" => "View",
-                 "action" => "view_record",
-                 "context" => %{
-                   "recordId" => %{"path" => "id"},
-                   "component" => "table"
-                 }
-               }
-             ]
+      assert grid["rowActions"] == []
     end
   end
 
@@ -232,7 +225,9 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
       assert %{
                "component" => "fieldDisplay",
                "label" => "Name",
-               "value" => %{"path" => "/form/name"}
+               # the view task's read-only display values — /form is the edit
+               # buffer and is never written in view mode
+               "value" => %{"path" => "/ui/panel/record/name"}
              } = comps["field_display_name"]
 
       assert %{"children" => form_children} = comps["form_section"]

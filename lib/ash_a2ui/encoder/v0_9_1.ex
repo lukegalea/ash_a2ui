@@ -553,7 +553,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # a destroy, so the renderer confirms through ConfirmDialog and
   # dispatches the envelope unchanged.
   defp admin_row_actions(view, table) do
-    view_entry = admin_row_envelope("View", "view_record", table)
+    # View only when the surface has a record panel to open (formless
+    # surfaces ship no dead affordance); Edit only with a declared update
+    # action — the same gates the basic emission applies.
+    view_entries =
+      if form_target?(view), do: [admin_row_envelope("View", "view_record", table)], else: []
 
     edit_entries =
       if view.update_action, do: [admin_row_envelope("Edit", "start_edit", table)], else: []
@@ -576,7 +580,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         |> maybe_destructive(view.resource, action)
       end)
 
-    [view_entry | edit_entries] ++ declared_entries
+    view_entries ++ edit_entries ++ declared_entries
   end
 
   defp admin_row_envelope(label, action, table) do
@@ -700,7 +704,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "id" => "field_display_#{field}",
       "component" => "fieldDisplay",
       "label" => view.fields[field].label,
-      "value" => %{"path" => "/form/#{field}"}
+      # the view task's read-only display values (view_record writes them;
+      # /form is the edit buffer and stays untouched in view mode)
+      "value" => %{"path" => "/ui/panel/record/#{field}"}
     }
 
     case admin_display_format(view, field) do
@@ -1151,24 +1157,29 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       List.flatten(action_components) ++ context_select_components ++ control_components
   end
 
-  # The row controls tail: v1 keeps the frozen Select button (form surfaces
-  # only — see select_button/2); v2 replaces it with View — plus Edit when
-  # the view declares an update action — carrying the same recordId path
-  # binding.
+  # The row controls tail: v2 replaces the frozen v1 Select with View —
+  # only when a form panel exists to show the record in (a View button on
+  # a formless surface is dead wire weight — the audit's 7 dead buttons) —
+  # plus Edit when the view declares an update action. v1 keeps the frozen
+  # Select button (form surfaces only — see select_button/2).
   defp row_controls(view, table, sfx) do
     if AshA2ui.Experience.v2?() do
-      {view_id, view_components} =
-        record_control(table, "view#{sfx}_button", "view_record", "View")
+      if form_target?(view) do
+        {view_id, view_components} =
+          record_control(table, "view#{sfx}_button", "view_record", "View")
 
-      {edit_ids, edit_components} =
-        if view.update_action do
-          {id, components} = record_control(table, "edit#{sfx}_button", "start_edit", "Edit")
-          {[id], components}
-        else
-          {[], []}
-        end
+        {edit_ids, edit_components} =
+          if view.update_action do
+            {id, components} = record_control(table, "edit#{sfx}_button", "start_edit", "Edit")
+            {[id], components}
+          else
+            {[], []}
+          end
 
-      {[view_id | edit_ids], view_components ++ edit_components}
+        {[view_id | edit_ids], view_components ++ edit_components}
+      else
+        {[], []}
+      end
     else
       components =
         if Enum.any?(view.components, &(&1.name == :form)),
@@ -1177,6 +1188,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
       {Enum.map(Enum.take(components, 1), & &1["id"]), components}
     end
+  end
+
+  # Whether the surface has a record-task panel for view_record to open:
+  # the form component's panel is the only view target.
+  defp form_target?(view) do
+    Enum.any?(view.components, &(&1.name == :form))
   end
 
   # One v2 record control: a Button dispatching `event` with the row's

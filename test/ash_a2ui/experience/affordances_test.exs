@@ -68,13 +68,16 @@ defmodule AshA2ui.Experience.AffordancesTest do
 
   describe "read-only resources" do
     @tag ac: "A2UI-101/AC-13"
-    test "read only resource offers view only" do
+    test "a formless surface ships no View affordance (it would be dead)" do
+      # The audit found 7 of 9 View buttons dead: the panel they open only
+      # exists on surfaces with a form. ReadOnly has neither form nor
+      # create/update actions, so rows carry no record controls at all.
       %{comps: comps} = surface!(ReadOnly)
 
-      # rows offer View only
-      assert %{"action" => %{"event" => %{"name" => "view_record"}}} = comps["view_button"]
-      assert "view_button" in comps["record_row_content"]["children"]
+      refute Map.has_key?(comps, "view_button")
       refute Map.has_key?(comps, "edit_button")
+      refute Enum.any?(Map.values(comps), &(&1["text"] == "View"))
+      refute "view_button" in (comps["record_row_content"] && comps["record_row_content"]["children"] || [])
 
       # no create affordance
       refute Map.has_key?(comps, "create_button")
@@ -83,6 +86,14 @@ defmodule AshA2ui.Experience.AffordancesTest do
       refute Map.has_key?(comps, "form")
       refute Map.has_key?(comps, "form_slot")
       refute Map.has_key?(comps, "form_submit_button")
+    end
+
+    @tag ac: "A2UI-101/AC-13"
+    test "a surface WITH a form keeps its View affordance" do
+      %{comps: comps} = surface!(NoUpdate)
+
+      assert %{"action" => %{"event" => %{"name" => "view_record"}}} = comps["view_button"]
+      assert "view_button" in comps["record_row_content"]["children"]
     end
   end
 end
