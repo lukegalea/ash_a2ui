@@ -11,6 +11,24 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     properties the host already bridges, so the picker matches the surfaces
     in both light and dark themes with zero host CSS.
 
+    ## Mounting: prefer the surfaces' live_session
+
+    Mount the picker inside the SAME `live_session` as the surfaces it
+    serves — `on_mount AshA2ui.Actor` is already running there, the picker
+    needs only the session (current-actor id) plus the roster, and in-app
+    navigation to its route renders without a document reload:
+
+        live_session :a2ui, on_mount: AshA2ui.Actor do
+          live "/schedule", ScheduleLive
+          live "/acting-as", AshA2ui.ActorPickerLive
+        end
+
+    A standalone live_session (just the picker) also works and stays
+    supported for hosts with different layout needs — the trade-off is that
+    reaching it from a surface page is a full document reload. The actor
+    SWITCH itself is always a redirect by design: `AshA2ui.ActorPlug` writes
+    the session over HTTP and 302s back to the referer.
+
     Zero jank: the actor read runs in an async task (`start_async/3`) so
     mount never blocks, the links are streamed (`stream/3`), and every load
     before the read lands shows skeleton pills — instant chrome, themed with
@@ -79,7 +97,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
             <a
               id={dom_id}
               href={"/a2ui/actor?id=#{actor.id}"}
-              aria-current={actor.id == @current_id}
+              aria-current={actor.id == @current_id && "true"}
               style={
                 "text-decoration:none;border-radius:var(--a2ui-border-radius, 0.25rem);
                  padding:0.125rem 0.625rem;border:1px solid var(--a2ui-color-border, currentColor);" <>

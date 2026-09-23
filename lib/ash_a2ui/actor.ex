@@ -32,6 +32,9 @@ defmodule AshA2ui.Actor do
 
       live_session :a2ui, on_mount: AshA2ui.Actor do
         live "/schedule", ScheduleLive
+        # Same live_session as the surfaces: reaching the picker is plain
+        # in-app navigation, not a document reload.
+        live "/acting-as", AshA2ui.ActorPickerLive
       end
 
   Options:
@@ -49,8 +52,9 @@ defmodule AshA2ui.Actor do
 
   Actor reads are infrastructural — the picker must show actors before any
   is chosen, like any sign-in screen — so they run with `authorize?: false`.
-  The session id is validated against the configured list on every switch,
-  so a stale session id degrades to "no actor" rather than an error.
+  The session id is validated with a primary-key read on every switch and on
+  every LiveView mount, so a stale session id degrades to "no actor" rather
+  than an error.
   """
 
   require Ash.Query
@@ -73,13 +77,19 @@ defmodule AshA2ui.Actor do
   The actor for a session id: `%__MODULE__{id: id, label: label}` or nil.
   Unknown and filtered-out ids both return nil — a stale session degrades to
   "no actor" rather than an error.
+
+  The read is a direct primary-key read (one targeted query, not the roster
+  scan `list/0` performs): `on_mount/4` runs it on every LiveView mount, so
+  it must not read the whole roster. The configured `:filter` still applies —
+  an actor filtered out cannot be loaded back — and the configured
+  `:read_action` is honored, exactly like `list/0`.
   """
   def load(nil), do: nil
 
   def load(id) when is_binary(id) do
     case config() do
       nil -> nil
-      _cfg -> Enum.find(list(), &(&1.id == id))
+      cfg -> load_actor(cfg, id)
     end
   end
 
@@ -110,6 +120,36 @@ defmodule AshA2ui.Actor do
     |> Ash.read!(action: cfg[:read_action], authorize?: false)
     |> Enum.sort_by(&Map.get(&1, sort))
     |> Enum.map(&%__MODULE__{id: &1.id, label: Map.get(&1, label)})
+  end
+
+  # The session-id read: `id == ^id` pushed into the query (a direct
+  # primary-key read), the configured :filter ANDed on top (a filtered-out
+  # actor cannot be loaded back), same :read_action, no actor authorization
+  # (the picker must show actors before any is chosen). Unknown, filtered
+  # out, and cast-invalid ids all degrade to nil.
+  defp load_actor(cfg, id) do
+    resource = Keyword.fetch!(cfg, :resource)
+    label = Keyword.get(cfg, :label) || label_attribute(resource)
+
+    query =
+      resource
+      |> Ash.Query.filter(id == ^id)
+      |> apply_actor_filter(cfg)
+
+    case Ash.read_one(query, action: cfg[:read_action], authorize?: false) do
+      {:ok, record} when not is_nil(record) ->
+        %__MODULE__{id: record.id, label: Map.get(record, label)}
+
+      _error_or_nil ->
+        nil
+    end
+  end
+
+  defp apply_actor_filter(query, cfg) do
+    case Keyword.get(cfg, :filter, []) do
+      [] -> query
+      filter -> Ash.Query.filter(query, ^filter)
+    end
   end
 
   defp label_attribute(resource) do

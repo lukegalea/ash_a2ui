@@ -35,6 +35,17 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       live("/live-renderer/query-pubsub", AshA2ui.Test.QueryPubsubLive)
       live("/live-renderer/multi-table", AshA2ui.Test.MultiTableLive)
       live("/live-renderer/context-pubsub", AshA2ui.Test.ContextPubsubLive)
+
+      # The actor picker, reachable both ways hosts wire it: standalone
+      # (its own live_session — links from surfaces reload the document)
+      # and in-session (a shared live_session carrying
+      # `on_mount AshA2ui.Actor`, so in-app navigation renders it without
+      # a document reload).
+      live("/acting-as", AshA2ui.ActorPickerLive)
+
+      live_session :a2ui_shared, on_mount: AshA2ui.Actor do
+        live("/acting-as/shared", AshA2ui.ActorPickerLive)
+      end
     end
   end
 

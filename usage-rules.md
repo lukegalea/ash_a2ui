@@ -246,10 +246,22 @@ end
   `:a2ui_actor`) — e.g. `actor_fn: & &1.assigns.a2ui_actor` on
   `AshA2ui.LiveRenderer`. A stale session id degrades to "no actor", never
   an error.
+- **Mount the picker in the SAME live_session as the surfaces** (the
+  `on_mount AshA2ui.Actor` session already carries everything it needs —
+  the picker reads only the session and renders switch links): navigating
+  to it in-app renders without a document reload. A standalone
+  live_session just for the picker also works and stays supported for
+  hosts with different layout needs — the trade-off is that reaching it
+  from a surface page is a full document reload. The actor SWITCH itself
+  is always a redirect by design (`ActorPlug` writes the session over
+  HTTP), so no client-side navigation trick removes that round trip.
 - The picker's actor reads are infrastructural and run unauthorized by
   design; everything the actor then does through surfaces is authorized
   normally. Transport-level authentication still gates who can reach the
-  picker at all.
+  picker at all. `on_mount/4` resolves the session id with a single
+  primary-key read (the configured `:filter` and `:read_action` apply — a
+  filtered-out actor cannot be loaded back); only the picker itself reads
+  the whole roster (`AshA2ui.Actor.list/0`).
 
 ## Building and serving payloads
 

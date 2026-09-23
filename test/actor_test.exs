@@ -6,7 +6,7 @@ defmodule AshA2ui.ActorTest do
 
   use ExUnit.Case, async: false
 
-  alias AshA2ui.Test.Owner
+  alias AshA2ui.Test.{ActorRoster, Owner}
 
   setup do
     previous = Application.get_env(:ash_a2ui, :actor)
@@ -16,6 +16,18 @@ defmodule AshA2ui.ActorTest do
     Application.put_env(:ash_a2ui, :actor, resource: Owner, label: :name)
 
     :ok
+  end
+
+  defp roster(name) do
+    ActorRoster
+    |> Ash.Changeset.for_create(:create, %{name: name})
+    |> Ash.create!()
+  end
+
+  # The roster table is shared (public ETS), so rows leak between tests —
+  # every roster-dependent test starts from a clean table.
+  defp clear_roster do
+    Enum.each(Ash.read!(ActorRoster, authorize?: false), &Ash.destroy!(&1))
   end
 
   test "list/0 reads the configured resource as labelled actors" do
@@ -44,5 +56,79 @@ defmodule AshA2ui.ActorTest do
     Application.put_env(:ash_a2ui, :actor, nil)
 
     assert AshA2ui.Actor.list() == []
+  end
+
+  # --- the load path: a primary-key read, not a roster scan -------------------
+
+  test "load/1 reads by primary key instead of scanning the roster" do
+    clear_roster()
+
+    Application.put_env(:ash_a2ui, :actor, resource: ActorRoster, label: :name)
+    ada = roster("Ada")
+    roster("Grace")
+
+    :persistent_term.put({ActorRoster, :last_filter}, :unset)
+    actor = AshA2ui.Actor.load(ada.id)
+    assert %AshA2ui.Actor{label: "Ada"} = actor
+    assert actor.id == ada.id
+
+    filter = :persistent_term.get({ActorRoster, :last_filter}, :unset)
+    assert filter != :unset, "expected load/1 to run exactly one read"
+    assert inspect(filter) =~ ada.id, "expected the read to carry the id filter"
+
+    # list/0 stays the roster read: no id filter
+    :persistent_term.put({ActorRoster, :last_filter}, :unset)
+    assert length(AshA2ui.Actor.list()) == 2
+    filter = :persistent_term.get({ActorRoster, :last_filter}, :unset)
+    refute inspect(filter) =~ ada.id
+  end
+
+  test "load/1 honors the configured :filter (a filtered-out actor cannot be loaded back)" do
+    clear_roster()
+
+    Application.put_env(:ash_a2ui, :actor,
+      resource: ActorRoster,
+      label: :name,
+      filter: [name: "Ada"]
+    )
+
+    ada = roster("Ada")
+    grace = roster("Grace")
+
+    actor = AshA2ui.Actor.load(ada.id)
+    assert %AshA2ui.Actor{label: "Ada"} = actor
+    assert actor.id == ada.id
+
+    refute AshA2ui.Actor.load(grace.id)
+  end
+
+  test "load/1 honors the configured :read_action like list/0" do
+    clear_roster()
+
+    Application.put_env(:ash_a2ui, :actor,
+      resource: ActorRoster,
+      label: :name,
+      read_action: :ada_only
+    )
+
+    ada = roster("Ada")
+    grace = roster("Grace")
+
+    actor = AshA2ui.Actor.load(ada.id)
+    assert %AshA2ui.Actor{label: "Ada"} = actor
+    assert actor.id == ada.id
+
+    refute AshA2ui.Actor.load(grace.id)
+    assert [%AshA2ui.Actor{label: "Ada"}] = AshA2ui.Actor.list()
+  end
+
+  test "load/1 degrades invalid ids to nil" do
+    clear_roster()
+
+    Application.put_env(:ash_a2ui, :actor, resource: ActorRoster, label: :name)
+    roster("Ada")
+
+    refute AshA2ui.Actor.load("not-a-uuid")
+    refute AshA2ui.Actor.load("")
   end
 end
