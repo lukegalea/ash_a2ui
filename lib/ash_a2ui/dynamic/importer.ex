@@ -422,7 +422,6 @@ defmodule AshA2ui.Dynamic.Importer do
   end
 
   defp keyword_key(key) when is_atom(key), do: to_string(key)
-  defp keyword_key(key) when is_boolean(key), do: to_string(key)
   defp keyword_key(key) when is_binary(key), do: key
 
   defp put_default_sort(spec, []), do: spec
