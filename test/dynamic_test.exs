@@ -53,6 +53,7 @@ defmodule AshA2ui.DynamicTest do
   alias AshA2ui.Dynamic
   alias AshA2ui.Dynamic.Error
   alias AshA2ui.DynamicTest.Guarded
+  alias AshA2ui.ResolvedView
   alias AshA2ui.Test.KitchenSink
   alias AshA2ui.Test.Minimal
 
@@ -259,6 +260,63 @@ defmodule AshA2ui.DynamicTest do
       [_create, _components, %{"updateDataModel" => %{"value" => scoped_model}}] = scoped
       assert [%{"title" => "checkup"}] = scoped_model["records"]
       assert scoped_model["detail"]["owner"]["name"] == "Ada"
+    end
+
+    test "nested forms resolve, render, and submit through the dynamic surface" do
+      allowlist = Dynamic.allowlist([AshA2ui.Test.Ticket, AshA2ui.Test.Author, AshA2ui.Test.Tag])
+
+      spec = %{
+        "resource" => "Ticket",
+        "components" => [
+          %{"kind" => "table", "fields" => ["subject"], "read_action" => "read"},
+          %{
+            "kind" => "form",
+            "fields" => ["subject"],
+            "create_action" => "create",
+            "update_action" => "update",
+            "nested_forms" => [
+              %{"name" => "notes", "fields" => ["body", "rating"]},
+              %{"name" => "tags"}
+            ]
+          }
+        ]
+      }
+
+      surface = resolve!(spec, allowlist: allowlist)
+
+      # the resolved view carries both nested forms with their modes
+      view = ResolvedView.resolve(surface.dsl_state)
+      assert %{notes: notes, tags: tags} = view.nested_forms
+      assert notes.mode == :create_inline
+      assert notes.fields == [:body, :rating]
+      assert tags.mode == :pick_existing
+
+      # the initial /form carries stable empty arrays for both arguments
+      messages = Dynamic.build_surface(surface, authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      assert data_model["form"]["notes"] == []
+      assert data_model["form"]["tags"] == []
+
+      # submitting rows round-trips: create_inline maps survive, pick_existing
+      # rows reduce to their picked ids (the manage_relationship inputs)
+      envelope = %{
+        "name" => "submit_form",
+        "context" => %{
+          "values" => %{
+            "subject" => "nested round trip",
+            "notes" => [%{"_row" => "r1", "body" => "first", "rating" => "2"}],
+            "tags" => []
+          }
+        }
+      }
+
+      assert {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      [ticket] = Ash.read!(AshA2ui.Test.Ticket, authorize?: false)
+      assert ticket.subject == "nested round trip"
     end
   end
 

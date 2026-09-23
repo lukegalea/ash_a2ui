@@ -13,9 +13,9 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
   defmodule AshA2ui.Test.ComposerLive do
     @moduledoc """
     The composer fixture: one standalone UI module (MinimalUI, the honest
-    surface_id rejection), one on-resource surface (Ticket, the nested-form
-    rejections), and one plain module (nothing to import), with the export
-    module pinned for assertions.
+    surface_id rejection), one on-resource surface (Ticket, nested forms
+    importing into the spec), and one plain module (nothing to import), with
+    the export module pinned for assertions.
     """
 
     use AshA2ui.Web.ComposerLive,

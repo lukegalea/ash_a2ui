@@ -10,6 +10,7 @@ defmodule AshA2ui.DynamicLifecycleTest do
   alias AshA2ui.Dynamic
   alias AshA2ui.Dynamic.Diff
   alias AshA2ui.Dynamic.Error
+  alias AshA2ui.Dynamic.Importer
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.KitchenSink
   alias AshA2ui.Test.Minimal
@@ -515,6 +516,36 @@ defmodule AshA2ui.DynamicLifecycleTest do
           allowlist: context_allowlist(),
           surface_id: "promoted_appointments"
         )
+
+      assert scrub(ResolvedView.resolve(module)) == scrub(ResolvedView.resolve(surface.dsl_state))
+    end
+
+    test "round-trip: an imported surface's nested forms promote losslessly" do
+      {:ok, spec, rejections} = Importer.import(AshA2ui.Test.Ticket)
+      assert [%{feature: "surface_id"}] = rejections
+
+      allowlist = Dynamic.allowlist([AshA2ui.Test.Ticket])
+
+      assert {:ok, source} =
+               Dynamic.to_dsl_source(spec,
+                 module: AshA2ui.Promoted.TicketUI,
+                 allowlist: allowlist,
+                 surface_id: "tickets"
+               )
+
+      # the nested forms came back as DSL blocks
+      assert source =~ "nested_form :notes do"
+      assert source =~ "fields [:body, :rating]"
+      assert source =~ "nested_form :tags"
+
+      [{module, _binary} | _rest] = Code.compile_string(source)
+
+      {:ok, surface} =
+        Dynamic.resolve(spec, allowlist: allowlist, surface_id: "tickets")
+
+      assert %{notes: notes, tags: tags} = ResolvedView.resolve(module).nested_forms
+      assert notes.mode == :create_inline and notes.fields == [:body, :rating]
+      assert tags.mode == :pick_existing
 
       assert scrub(ResolvedView.resolve(module)) == scrub(ResolvedView.resolve(surface.dsl_state))
     end

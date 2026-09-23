@@ -43,6 +43,16 @@ defmodule AshA2ui.Dynamic.Promoter do
 
   @group_options [label: :raw, columns: :raw, fields: :name_list]
 
+  @nested_form_options [
+    label: :raw,
+    fields: :name_list,
+    option_label: :name,
+    option_value: :name,
+    option_sort: :name,
+    option_limit: :raw,
+    option_search: :name_list
+  ]
+
   @query_options [
     search_fields: :search_fields,
     sortable: :name_list,
@@ -162,7 +172,8 @@ defmodule AshA2ui.Dynamic.Promoter do
     nested =
       [
         entry |> Map.get("row_layout") |> row_layout_block(),
-        entry |> Map.get("groups", []) |> Enum.map(&group_block/1)
+        entry |> Map.get("groups", []) |> Enum.map(&group_block/1),
+        entry |> Map.get("nested_forms", []) |> Enum.map(&nested_form_block/1)
       ]
       |> List.flatten()
       |> Enum.filter(& &1)
@@ -178,6 +189,13 @@ defmodule AshA2ui.Dynamic.Promoter do
 
   defp group_block(entry) do
     block(~s(group :#{Map.fetch!(entry, "name")}), option_lines(entry, @group_options))
+  end
+
+  defp nested_form_block(entry) do
+    block(
+      ~s(nested_form :#{Map.fetch!(entry, "name")}),
+      option_lines(entry, @nested_form_options)
+    )
   end
 
   defp query_block(entry) do

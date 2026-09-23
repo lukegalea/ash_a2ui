@@ -81,5 +81,3 @@ end
   a dynamic surface on a policy-less resource is not access control.
 - ❌ Using dynamic specs for surfaces a human authors — write the DSL and
   get compile-time diagnostics instead.
-- ❌ `nested_form` in specs — not composable dynamically (needs
-  `manage_relationship` knowledge); declare such surfaces in the DSL.

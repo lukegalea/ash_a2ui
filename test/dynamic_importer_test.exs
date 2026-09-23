@@ -29,21 +29,36 @@ defmodule AshA2ui.DynamicImporterTest do
       assert {:ok, %Dynamic.Surface{}} = Dynamic.resolve(spec, allowlist: allow)
     end
 
-    test "an inline resource surface imports, with its nested forms rejected by name" do
+    test "an inline resource surface imports its nested forms losslessly" do
       {:ok, spec, rejections} = Importer.import(AshA2ui.Test.Ticket)
 
       kinds = spec["components"] |> Enum.map(& &1["kind"]) |> Enum.sort()
       assert kinds == ["form", "table"]
 
-      # Nested relationship forms have no spec vocabulary; the resolver's
-      # parser would silently ignore a "nested_forms" key, so both forms are
-      # rejected visibly instead.
-      nested = Enum.filter(rejections, &String.contains?(&1.path, "nested_forms"))
-      assert length(nested) == 2
-      assert Enum.all?(nested, &String.contains?(&1.reason, "no spec vocabulary"))
-      refute Enum.any?(spec["components"], &Map.has_key?(&1, "nested_forms"))
+      # Nested relationship forms are spec vocabulary: both of Ticket's
+      # nested forms import, one create_inline with explicit fields, one
+      # pick_existing inheriting everything.
+      [_table, form] = spec["components"]
+
+      assert form["nested_forms"] == [
+               %{"name" => "notes", "fields" => ["body", "rating"]},
+               %{"name" => "tags"}
+             ]
+
+      # the only honest rejection this fixture produces
+      assert [%{feature: "surface_id", path: "a2ui.surface_id"}] = rejections
 
       allow = Dynamic.allowlist([AshA2ui.Test.Ticket])
+      assert {:ok, %Dynamic.Surface{}} = Dynamic.resolve(spec, allowlist: allow)
+    end
+
+    test "a searchable nested form imports with its option vocabulary" do
+      {:ok, spec, _rejections} = Importer.import(AshA2ui.Test.TicketSearchUI)
+
+      [_table, form] = spec["components"]
+      assert [%{"name" => "tags", "option_search" => ["name"]}] = form["nested_forms"]
+
+      allow = Dynamic.allowlist([AshA2ui.Test.Ticket, AshA2ui.Test.Author, AshA2ui.Test.Tag])
       assert {:ok, %Dynamic.Surface{}} = Dynamic.resolve(spec, allowlist: allow)
     end
   end

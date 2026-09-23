@@ -88,18 +88,26 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert length(socket.rejections) == 1
       end
 
-      test "renders every rejection the import produces (nested forms, surface id)", %{
+      test "imports nested forms into the spec (only the surface id is rejected)", %{
         conn: conn
       } do
         {view, _html} = open_composer(conn)
         html = import_module(view, AshA2ui.Test.Ticket)
 
+        # Nested forms are spec vocabulary now: they land in the imported
+        # spec (the editor's schema-introspected rows render them as JSON
+        # inputs), and the only honest rejection left is the surface id.
         assert html =~ "Import rejections"
-        assert html =~ "nested_forms"
-        assert html =~ "no spec vocabulary"
+        assert html =~ "a2ui.surface_id (surface_id):"
+        refute html =~ "no spec vocabulary"
 
-        assert %{rejections: rejections} = assigns(view)
-        assert length(rejections) == 3
+        socket = assigns(view)
+        assert %{rejections: [rejection]} = socket
+        assert rejection.feature == "surface_id"
+
+        assert [_table, form] = socket.spec["components"]
+        assert [%{"name" => "notes"}, %{"name" => "tags"}] = form["nested_forms"]
+        assert %Dynamic.Surface{} = socket.surface
       end
 
       test "a module with no a2ui section shows the nothing-to-import rejection", %{conn: conn} do

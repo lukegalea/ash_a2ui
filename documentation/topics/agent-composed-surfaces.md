@@ -42,10 +42,10 @@ composer chooses among the same knobs a DSL author has, nothing more.
 
 The full vocabulary — components (`table` / `form` / `detail`), field
 overrides, queries with presets and range filters, `row_layout` cards, form
-`groups`, `action` metadata (`refreshes`, `prompt_fields`, `visible_when`),
-and `contexts` — mirrors the DSL entity for entity. `AshA2ui.Dynamic.spec_schema/1`
-returns a JSON Schema of the whole spec, ready to hand to an LLM as a tool
-parameter schema.
+`groups` and `nested_forms`, `action` metadata (`refreshes`, `prompt_fields`,
+`visible_when`), and `contexts` — mirrors the DSL entity for entity.
+`AshA2ui.Dynamic.spec_schema/1` returns a JSON Schema of the whole spec,
+ready to hand to an LLM as a tool parameter schema.
 
 ## The validation pipeline
 
@@ -237,9 +237,6 @@ asset instead of evaporating with the chat session:
   declare can be composed. No free-form layout, no custom components, no
   arbitrary filters beyond `query` allowlists and presets, at most one form
   per surface.
-- `nested_form` entities are **not** composable dynamically (they depend on
-  `manage_relationship` changes that only make sense with intimate action
-  knowledge); declare those surfaces in the DSL instead.
 - Widget/format hints are limited to the encoder's vocabulary
   (`text_field`, `check_box`, `choice_picker`, `date_time_input`; `date`).
 - A dynamic surface is only as capable as the resource's actions and

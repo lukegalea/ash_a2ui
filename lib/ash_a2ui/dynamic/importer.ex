@@ -8,12 +8,12 @@ defmodule AshA2ui.Dynamic.Importer do
   imported spec resolves to a surface that renders like the declared one.
 
   Import is honest about the spec's boundaries: a declared feature with no
-  spec vocabulary (sectioned tables, `via`-delegated actions, nested forms,
-  inline editing, file export, plus the section options that live outside
-  the spec — `surface_id`, `record_label`, `spec_version`) becomes a
-  **visible rejection** carrying the reason, never a silent drop. The
-  composer shows rejections in the inspector; the spec itself contains
-  exactly what the dynamic stack can honor.
+  spec vocabulary (sectioned tables, `via`-delegated actions, inline
+  editing, file export, plus the section options that live outside the
+  spec — `surface_id`, `record_label`, `spec_version`) becomes a **visible
+  rejection** carrying the reason, never a silent drop. The composer shows
+  rejections in the inspector; the spec itself contains exactly what the
+  dynamic stack can honor.
 
   The inverse direction (spec → DSL source) is
   `AshA2ui.Dynamic.to_dsl_source/2`.
@@ -174,8 +174,6 @@ defmodule AshA2ui.Dynamic.Importer do
   end
 
   defp component_entry(%Component{} = component, path) do
-    {rejections, nested_rejections} = component_rejections(component, path)
-
     spec =
       %{"kind" => to_string(component.name)}
       |> put_component_name(component)
@@ -191,46 +189,32 @@ defmodule AshA2ui.Dynamic.Importer do
       |> put_opt("context", component.context)
       |> put_row_layout(component.row_layout)
       |> put_groups(component.groups)
+      |> put_nested_forms(component.nested_forms)
 
-    {spec, rejections ++ nested_rejections}
+    {spec, component_rejections(component, path)}
   end
 
   # Declared component features with no spec vocabulary: rejected with the
-  # reason, never dropped. (`nested_forms` deserves its own wording: the
-  # resolver's parser would silently ignore a "nested_forms" spec key, so a
-  # nested form imported into the spec would vanish without a trace.)
+  # reason, never dropped.
   defp component_rejections(component, path) do
-    feature_rejections =
-      for {feature, note} <- [
-            {:sections,
-             "sectioned tables expand into per-section tables at render time and have no spec " <>
-               "vocabulary — declare one table per section, or keep the sectioned surface declared"},
-            {:editable, "inline cell editing has no spec vocabulary"},
-            {:export, "file export has no spec vocabulary — keep it in the declared surface"},
-            {:action, "generic-action tables have no spec vocabulary"},
-            {:params, "generic-action tables have no spec vocabulary"}
-          ],
-          value = Map.get(component, feature),
-          not is_nil(value),
-          value != false do
-        Rejection.new(
-          "#{path}.#{feature}",
-          to_string(feature),
-          "declared on this component — #{note}"
-        )
-      end
-
-    nested_rejections =
-      for {form, index} <- Enum.with_index(component.nested_forms) do
-        Rejection.new(
-          "#{path}.nested_forms[#{index}]",
-          "nested_form #{inspect(form.name)}",
-          "nested relationship forms have no spec vocabulary — the resolver would silently " <>
-            "drop them, so import rejects them instead; keep them in the promoted module"
-        )
-      end
-
-    {feature_rejections, nested_rejections}
+    for {feature, note} <- [
+          {:sections,
+           "sectioned tables expand into per-section tables at render time and have no spec " <>
+             "vocabulary — declare one table per section, or keep the sectioned surface declared"},
+          {:editable, "inline cell editing has no spec vocabulary"},
+          {:export, "file export has no spec vocabulary — keep it in the declared surface"},
+          {:action, "generic-action tables have no spec vocabulary"},
+          {:params, "generic-action tables have no spec vocabulary"}
+        ],
+        value = Map.get(component, feature),
+        not is_nil(value),
+        value != false do
+      Rejection.new(
+        "#{path}.#{feature}",
+        to_string(feature),
+        "declared on this component — #{note}"
+      )
+    end
   end
 
   # Only table/detail components may carry a distinguishing name — the form
@@ -269,6 +253,27 @@ defmodule AshA2ui.Dynamic.Importer do
       end)
 
     Map.put(spec, "groups", entries)
+  end
+
+  # Nested relationship sub-forms: `name` is the managed action argument;
+  # the other keys mirror the field entity's option vocabulary. Defaults
+  # (option_limit) stay unspoken — silence is the default, like the DSL.
+  defp put_nested_forms(spec, []), do: spec
+
+  defp put_nested_forms(spec, nested_forms) do
+    entries =
+      Enum.map(nested_forms, fn nested ->
+        %{"name" => to_string(nested.name)}
+        |> put_value("label", nested.label)
+        |> put_list("fields", nested.fields)
+        |> put_opt("option_label", nested.option_label)
+        |> put_opt("option_value", nested.option_value)
+        |> put_opt("option_sort", nested.option_sort)
+        |> put_value("option_limit", if(nested.option_limit == 100, do: nil))
+        |> put_list("option_search", nested.option_search)
+      end)
+
+    Map.put(spec, "nested_forms", entries)
   end
 
   # --- queries -----------------------------------------------------------------------

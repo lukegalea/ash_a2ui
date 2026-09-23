@@ -6,10 +6,11 @@ defmodule AshA2ui.Dynamic do
   `a2ui` DSL.
 
   A spec is *not* raw A2UI. It is a declarative mirror of the DSL vocabulary
-  (components, fields, queries, presets, groups, row layouts, actions,
-  contexts) that references resources, attributes and actions **by name**;
-  the server resolves, validates, and encodes everything. The spec composer
-  never controls the wire payload, only the same knobs a DSL author has.
+  (components, fields, queries, presets, groups, row layouts, nested forms,
+  actions, contexts) that references resources, attributes and actions **by
+  name**; the server resolves, validates, and encodes everything. The spec
+  composer never controls the wire payload, only the same knobs a DSL author
+  has.
 
   ## Pipeline
 
@@ -592,6 +593,51 @@ defmodule AshA2ui.Dynamic do
               "fields" => name_list
             },
             "required" => ["name", "fields"],
+            "additionalProperties" => false
+          }
+        },
+        "nested_forms" => %{
+          "type" => "array",
+          "maxItems" => 64,
+          "description" =>
+            "Nested relationship sub-forms (forms only), named by the action argument a " <>
+              "manage_relationship change consumes on the form's create/update actions. " <>
+              "The interaction mode (pick existing vs. create inline) is inferred from that change.",
+          "items" => %{
+            "type" => "object",
+            "properties" => %{
+              "name" =>
+                Map.put(
+                  name,
+                  "description",
+                  "The action argument this nested form edits (managed by manage_relationship)."
+                ),
+              "label" => %{"type" => "string", "maxLength" => 120},
+              "fields" =>
+                Map.put(
+                  name_list,
+                  "description",
+                  "Destination attributes rendered as sub-form inputs (create-inline mode)."
+                ),
+              "option_label" =>
+                Map.put(
+                  name,
+                  "description",
+                  "Destination attribute shown as the pick-existing option label."
+                ),
+              "option_value" =>
+                Map.put(name, "description", "Destination attribute submitted as the value."),
+              "option_sort" =>
+                Map.put(name, "description", "Destination attribute options are sorted by."),
+              "option_limit" => %{"type" => "integer", "minimum" => 1, "maximum" => 500},
+              "option_search" =>
+                Map.put(
+                  name_list,
+                  "description",
+                  "Destination string attributes searched; makes the pick-existing select searchable."
+                )
+            },
+            "required" => ["name"],
             "additionalProperties" => false
           }
         }

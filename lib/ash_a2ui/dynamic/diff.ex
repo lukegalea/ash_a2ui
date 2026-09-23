@@ -6,9 +6,9 @@ defmodule AshA2ui.Dynamic.Diff do
 
   The diff is computed at the **spec vocabulary level**, never as a raw JSON
   diff: entities (components, queries, fields, actions, contexts — and their
-  nested presets, groups, and row layouts) are matched by name, and each
-  change names the entity, the option that changed, and the old and new
-  values. Key order and other serialization noise never show up.
+  nested presets, groups, nested forms, and row layouts) are matched by name,
+  and each change names the entity, the option that changed, and the old and
+  new values. Key order and other serialization noise never show up.
 
   Compute one through `AshA2ui.Dynamic.diff/2` (which accepts spec maps,
   serialized specs, and resolved surfaces interchangeably):
@@ -49,7 +49,15 @@ defmodule AshA2ui.Dynamic.Diff do
     @type t :: %__MODULE__{
             kind: :added | :removed | :changed,
             entity:
-              :surface | :component | :query | :preset | :field | :action | :context | :group,
+              :surface
+              | :component
+              | :query
+              | :preset
+              | :field
+              | :action
+              | :context
+              | :group
+              | :nested_form,
             name: String.t() | nil,
             path: String.t(),
             option: String.t() | nil,
@@ -169,9 +177,9 @@ defmodule AshA2ui.Dynamic.Diff do
 
   # --- per-entity option diffing ----------------------------------------------------
 
-  # Queries nest presets, components nest groups (named sub-entities) and a
-  # row_layout singleton (flattened into dotted options); everything else is
-  # a flat option map.
+  # Queries nest presets, components nest groups and nested forms (named
+  # sub-entities) plus a row_layout singleton (flattened into dotted
+  # options); everything else is a flat option map.
   defp entity_option_changes(:query, path, old_entry, new_entry) do
     flat_changes(:query, path, old_entry, new_entry, ["presets"]) ++
       diff_entities(
@@ -211,8 +219,20 @@ defmodule AshA2ui.Dynamic.Diff do
         end
       )
 
+    nested_form_changes =
+      diff_entities(
+        :nested_form,
+        &~s(#{path} nested form "#{&1}"),
+        Map.get(old_entry, "nested_forms", []),
+        Map.get(new_entry, "nested_forms", []),
+        &name_of/1,
+        fn nested_path, old_nested, new_nested ->
+          flat_changes(:nested_form, nested_path, old_nested, new_nested, [])
+        end
+      )
+
     flat_changes(:component, path, old_entry, new_entry, ["row_layout", "groups"]) ++
-      row_layout_changes ++ group_changes
+      row_layout_changes ++ group_changes ++ nested_form_changes
   end
 
   defp entity_option_changes(entity, path, old_entry, new_entry) do

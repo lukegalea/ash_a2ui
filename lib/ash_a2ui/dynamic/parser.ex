@@ -165,11 +165,14 @@ defmodule AshA2ui.Dynamic.Parser do
     component_def = entity_def(:component)
     [row_layout_def] = component_def.entities[:row_layout]
     [group_def] = component_def.entities[:groups]
+    [nested_form_def] = component_def.entities[:nested_forms]
 
     with {:ok, row_layout} <-
            parse_row_layout(Map.get(entry, "row_layout"), row_layout_def, path),
-         {:ok, groups} <- parse_groups(Map.get(entry, "groups"), group_def, path) do
-      {:ok, [row_layout: row_layout, groups: groups, nested_forms: []]}
+         {:ok, groups} <- parse_groups(Map.get(entry, "groups"), group_def, path),
+         {:ok, nested_forms} <-
+           parse_nested_forms(Map.get(entry, "nested_forms"), nested_form_def, path) do
+      {:ok, [row_layout: row_layout, groups: groups, nested_forms: nested_forms]}
     end
   end
 
@@ -220,6 +223,46 @@ defmodule AshA2ui.Dynamic.Parser do
 
   defp parse_groups(_entries, _def, path),
     do: {:error, [Error.new("#{path}.groups", "groups must be an array")]}
+
+  @nested_form_keys %{
+    "name" => :name,
+    "label" => :label,
+    "fields" => :fields,
+    "option_label" => :option_label,
+    "option_value" => :option_value,
+    "option_sort" => :option_sort,
+    "option_limit" => :option_limit,
+    "option_search" => :option_search
+  }
+
+  # Nested relationship sub-forms, named by the action argument a
+  # manage_relationship change consumes on the form's actions. All checks
+  # that need resource knowledge (the manage_relationship change, the
+  # interaction mode, option attributes) stay with VerifyNestedForms, which
+  # runs over the resolved entities exactly as it does at compile time.
+  defp parse_nested_forms(nil, _def, _path), do: {:ok, []}
+
+  defp parse_nested_forms(entries, nested_form_def, path) when is_list(entries) do
+    entries
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {entry, index}, {:ok, acc} ->
+      nested_path = "#{path}.nested_forms[#{index}]"
+
+      result =
+        with true <- is_map(entry) || {:error, [Error.new(nested_path, "must be a JSON object")]},
+             {:ok, opts} <- convert_options(entry, @nested_form_keys, [], nested_path) do
+          build_entity(:nested_form, nested_form_def, opts, [], nested_path)
+        end
+
+      case result do
+        {:ok, nested_form} -> {:cont, {:ok, acc ++ [nested_form]}}
+        {:error, errors} -> {:halt, {:error, errors}}
+      end
+    end)
+  end
+
+  defp parse_nested_forms(_entries, _def, path),
+    do: {:error, [Error.new("#{path}.nested_forms", "nested_forms must be an array")]}
 
   # --- queries ----------------------------------------------------------------
 
