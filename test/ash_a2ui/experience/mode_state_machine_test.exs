@@ -71,8 +71,18 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert "form_slot" in comps["root"]["children"]
 
       # zero jank: the gated panel is the FIRST root child, so an open
-      # create/view/edit task is front-and-center above the tables
+      # create/view/edit task is front-and-center above the tables...
       assert hd(comps["root"]["children"]) == "form_slot"
+
+      # ...and the single authoritative feedback region is the SECOND — a
+      # near-action home above the tables, so invoke successes and refusals
+      # render on screen instead of at the page bottom (the audit's
+      # offscreen-feedback finding)
+      assert %{"component" => "Text", "text" => %{"path" => "/ui/feedback/message"}} =
+               comps["status_text"]
+
+      assert Enum.at(comps["root"]["children"], 1) == "status_text"
+      assert Enum.count(comps["root"]["children"], &(&1 == "status_text")) == 1
     end
 
     @tag ac: "A2UI-101/AC-6"

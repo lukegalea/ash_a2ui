@@ -58,13 +58,15 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
       assert comps["root"]["title"] == "Task"
 
       # zero jank: the record-task panel is the FIRST root child — an open
-      # create/view/edit task is front-and-center, not below the tables
+      # create/view/edit task is front-and-center, not below the tables —
+      # and the typed-feedback banner sits right below it (near-action home,
+      # above the collections)
       assert comps["root"]["children"] == [
                "record_panel",
+               "status_banner",
                "query_controls",
                "create_button",
                "data_grid",
-               "status_banner",
                "action_result_panel"
              ]
 

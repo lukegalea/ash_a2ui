@@ -436,11 +436,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "component" => "entityPage",
       "title" => AshA2ui.Experience.surface_title(view),
       # Record-task panel first (zero jank: an open task is
-      # front-and-center), then context pickers, tables, details.
+      # front-and-center), the typed-feedback banner right below it (the
+      # near-action outcome home), then context pickers, tables, details.
       "children" =>
         form_children ++
+          ["status_banner"] ++
           context_children(view) ++
-          table_children ++ detail_children ++ ["status_banner", "action_result_panel"]
+          table_children ++ detail_children ++ ["action_result_panel"]
     }
 
     [
@@ -734,10 +736,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # the FIRST root child — opening a create/view/edit task puts the form
   # front-and-center instead of below every table (the visibility gate keeps
   # it out of the browse layout, so the position only matters when a task is
-  # open). The panel is followed by context pickers (in declaration order),
-  # then per table/detail component (in declaration order) its section, then
-  # status and the action-result panel. The v1 experience keeps the frozen
-  # pre-v2 root order with the always-rendered form last.
+  # open) — and the feedback region (`status_text`, the single authoritative
+  # outcome line bound to /ui/feedback/message) is the SECOND: a near-action
+  # home, above the tables, so an invoke success or refusal is on screen
+  # without scrolling to the page bottom (the audit's offscreen-feedback
+  # finding; the panel-first ordering carries it into view when a task is
+  # open). Tables/details follow. The v1 experience keeps the frozen
+  # pre-v2 root order with the always-rendered form and status last.
   defp root_children(view, form) do
     context_children =
       for name <- view.context_order, view.contexts[name].picker, do: "context_#{name}"
@@ -748,7 +753,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     if AshA2ui.Experience.v2?() do
       form_child ++
-        context_children ++ component_children ++ ["status_text", "action_result_panel"]
+        ["status_text"] ++ context_children ++ component_children ++ ["action_result_panel"]
     else
       context_children ++
         component_children ++ form_child ++ ["status_text", "action_result_panel"]
