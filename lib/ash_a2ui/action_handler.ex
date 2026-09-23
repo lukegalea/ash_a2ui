@@ -1949,20 +1949,22 @@ defmodule AshA2ui.ActionHandler do
       %{"status" => "ok", "message" => status_text, "result" => %{}, "resultText" => ""}
       |> Map.merge((is_map(extra) && extra) || %{})
 
-    case refresh_messages(env) do
-      {:ok, refresh} ->
-        {:ok,
-         refresh ++
-           [
-             update_data_model(view, "/form", ResolvedView.initial_form(view)),
-             update_data_model(view, "/errors", %{}),
-             update_data_model(view, "/ui/response", response)
-           ] ++ select_clear(view) ++ prompt_clear(env) ++ task_success(env, status_text)}
+      case refresh_messages(env) do
+        {:ok, refresh} ->
+          {:ok,
+           refresh ++
+             [
+               update_data_model(view, "/form", ResolvedView.initial_form(view)),
+               update_data_model(view, "/errors", %{}),
+               update_data_model(view, "/ui/response", response)
+             ] ++
+             select_clear(view) ++ prompt_clear(env) ++ task_success(env, status_text) ++
+               success_feedback(env, status_text)}
 
-      {:error, error} ->
-        {:error, error_messages(view, error)}
+        {:error, error} ->
+          {:error, error_messages(view, error)}
+      end
     end
-  end
 
   defp success(%{view: view} = env, status_text, extra) do
     case refresh_messages(env) do
@@ -1976,24 +1978,38 @@ defmodule AshA2ui.ActionHandler do
              update_data_model(view, "/ui/action_result", %{}),
              update_data_model(view, "/ui/action_result_text", "")
            ] ++
-           select_clear(view) ++ prompt_clear(env) ++ extra ++ task_success(env, status_text)}
+           select_clear(view) ++ prompt_clear(env) ++ extra ++ task_success(env, status_text) ++
+             success_feedback(env, status_text)}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
     end
   end
 
-  # v2: a successful task submission (submit_form) closes the panel, returns
-  # to browse, and reports the outcome as typed success feedback.
-  defp task_success(%{task: true, view: view}, status_text) do
+  # v2: a successful task submission (submit_form) closes the panel and
+  # returns to browse. The typed success feedback itself is written for
+  # EVERY success (see success_feedback/2).
+  defp task_success(%{task: true, view: view}, _status_text) do
     [
       update_data_model(view, "/ui/intent", "browse"),
-      update_data_model(view, "/ui/panel", Experience.panel_state(:hidden)),
-      update_data_model(view, "/ui/feedback", Experience.feedback("success", status_text))
+      update_data_model(view, "/ui/panel", Experience.panel_state(:hidden))
     ]
   end
 
   defp task_success(_env, _status_text), do: []
+
+  # v2 typed feedback — for EVERY action outcome, invoke and submit alike:
+  # successes write the /ui/feedback success value, the path the v2 status
+  # Text actually binds (the classic /ui/status keeps flowing alongside for
+  # programmatic consumers — under v2 nothing renders it). Failures carry
+  # the error value through invoke_feedback/2 and task_error_feedback/2.
+  defp success_feedback(%{view: view} = _env, status_text) do
+    if Experience.v2?() do
+      [update_data_model(view, "/ui/feedback", Experience.feedback("success", status_text))]
+    else
+      []
+    end
+  end
 
   # v2: a failed task submission reports typed error feedback; the mode,
   # panel, and submitted /form values are deliberately left untouched (the

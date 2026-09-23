@@ -98,6 +98,50 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
       # the collection data refreshes with the new record
       assert Enum.any?(values["/records"], &(&1["name"] == "Created!"))
     end
+
+    @tag ac: "A2UI-101/AC-15"
+    test "every invoke success carries typed feedback on the rendered path" do
+      # The audit's headline failure: invoke successes wrote /ui/status —
+      # which nothing renders under v2 — so a successful row action looked
+      # like a no-op. The feedback region binds /ui/feedback/message.
+      record = Ash.create!(Task, %{name: "Doomed"}, authorize?: false)
+
+      assert {:ok, messages} =
+               ActionHandler.handle(Task, envelope("invoke", %{"action" => "destroy", "recordId" => record.id}))
+
+      values = by_path(messages)
+
+      # typed success on the path the v2 status Text binds...
+      assert values["/ui/feedback"] == %{
+               "kind" => "success",
+               "message" => ~s(Action "destroy" completed.)
+             }
+
+      # ...with the classic status text still flowing alongside (the
+      # programmatic contract, unchanged)...
+      assert values["/ui/status"] == ~s(Action "destroy" completed.)
+
+      # ...and no panel/mode writes: a browse-mode invoke never closes a task
+      refute Map.has_key?(values, "/ui/intent")
+      refute Map.has_key?(values, "/ui/panel")
+    end
+
+    @tag ac: "A2UI-101/AC-15"
+    test "invoke failures keep their typed error feedback" do
+      record = Ash.create!(Task, %{name: "Survivor"}, authorize?: false)
+
+      # destroy requires a recordId-bearing allowlisted row action; a
+      # non-allowlisted action is rejected before any write
+      assert {:error, messages} =
+               ActionHandler.handle(Task, envelope("invoke", %{"action" => "explode"}))
+
+      values = by_path(messages)
+      assert values["/ui/feedback"]["kind"] == "error"
+      assert values["/ui/feedback"]["message"] != ""
+
+      # the untouched record proves the rejection happened before the write
+      assert Ash.get!(Task, record.id, authorize?: false).name == "Survivor"
+    end
   end
 
   describe "forged events" do
