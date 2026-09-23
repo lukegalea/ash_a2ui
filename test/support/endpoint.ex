@@ -46,6 +46,9 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       live_session :a2ui_shared, on_mount: AshA2ui.Actor do
         live("/acting-as/shared", AshA2ui.ActorPickerLive)
       end
+
+      # The presence surface fixture (AshA2ui.Presence + PresenceBar).
+      live("/presence", AshA2ui.Test.PresenceLive)
     end
   end
 
