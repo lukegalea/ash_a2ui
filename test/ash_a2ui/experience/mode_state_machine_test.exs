@@ -119,15 +119,15 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert values["/ui/intent"] == "create"
 
       assert %{
-                "visible" => visible,
-                "mode" => "create",
-                "title" => "Create Task",
-                "primary_label" => "Create Task",
-                "record_id" => nil,
-                "submit_visible" => submit,
-                "form_visible" => form,
-                "view_visible" => view
-              } = values["/ui/panel"]
+               "visible" => visible,
+               "mode" => "create",
+               "title" => "Create Task",
+               "primary_label" => "Create Task",
+               "record_id" => nil,
+               "submit_visible" => submit,
+               "form_visible" => form,
+               "view_visible" => view
+             } = values["/ui/panel"]
 
       assert visible != []
       assert submit != []

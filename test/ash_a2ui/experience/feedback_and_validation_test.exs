@@ -107,7 +107,10 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
       record = Ash.create!(Task, %{name: "Doomed"}, authorize?: false)
 
       assert {:ok, messages} =
-               ActionHandler.handle(Task, envelope("invoke", %{"action" => "destroy", "recordId" => record.id}))
+               ActionHandler.handle(
+                 Task,
+                 envelope("invoke", %{"action" => "destroy", "recordId" => record.id})
+               )
 
       values = by_path(messages)
 

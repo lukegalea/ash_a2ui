@@ -1168,31 +1168,35 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # plus Edit when the view declares an update action. v1 keeps the frozen
   # Select button (form surfaces only — see select_button/2).
   defp row_controls(view, table, sfx) do
-    if AshA2ui.Experience.v2?() do
-      if form_target?(view) do
-        {view_id, view_components} =
-          record_control(table, "view#{sfx}_button", "view_record", "View")
+    cond do
+      not AshA2ui.Experience.v2?() -> v1_select_control(view, table, sfx)
+      form_target?(view) -> view_edit_controls(view, table, sfx)
+      true -> {[], []}
+    end
+  end
 
-        {edit_ids, edit_components} =
-          if view.update_action do
-            {id, components} = record_control(table, "edit#{sfx}_button", "start_edit", "Edit")
-            {[id], components}
-          else
-            {[], []}
-          end
+  defp view_edit_controls(view, table, sfx) do
+    {view_id, view_components} =
+      record_control(table, "view#{sfx}_button", "view_record", "View")
 
-        {[view_id | edit_ids], view_components ++ edit_components}
+    {edit_ids, edit_components} =
+      if view.update_action do
+        {id, components} = record_control(table, "edit#{sfx}_button", "start_edit", "Edit")
+        {[id], components}
       else
         {[], []}
       end
-    else
-      components =
-        if Enum.any?(view.components, &(&1.name == :form)),
-          do: select_button(table, sfx),
-          else: []
 
-      {Enum.map(Enum.take(components, 1), & &1["id"]), components}
-    end
+    {[view_id | edit_ids], view_components ++ edit_components}
+  end
+
+  defp v1_select_control(view, table, sfx) do
+    components =
+      if Enum.any?(view.components, &(&1.name == :form)),
+        do: select_button(table, sfx),
+        else: []
+
+    {Enum.map(Enum.take(components, 1), & &1["id"]), components}
   end
 
   # Whether the surface has a record-task panel for view_record to open:
@@ -1730,7 +1734,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     # view task renders the derived display, never an empty editable form.
     children =
       if AshA2ui.Experience.v2?() do
-        ["form_title", "panel_view_slot", "form_fields_slot", "form_submit_slot", "form_cancel_button"]
+        [
+          "form_title",
+          "panel_view_slot",
+          "form_fields_slot",
+          "form_submit_slot",
+          "form_cancel_button"
+        ]
       else
         field_children ++ nested_children ++ ["form_submit_button"]
       end
@@ -1807,7 +1817,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         ]
       end)
 
-    [%{"id" => "panel_view", "component" => "Column", "children" => Enum.map(form.fields, &"panel_view_#{&1}")} | rows]
+    [
+      %{
+        "id" => "panel_view",
+        "component" => "Column",
+        "children" => Enum.map(form.fields, &"panel_view_#{&1}")
+      }
+      | rows
+    ]
   end
 
   defp field_anchor_ids(view, field) do

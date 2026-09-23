@@ -77,7 +77,9 @@ defmodule AshA2ui.Experience.AffordancesTest do
       refute Map.has_key?(comps, "view_button")
       refute Map.has_key?(comps, "edit_button")
       refute Enum.any?(Map.values(comps), &(&1["text"] == "View"))
-      refute "view_button" in (comps["record_row_content"] && comps["record_row_content"]["children"] || [])
+
+      refute "view_button" in ((comps["record_row_content"] &&
+                                  comps["record_row_content"]["children"]) || [])
 
       # no create affordance
       refute Map.has_key?(comps, "create_button")

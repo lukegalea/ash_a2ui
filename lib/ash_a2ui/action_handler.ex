@@ -615,7 +615,8 @@ defmodule AshA2ui.ActionHandler do
         result =
           with {:ok, record} <-
                  fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)) do
-            {:ok, task_open_messages(view, :view, record) ++ panel_record_population(view, record)}
+            {:ok,
+             task_open_messages(view, :view, record) ++ panel_record_population(view, record)}
           end
 
         case result do
@@ -630,27 +631,30 @@ defmodule AshA2ui.ActionHandler do
   # never offers the affordance either, and a hand-crafted event gets this
   # rejection instead of the primary-action fallback — or a crash on
   # resources without any update action at all).
+  defp start_edit(%{view: %{update_action: nil} = view}, _context) do
+    {:error, [status(view, "This surface does not declare an update action.")]}
+  end
+
+  # The edit pre-flight runs the update authorization before the panel ever
+  # opens (the write itself only happens on the subsequent submit_form): a
+  # record the actor may read but not update is rejected here.
   defp start_edit(%{view: view, ash_opts: ash_opts} = _env, context) do
-    if view.update_action do
-      case Map.get(context, "recordId") do
-        nil ->
-          {:error, [status(view, ~s(Malformed start_edit action: context is missing "recordId".))]}
+    case Map.get(context, "recordId") do
+      nil ->
+        {:error, [status(view, ~s(Malformed start_edit action: context is missing "recordId".))]}
 
-        record_id ->
-          result =
-            with {:ok, record} <-
-                   fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)),
-                 :ok <- authorize_update(view, record, ash_opts) do
-              {:ok, task_open_messages(view, :edit, record) ++ form_population(view, record)}
-            end
-
-          case result do
-            {:ok, messages} -> {:ok, messages}
-            {:error, error} -> {:error, error_messages(view, error)}
+      record_id ->
+        result =
+          with {:ok, record} <-
+                 fetch_record(view, record_id, ash_opts, ResolvedView.form_loads(view)),
+               :ok <- authorize_update(view, record, ash_opts) do
+            {:ok, task_open_messages(view, :edit, record) ++ form_population(view, record)}
           end
-      end
-    else
-      {:error, [status(view, "This surface does not declare an update action.")]}
+
+        case result do
+          {:ok, messages} -> {:ok, messages}
+          {:error, error} -> {:error, error_messages(view, error)}
+        end
     end
   end
 
@@ -1968,22 +1972,24 @@ defmodule AshA2ui.ActionHandler do
       %{"status" => "ok", "message" => status_text, "result" => %{}, "resultText" => ""}
       |> Map.merge((is_map(extra) && extra) || %{})
 
-      case refresh_messages(env) do
-        {:ok, refresh} ->
-          {:ok,
-           refresh ++
-             [
-               update_data_model(view, "/form", ResolvedView.initial_form(view)),
-               update_data_model(view, "/errors", %{}),
-               update_data_model(view, "/ui/response", response)
-             ] ++
-             select_clear(view) ++ prompt_clear(env) ++ task_success(env, status_text) ++
-               success_feedback(env, status_text)}
+    case refresh_messages(env) do
+      {:ok, refresh} ->
+        {:ok,
+         refresh ++
+           [
+             update_data_model(view, "/form", ResolvedView.initial_form(view)),
+             update_data_model(view, "/errors", %{}),
+             update_data_model(view, "/ui/response", response)
+           ] ++
+           select_clear(view) ++
+           prompt_clear(env) ++
+           task_success(env, status_text) ++
+           success_feedback(env, status_text)}
 
-        {:error, error} ->
-          {:error, error_messages(view, error)}
-      end
+      {:error, error} ->
+        {:error, error_messages(view, error)}
     end
+  end
 
   defp success(%{view: view} = env, status_text, extra) do
     case refresh_messages(env) do
@@ -1997,8 +2003,11 @@ defmodule AshA2ui.ActionHandler do
              update_data_model(view, "/ui/action_result", %{}),
              update_data_model(view, "/ui/action_result_text", "")
            ] ++
-           select_clear(view) ++ prompt_clear(env) ++ extra ++ task_success(env, status_text) ++
-             success_feedback(env, status_text)}
+           select_clear(view) ++
+           prompt_clear(env) ++
+           extra ++
+           task_success(env, status_text) ++
+           success_feedback(env, status_text)}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
