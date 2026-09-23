@@ -129,7 +129,7 @@ defmodule AshA2ui.ActionHandlerTest.CheckInFacade do
     {:error,
      %Ash.Error.Invalid{
        errors: [
-          InvalidArgument.exception(
+         InvalidArgument.exception(
            field: :status,
            message: "task already completed"
          )
@@ -185,7 +185,7 @@ defmodule AshA2ui.ActionHandlerTest.Ticket do
     end
 
     action :check_in do
-      via({AshA2ui.ActionHandlerTest.CheckInFacade, :complete, [:board]})
+      via {AshA2ui.ActionHandlerTest.CheckInFacade, :complete, [:board]}
     end
   end
 end

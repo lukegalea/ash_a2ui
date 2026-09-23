@@ -218,7 +218,7 @@ defmodule AshA2ui.Test.Experience.EstateUser do
   a2ui do
     surface_id "estate_users"
     title "Legacy users"
-    record_label("legacy user")
+    record_label "legacy user"
 
     query :default do
       search_fields [:login]
