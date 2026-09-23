@@ -53,6 +53,15 @@ defmodule AshA2ui.Dynamic.Promoter do
     option_search: :name_list
   ]
 
+  @section_options [
+    scope_by: :name,
+    label: :name,
+    value: :name,
+    read_action: :name,
+    sort: :name,
+    limit: :raw
+  ]
+
   @query_options [
     search_fields: :search_fields,
     sortable: :name_list,
@@ -118,7 +127,7 @@ defmodule AshA2ui.Dynamic.Promoter do
         spec_version != "0.9.1" && ~s(spec_version "#{spec_version}"),
         Enum.map(Map.get(spec, "contexts", []), &context_block(&1, allowlist)),
         Enum.map(Map.get(spec, "queries", []), &query_block/1),
-        Enum.map(Map.get(spec, "components", []), &component_block/1),
+        Enum.map(Map.get(spec, "components", []), &component_block(&1, allowlist)),
         Enum.map(Map.get(spec, "fields", []), &field_block/1),
         Enum.map(Map.get(spec, "actions", []), &action_block/1)
       ]
@@ -162,7 +171,7 @@ defmodule AshA2ui.Dynamic.Promoter do
 
   # --- entity blocks ----------------------------------------------------------------
 
-  defp component_block(entry) do
+  defp component_block(entry, allowlist) do
     args =
       case Map.get(entry, "name") do
         nil -> ":#{Map.fetch!(entry, "kind")}"
@@ -173,7 +182,8 @@ defmodule AshA2ui.Dynamic.Promoter do
       [
         entry |> Map.get("row_layout") |> row_layout_block(),
         entry |> Map.get("groups", []) |> Enum.map(&group_block/1),
-        entry |> Map.get("nested_forms", []) |> Enum.map(&nested_form_block/1)
+        entry |> Map.get("nested_forms", []) |> Enum.map(&nested_form_block/1),
+        entry |> Map.get("sections") |> sections_block(allowlist)
       ]
       |> List.flatten()
       |> Enum.filter(& &1)
@@ -196,6 +206,16 @@ defmodule AshA2ui.Dynamic.Promoter do
       ~s(nested_form :#{Map.fetch!(entry, "name")}),
       option_lines(entry, @nested_form_options)
     )
+  end
+
+  # The section source is emitted as a module literal, resolved through the
+  # allowlist like a context's resource.
+  defp sections_block(nil, _allowlist), do: nil
+
+  defp sections_block(entry, allowlist) do
+    source = Map.fetch!(allowlist, Map.fetch!(entry, "source"))
+
+    block("sections", ["source #{inspect(source)}" | option_lines(entry, @section_options)])
   end
 
   defp query_block(entry) do

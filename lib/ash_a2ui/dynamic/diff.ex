@@ -197,15 +197,19 @@ defmodule AshA2ui.Dynamic.Diff do
   defp entity_option_changes(:component, path, old_entry, new_entry) do
     name = component_key(new_entry)
 
-    row_layout_changes =
-      option_map_changes(
-        :component,
-        name,
-        path,
-        "row_layout",
-        Map.get(old_entry, "row_layout", %{}),
-        Map.get(new_entry, "row_layout", %{})
-      )
+    singleton_options = ["row_layout", "sections"]
+
+    singleton_changes =
+      for option <- singleton_options do
+        option_map_changes(
+          :component,
+          name,
+          path,
+          option,
+          Map.get(old_entry, option, %{}),
+          Map.get(new_entry, option, %{})
+        )
+      end
 
     group_changes =
       diff_entities(
@@ -231,8 +235,8 @@ defmodule AshA2ui.Dynamic.Diff do
         end
       )
 
-    flat_changes(:component, path, old_entry, new_entry, ["row_layout", "groups"]) ++
-      row_layout_changes ++ group_changes ++ nested_form_changes
+    flat_changes(:component, path, old_entry, new_entry, singleton_options) ++
+      List.flatten(singleton_changes) ++ group_changes ++ nested_form_changes
   end
 
   defp entity_option_changes(entity, path, old_entry, new_entry) do

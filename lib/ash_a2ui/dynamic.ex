@@ -461,7 +461,7 @@ defmodule AshA2ui.Dynamic do
           "type" => "array",
           "minItems" => 1,
           "maxItems" => 64,
-          "items" => component_schema(name, name_list),
+          "items" => component_schema(name, name_list, resource_names),
           "description" =>
             "The surface's components: usually one table (plus optionally one form). " <>
               "Multiple tables/details need distinguishing names."
@@ -502,7 +502,7 @@ defmodule AshA2ui.Dynamic do
     }
   end
 
-  defp component_schema(name, name_list) do
+  defp component_schema(name, name_list, resource_names) do
     %{
       "type" => "object",
       "properties" => %{
@@ -640,6 +640,52 @@ defmodule AshA2ui.Dynamic do
             "required" => ["name"],
             "additionalProperties" => false
           }
+        },
+        "sections" => %{
+          "type" => "object",
+          "description" =>
+            "Dynamic table sets (tables only): this table becomes a template expanded at " <>
+              "render time into one concrete table per record of the source resource, each " <>
+              "scoped by scope_by == the section's value and headed by its label. The source " <>
+              "must be allowlisted; the source read is authorized like any other.",
+          "properties" => %{
+            "source" => %{
+              "type" => "string",
+              "enum" => resource_names,
+              "description" => "The resource whose records enumerate the sections."
+            },
+            "scope_by" =>
+              Map.put(
+                name,
+                "description",
+                "Public attribute of this table's resource each section's reads filter on " <>
+                  "(scope_by == <section value>)."
+              ),
+            "label" =>
+              Map.put(
+                name,
+                "description",
+                "Source attribute shown as each section's table heading."
+              ),
+            "value" =>
+              Map.put(
+                name,
+                "description",
+                "Source attribute providing each section's scope value and runtime name " <>
+                  "(defaults to the source's primary key)."
+              ),
+            "read_action" =>
+              Map.put(name, "description", "Source read action enumerating the sections."),
+            "sort" =>
+              Map.put(
+                name,
+                "description",
+                "Source attribute the sections are ordered by (ascending)."
+              ),
+            "limit" => %{"type" => "integer", "minimum" => 1, "maximum" => 500}
+          },
+          "required" => ["source", "scope_by"],
+          "additionalProperties" => false
         }
       },
       "required" => ["kind"],

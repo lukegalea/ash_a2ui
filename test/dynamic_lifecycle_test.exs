@@ -550,6 +550,52 @@ defmodule AshA2ui.DynamicLifecycleTest do
       assert scrub(ResolvedView.resolve(module)) == scrub(ResolvedView.resolve(surface.dsl_state))
     end
 
+    test "round-trip: an imported sectioned table promotes losslessly" do
+      {:ok, spec, rejections} = Importer.import(AshA2ui.Test.BucketWordsUI)
+
+      # the spec vocabulary now carries the sections config; the fixture's
+      # editable block (and the section-level surface_id) stay honest rejections
+      refute Enum.any?(rejections, &(&1.feature == "sections"))
+      assert Enum.any?(rejections, &(&1.feature == "editable"))
+
+      assert [_new_words, per_bucket] = spec["components"]
+
+      assert per_bucket["sections"] == %{
+               "source" => "Bucket",
+               "scope_by" => "bucket_id",
+               "label" => "name",
+               "sort" => "name"
+             }
+
+      allowlist = Dynamic.allowlist([AshA2ui.Test.BucketWord, AshA2ui.Test.Bucket])
+
+      assert {:ok, source} =
+               Dynamic.to_dsl_source(spec,
+                 module: AshA2ui.Promoted.BucketWordsUI,
+                 allowlist: allowlist,
+                 surface_id: "bucket_words"
+               )
+
+      assert source =~ "component :table, :per_bucket do"
+      assert source =~ "source AshA2ui.Test.Bucket"
+      assert source =~ "scope_by :bucket_id"
+      assert source =~ "label :name"
+      assert source =~ "sort :name"
+
+      [{module, _binary} | _rest] = Code.compile_string(source)
+
+      {:ok, surface} =
+        Dynamic.resolve(spec, allowlist: allowlist, surface_id: "bucket_words")
+
+      assert %{sections: resolved_sections} =
+               ResolvedView.resolve(module).tables |> Enum.find(&(&1.name == :per_bucket))
+
+      assert resolved_sections.source == AshA2ui.Test.Bucket
+      assert resolved_sections.scope_by == :bucket_id
+
+      assert scrub(ResolvedView.resolve(module)) == scrub(ResolvedView.resolve(surface.dsl_state))
+    end
+
     test "defaults the surface_id to the underscored module name and honors spec_version" do
       {:ok, source} =
         Dynamic.to_dsl_source(minimal_spec(),

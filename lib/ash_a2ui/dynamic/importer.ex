@@ -8,12 +8,12 @@ defmodule AshA2ui.Dynamic.Importer do
   imported spec resolves to a surface that renders like the declared one.
 
   Import is honest about the spec's boundaries: a declared feature with no
-  spec vocabulary (sectioned tables, `via`-delegated actions, inline
-  editing, file export, plus the section options that live outside the
-  spec — `surface_id`, `record_label`, `spec_version`) becomes a **visible
-  rejection** carrying the reason, never a silent drop. The composer shows
-  rejections in the inspector; the spec itself contains exactly what the
-  dynamic stack can honor.
+  spec vocabulary (`via`-delegated actions, inline editing, file export,
+  plus the section options that live outside the spec — `surface_id`,
+  `record_label`, `spec_version`) becomes a **visible rejection** carrying
+  the reason, never a silent drop. The composer shows rejections in the
+  inspector; the spec itself contains exactly what the dynamic stack can
+  honor.
 
   The inverse direction (spec → DSL source) is
   `AshA2ui.Dynamic.to_dsl_source/2`.
@@ -190,6 +190,7 @@ defmodule AshA2ui.Dynamic.Importer do
       |> put_row_layout(component.row_layout)
       |> put_groups(component.groups)
       |> put_nested_forms(component.nested_forms)
+      |> put_sections(component.sections)
 
     {spec, component_rejections(component, path)}
   end
@@ -198,9 +199,6 @@ defmodule AshA2ui.Dynamic.Importer do
   # reason, never dropped.
   defp component_rejections(component, path) do
     for {feature, note} <- [
-          {:sections,
-           "sectioned tables expand into per-section tables at render time and have no spec " <>
-             "vocabulary — declare one table per section, or keep the sectioned surface declared"},
           {:editable, "inline cell editing has no spec vocabulary"},
           {:export, "file export has no spec vocabulary — keep it in the declared surface"},
           {:action, "generic-action tables have no spec vocabulary"},
@@ -276,6 +274,24 @@ defmodule AshA2ui.Dynamic.Importer do
     Map.put(spec, "nested_forms", entries)
   end
 
+  # Sectioned tables carry their dynamic-section config verbatim — the
+  # faithful representation (the runtime expansion yields a dynamic number
+  # of tables, so a per-section unrolling cannot round-trip). The source is
+  # named by its allowlist name; defaults (limit) stay unspoken.
+  defp put_sections(spec, nil), do: spec
+
+  defp put_sections(spec, sections) do
+    section =
+      %{"source" => short_name(sections.source), "scope_by" => to_string(sections.scope_by)}
+      |> put_opt("label", sections.label)
+      |> put_opt("value", sections.value)
+      |> put_opt("read_action", sections.read_action)
+      |> put_opt("sort", sections.sort)
+      |> put_value("limit", if(sections.limit == 50, do: nil))
+
+    Map.put(spec, "sections", section)
+  end
+
   # --- queries -----------------------------------------------------------------------
 
   defp query_specs(module) do
@@ -332,20 +348,72 @@ defmodule AshA2ui.Dynamic.Importer do
   # --- actions -----------------------------------------------------------------------
 
   defp action_specs(module) do
+    resource = AshA2ui.Info.resource!(module)
+    components = AshA2ui.Info.components(module)
+
+    # The actions a spec-declared component can reach: row actions, the
+    # form's create/update (including primary defaults). An `action` entity
+    # reachable ONLY through a rejected feature (inline editing commits
+    # through its update_action) would make the spec unresolvable — it is
+    # rejected visibly alongside the feature that carried it.
+    reachable = MapSet.new(reachable_from_spec(components, resource))
+
     AshA2ui.Info.action_settings(module)
     |> Enum.with_index()
-    |> Enum.map_reduce([], fn {action, index}, acc ->
-      {rejections, via_rejection} = via_rejection(action, "actions[#{index}]")
+    |> Enum.flat_map_reduce([], fn {action, index}, acc ->
+      path = "actions[#{index}]"
 
-      spec =
-        %{"name" => to_string(action.name)}
-        |> put_list("refreshes", action.refreshes)
-        |> put_list("prompt_fields", action.prompt_fields)
-        |> put_value("prompt_title", action.prompt_title)
-        |> put_keyword("visible_when", action.visible_when, :raw)
+      if MapSet.member?(reachable, action.name) do
+        {rejections, via_rejection} = via_rejection(action, path)
 
-      {spec, acc ++ rejections ++ via_rejection}
+        spec =
+          %{"name" => to_string(action.name)}
+          |> put_list("refreshes", action.refreshes)
+          |> put_list("prompt_fields", action.prompt_fields)
+          |> put_value("prompt_title", action.prompt_title)
+          |> put_keyword("visible_when", action.visible_when, :raw)
+
+        {[spec], acc ++ rejections ++ via_rejection}
+      else
+        # A compile-verified declared surface only carries reachable actions,
+        # so this can only be an action whose reachability rode on a rejected
+        # feature: the editable block's update_action.
+        {[],
+         acc ++
+           [
+             Rejection.new(
+               path,
+               to_string(action.name),
+               "action #{inspect(action.name)} is only reachable through its component's " <>
+                 "editable block (inline editing has no spec vocabulary) — the action's " <>
+                 "metadata is rejected with it, or the spec would not resolve"
+             )
+           ]}
+      end
     end)
+  end
+
+  # The action names a spec-declared component can reach: every component's
+  # row actions and typed actions, plus the primary create/update the form
+  # falls back to.
+  defp reachable_from_spec(components, resource) do
+    Enum.flat_map(components, fn component ->
+      component.row_actions ++
+        Enum.reject([component.create_action, component.update_action], &is_nil/1)
+    end)
+    |> Enum.concat(primary_action_names(resource))
+    |> Enum.uniq()
+  end
+
+  defp primary_action_names(resource) do
+    [:create, :update]
+    |> Enum.map(fn type ->
+      case Ash.Resource.Info.primary_action(resource, type) do
+        %{name: name} -> name
+        nil -> nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
   end
 
   # `via` re-points a row action at a host-provided MFA; the spec's action

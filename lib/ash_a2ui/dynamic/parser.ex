@@ -61,7 +61,7 @@ defmodule AshA2ui.Dynamic.Parser do
     results = [
       parse_entities(spec, "contexts", &parse_context(&1, &2, allowlist)),
       parse_entities(spec, "queries", &parse_query/2),
-      parse_entities(spec, "components", &parse_component/2),
+      parse_entities(spec, "components", &parse_component(&1, &2, allowlist)),
       parse_entities(spec, "fields", &parse_field/2),
       parse_entities(spec, "actions", &parse_action/2)
     ]
@@ -134,17 +134,17 @@ defmodule AshA2ui.Dynamic.Parser do
     "context" => :context
   }
 
-  @component_nested ~w(row_layout groups nested_forms)
+  @component_nested ~w(row_layout groups nested_forms sections)
 
-  defp parse_component(entry, path) when is_map(entry) do
+  defp parse_component(entry, path, allowlist) when is_map(entry) do
     with :ok <- require_kind(entry, path),
          {:ok, opts} <- convert_options(entry, @component_keys, @component_nested, path),
-         {:ok, nested} <- parse_component_nested(entry, path) do
+         {:ok, nested} <- parse_component_nested(entry, path, allowlist) do
       build_entity(:component, entity_def(:component), opts, nested, path)
     end
   end
 
-  defp parse_component(_entry, path),
+  defp parse_component(_entry, path, _allowlist),
     do: {:error, [Error.new(path, "each component must be a JSON object")]}
 
   defp require_kind(entry, path) do
@@ -161,18 +161,27 @@ defmodule AshA2ui.Dynamic.Parser do
     end
   end
 
-  defp parse_component_nested(entry, path) do
+  defp parse_component_nested(entry, path, allowlist) do
     component_def = entity_def(:component)
     [row_layout_def] = component_def.entities[:row_layout]
     [group_def] = component_def.entities[:groups]
     [nested_form_def] = component_def.entities[:nested_forms]
+    [sections_def] = component_def.entities[:sections]
 
     with {:ok, row_layout} <-
            parse_row_layout(Map.get(entry, "row_layout"), row_layout_def, path),
          {:ok, groups} <- parse_groups(Map.get(entry, "groups"), group_def, path),
          {:ok, nested_forms} <-
-           parse_nested_forms(Map.get(entry, "nested_forms"), nested_form_def, path) do
-      {:ok, [row_layout: row_layout, groups: groups, nested_forms: nested_forms]}
+           parse_nested_forms(Map.get(entry, "nested_forms"), nested_form_def, path),
+         {:ok, sections} <-
+           parse_sections(Map.get(entry, "sections"), sections_def, path, allowlist) do
+      {:ok,
+       [
+         row_layout: row_layout,
+         groups: groups,
+         nested_forms: nested_forms,
+         sections: sections
+       ]}
     end
   end
 
@@ -263,6 +272,79 @@ defmodule AshA2ui.Dynamic.Parser do
 
   defp parse_nested_forms(_entries, _def, path),
     do: {:error, [Error.new("#{path}.nested_forms", "nested_forms must be an array")]}
+
+  @section_keys %{
+    "scope_by" => :scope_by,
+    "value" => :value,
+    "read_action" => :read_action,
+    "sort" => :sort,
+    "limit" => :limit
+  }
+
+  # Sectioned tables: the dynamic-section config that expands a `:table`
+  # template into one concrete table per record of its `source` at render
+  # time. The source is named like a context resource — resolved through the
+  # allowlist, so a spec can only enumerate sections of resources the host
+  # offers. ("label" is handled like "resource" below: it names an attribute
+  # here, while field/group labels are strings.)
+  defp parse_sections(nil, _def, _path, _allowlist), do: {:ok, []}
+
+  defp parse_sections(entry, sections_def, path, allowlist) when is_map(entry) do
+    section_path = "#{path}.sections"
+
+    with {:ok, source} <- sections_source(entry, section_path, allowlist),
+         {:ok, label} <- optional_name(entry, "label", section_path),
+         entry = Map.delete(entry, "label"),
+         {:ok, opts} <-
+           convert_options(Map.delete(entry, "source"), @section_keys, [], section_path) do
+      opts = if label, do: [{:label, label} | opts], else: opts
+
+      case build_entity(:sections, sections_def, [{:source, source} | opts], [], section_path) do
+        {:ok, sections} -> {:ok, [sections]}
+        error -> error
+      end
+    end
+  end
+
+  defp parse_sections(_entry, _def, path, _allowlist),
+    do: {:error, [Error.new("#{path}.sections", "sections must be a JSON object")]}
+
+  defp sections_source(entry, path, allowlist) do
+    case Map.fetch(entry, "source") do
+      {:ok, name} when is_binary(name) ->
+        case Map.fetch(allowlist, name) do
+          {:ok, resource} ->
+            {:ok, resource}
+
+          :error ->
+            {:error,
+             [
+               Error.new(
+                 "#{path}.source",
+                 "resource #{inspect(name)} is not available to dynamic surfaces — " <>
+                   "use one of: #{Enum.join(Enum.sort(Map.keys(allowlist)), ", ")}"
+               )
+             ]}
+        end
+
+      _missing_or_not_binary ->
+        {:error, [Error.new("#{path}.source", ~s(sections must name a "source" resource string))]}
+    end
+  end
+
+  # An option that is a name when present and absent when not.
+  defp optional_name(entry, key, path) do
+    case Map.fetch(entry, key) do
+      {:ok, value} ->
+        case convert_name(String.to_atom(key), value, path, true) do
+          {:ok, name} -> {:ok, name}
+          {:error, errors} -> {:error, errors}
+        end
+
+      :error ->
+        {:ok, nil}
+    end
+  end
 
   # --- queries ----------------------------------------------------------------
 
@@ -505,7 +587,10 @@ defmodule AshA2ui.Dynamic.Parser do
               :title,
               :badge,
               :depends_on,
-              :default_preset
+              :default_preset,
+              :scope_by,
+              :value,
+              :sort
             ],
        do: :name
 

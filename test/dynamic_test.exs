@@ -318,6 +318,70 @@ defmodule AshA2ui.DynamicTest do
       [ticket] = Ash.read!(AshA2ui.Test.Ticket, authorize?: false)
       assert ticket.subject == "nested round trip"
     end
+
+    test "sections resolve into a template and expand into per-section tables" do
+      allowlist = Dynamic.allowlist([AshA2ui.Test.BucketWord, AshA2ui.Test.Bucket])
+
+      bucket = Ash.create!(AshA2ui.Test.Bucket, %{name: "a3f4-9"}, authorize?: false)
+
+      Ash.create!(
+        AshA2ui.Test.BucketWord,
+        %{word: "misspeld", replacement: "misspelled", bucket_id: bucket.id, state: :bucketed},
+        authorize?: false
+      )
+
+      spec = %{
+        "resource" => "BucketWord",
+        "components" => [
+          %{
+            "kind" => "table",
+            "name" => "per_bucket",
+            "fields" => ["word", "replacement"],
+            "read_action" => "bucketed",
+            "sections" => %{
+              "source" => "Bucket",
+              "scope_by" => "bucket_id",
+              "label" => "name",
+              "sort" => "name"
+            }
+          }
+        ]
+      }
+
+      surface = resolve!(spec, allowlist: allowlist)
+
+      # the resolved view carries the template; the surface is multi-table
+      # (even before expansion) so the scoped paths are stable
+      view = ResolvedView.resolve(surface.dsl_state)
+      assert view.sectioned?
+      assert ResolvedView.multi_table?(view)
+
+      # expansion yields one concrete table per bucket record under the
+      # runtime name <template>_<sanitized value> (the value defaults to the
+      # source's primary key), with scoped reads ANDed on
+      messages = Dynamic.build_surface(surface, authorize?: false)
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      runtime_name = "per_bucket_#{String.replace(bucket.id, "-", "_")}"
+
+      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      assert [%{"word" => "misspeld"}] = data_model["records"][runtime_name]
+    end
+
+    test "a sections source outside the allowlist is rejected" do
+      spec = %{
+        "resource" => "BucketWord",
+        "components" => [
+          %{
+            "kind" => "table",
+            "sections" => %{"source" => "KitchenSink", "scope_by" => "bucket_id"}
+          }
+        ]
+      }
+
+      assert [text] = error_texts(spec, allowlist: Dynamic.allowlist([AshA2ui.Test.BucketWord]))
+      assert text =~ ~s(resource "KitchenSink" is not available to dynamic surfaces)
+    end
   end
 
   describe "resolve/2 — encoding parity with an equivalent DSL surface" do

@@ -77,12 +77,28 @@ defmodule AshA2ui.DynamicImporterTest do
       refute Map.has_key?(action, "via")
     end
 
-    test "inline editing and sectioned tables are rejected" do
+    test "inline editing is rejected; sectioned tables import their sections config" do
       {:ok, _spec, rejections} = Importer.import(AshA2ui.Test.EditableWordsUI)
       assert Enum.any?(rejections, &(&1.feature == "editable"))
 
-      {:ok, _spec, rejections} = Importer.import(AshA2ui.Test.BucketWordsUI)
-      assert Enum.any?(rejections, &(&1.feature == "sections"))
+      {:ok, spec, rejections} = Importer.import(AshA2ui.Test.BucketWordsUI)
+
+      # sections are spec vocabulary; the fixture's editable block is the
+      # honest remainder (plus the section-level surface_id)
+      assert Enum.any?(rejections, &(&1.feature == "editable"))
+      refute Enum.any?(rejections, &(&1.feature == "sections"))
+
+      assert [_new_words, per_bucket] = spec["components"]
+
+      assert per_bucket["sections"] == %{
+               "source" => "Bucket",
+               "scope_by" => "bucket_id",
+               "label" => "name",
+               "sort" => "name"
+             }
+
+      allow = Dynamic.allowlist([AshA2ui.Test.BucketWord, AshA2ui.Test.Bucket])
+      assert {:ok, %Dynamic.Surface{}} = Dynamic.resolve(spec, allowlist: allow)
     end
   end
 
