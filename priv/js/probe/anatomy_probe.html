@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!--
+  CLIN-10 anatomy probe page — the client half; drive with
+  priv/js/probe/anatomy_probe.mjs.
+
+  Loads the FULL host stack minus an app: the neutral theme (the type
+  tiers + admin bridge now ship there), the merged catalog with the
+  neobrutalist anatomy overrides, and recorded wire payloads. Query:
+
+    ?payload=promotion[&open=1]   badge rows + carded form panel + create
+    ?payload=paginated            the query pager
+    ?payload=estate_user          the titled surface
+
+  Exposes __feed/__dispatched/__surfaceId (see picker_probe.html).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>CLIN-10 anatomy probe</title>
+    <link rel="stylesheet" href="./catalog/ash_a2ui_theme.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "lit": "./nm/lit/index.js",
+          "lit/": "./nm/lit/",
+          "lit-html": "./nm/lit-html/lit-html.js",
+          "lit-html/": "./nm/lit-html/",
+          "@lit/reactive-element": "./nm/@lit/reactive-element/reactive-element.js",
+          "@lit/reactive-element/": "./nm/@lit/reactive-element/",
+          "@lit/context": "./nm/@lit/context/index.js",
+          "@lit/context/": "./nm/@lit/context/",
+          "lit-element": "./nm/lit-element/index.js",
+          "lit-element/": "./nm/lit-element/",
+          "@a2ui/web_core/": "./nm/@a2ui/web_core/src/",
+          "@a2ui/web_core/v0_9": "./nm/@a2ui/web_core/src/v0_9/index.js",
+          "@a2ui/web_core/v0_9/basic_catalog": "./nm/@a2ui/web_core/src/v0_9/basic_catalog/index.js",
+          "@a2ui/lit/": "./nm/@a2ui/lit/src/",
+          "@a2ui/lit/v0_9": "./nm/@a2ui/lit/src/v0_9/index.js",
+          "zod": "./nm/zod/index.js",
+          "zod/v3": "./nm/zod/v3/index.js",
+          "zod/v4": "./nm/zod/v4/index.js",
+          "zod/v4-mini": "./nm/zod/v4-mini/index.js",
+          "zod/mini": "./nm/zod/mini/index.js",
+          "zod/": "./nm/zod/",
+          "@preact/signals-core": "./nm/@preact/signals-core/dist/signals-core.mjs",
+          "signal-utils": "./nm/signal-utils/dist/index.ts.js",
+          "signal-utils/": "./nm/signal-utils/dist/",
+          "@lit-labs/signals": "./nm/@lit-labs/signals/index.js",
+          "zod-to-json-schema": "./nm/zod-to-json-schema/dist/esm/index.js",
+          "date-fns": "./nm/date-fns/index.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import {html, css, nothing} from "lit";
+      import "@a2ui/lit/v0_9";
+      import {basicCatalog, A2uiLitElement, A2uiController} from "@a2ui/lit/v0_9";
+      import {MessageProcessor, Catalog} from "@a2ui/web_core/v0_9";
+      import {ChoicePickerApi, ColumnApi} from "@a2ui/web_core/v0_9/basic_catalog";
+      import {createAshA2uiCatalog} from "./catalog/ash_a2ui_catalog.js";
+
+      const a2uiCatalog = createAshA2uiCatalog({
+        Catalog,
+        basicCatalog,
+        ChoicePickerApi,
+        ColumnApi,
+        A2uiLitElement,
+        A2uiController,
+        lit: {html, css, nothing},
+      });
+
+      window.__boot = {stage: "imports-done"};
+      window.__dispatched = [];
+
+      const params = new URLSearchParams(location.search);
+      const caseName = params.get("payload") || "promotion";
+
+      const surfaceEl = document.createElement("a2ui-surface");
+      document.getElementById("host").appendChild(surfaceEl);
+
+      const processor = new MessageProcessor([a2uiCatalog], (action) => {
+        window.__dispatched.push({name: action.name, source: action.sourceComponentId});
+      });
+      processor.onSurfaceCreated((surface) => {
+        window.__boot.surfaceCreated = true;
+        surfaceEl.surface = surface;
+      });
+      window.__feed = (messages) => processor.processMessages(messages);
+
+      try {
+        const boot = await (await fetch(`./fixtures/${caseName}_payload.json`)).json();
+        window.__surfaceId =
+          boot.messages.find((message) => message.createSurface)?.createSurface?.surfaceId ?? null;
+        processor.processMessages(boot.messages);
+        window.__boot.stage = "booted";
+        if (params.get("open") === "1") {
+          const open = await (await fetch(`./fixtures/${caseName}_open_payload.json`)).json();
+          processor.processMessages(open.messages);
+          window.__boot.stage = "panel-open";
+        }
+      } catch (error) {
+        window.__boot.stage = "error";
+        window.__boot.error = String(error);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="host"></div>
+  </body>
+</html>

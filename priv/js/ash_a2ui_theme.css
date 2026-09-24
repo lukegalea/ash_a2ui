@@ -51,19 +51,22 @@
 
   --a2ui-color-border: light-dark(#cbd5e1, #475569);
 
-  /* ---- Shape ------------------------------------------------------- */
-  --a2ui-border-radius: 0.5rem;
-  --a2ui-card-border-radius: 0.75rem;
-  --a2ui-button-border-radius: 0.5rem;
-  --a2ui-textfield-border-radius: 0.5rem;
-  --a2ui-choicepicker-select-border-radius: 0.5rem;
-
-  /* ---- Depth ------------------------------------------------------- */
-  --a2ui-card-box-shadow: light-dark(
-    0 1px 3px rgb(15 23 42 / 0.08),
-    0 1px 3px rgb(0 0 0 / 0.4)
-  );
-  --a2ui-button-box-shadow: none;
+  /* ---- Shape + depth: the neobrutalist structural invariants ---------
+   * The digest's rules, pinned where upstream's var() fallbacks read them:
+   * 2px borders everywhere, the 4px/4px/0 hard shadow on cards and
+   * buttons, the shared 5px radius. Upstream's own defaults are 1px
+   * borders and soft shadows — a host wanting this structure either
+   * imports this theme or pins the same tokens itself. Per-component
+   * (-button-*, -card-*, -textfield-*) overrides still win. */
+  --a2ui-border-width: 2px;
+  --a2ui-border-radius: 5px;
+  --a2ui-card-border-radius: var(--a2ui-border-radius);
+  --a2ui-button-border-radius: var(--a2ui-border-radius);
+  --a2ui-textfield-border-radius: var(--a2ui-border-radius);
+  --a2ui-choicepicker-select-border-radius: var(--a2ui-border-radius);
+  --a2ui-card-border: var(--a2ui-border-width) solid var(--a2ui-color-border);
+  --a2ui-card-box-shadow: 4px 4px 0px 0px var(--a2ui-color-border);
+  --a2ui-button-box-shadow: 4px 4px 0px 0px var(--a2ui-color-border);
 
   /* ---- Spacing & layout -------------------------------------------- */
   /* The upstream defaults give Buttons and Cards an outer margin of
@@ -82,8 +85,108 @@
   --a2ui-button-font-weight: 500;
   --a2ui-label-font-weight: 600;
 
+  /* The surface type scale, tied to the control tier. Upstream leaves
+   * --a2ui-font-size at 1rem, so every surface inherits the 16px page
+   * font — buttons and body text one full step larger than the chrome
+   * around them (the "MASSIVE Complete" root cause). Tiered per the
+   * neobrutalism convention: controls/body at text-sm (14px), metadata
+   * at 12px+, headings stepped above. Hosts override any tier; these
+   * are the fallbacks, not the law. */
+  --a2ui-font-size: 0.875rem;
+  --a2ui-font-size-xs: 0.75rem;  /* badge/caption floor — 12px, never 11 */
+  --a2ui-font-size-s: 0.8125rem;
+  --a2ui-font-size-m: 0.875rem;  /* body + controls (text-sm) */
+  --a2ui-font-size-l: 1rem;      /* h3 */
+  --a2ui-font-size-xl: 1.25rem;  /* h2 — section headings */
+  --a2ui-font-size-2xl: 1.5rem;  /* h1 — the surface title */
+  --a2ui-button-font-size: var(--a2ui-font-size-m);
+
+  /* The neobrutalist button system (consumed by the merged catalog's
+   * Button override): the four-tier size scale and the two density tiers.
+   * Heights 32/36/40/44; "quiet" is the utility tier — row actions and
+   * pagination, white and shadowless beside the one loud primary. */
+  --a2ui-button-height-xs: 2rem;
+  --a2ui-button-height-sm: 2.25rem;
+  --a2ui-button-height: 2.5rem;
+  --a2ui-button-height-lg: 2.75rem;
+  --a2ui-button-padding-sm: 0.375rem 0.75rem;
+
+  /* Badge anatomy tokens (merged-catalog Text override, `*_badge` ids):
+   * saturated fill + BLACK ink — the style has no grey tier, so a badge
+   * is either filled (needs attention) or white (metadata). */
+  --a2ui-badge-border: 2px solid var(--a2ui-color-border);
+  --a2ui-badge-border-radius: 5px;
+  --a2ui-badge-padding: 0.125rem 0.625rem;
+  --a2ui-badge-font-size: 0.75rem;
+  --a2ui-badge-font-weight: 500;
+
   /* ---- Search pickers (merged-catalog combobox & chips) ------------- */
   --a2ui-combobox-max-height: 18rem;
   --a2ui-combobox-z-index: 30;
   --a2ui-chip-border-radius: 999px;
+}
+
+/* ---------------------------------------------------------------------------
+ * The admin re-enable bridge (insurance — see the CLIN-10 root-cause map,
+ * finding #16).
+ *
+ * The admin catalog (ash_admin_catalog.js) reads `--ash-admin-*` FIRST and
+ * falls back to `--a2ui-*`, then to its own slate/indigo literals: soft
+ * 3-layer shadows, 0.375–0.75rem radii, 1px hardcoded border widths, grey
+ * muted text. If admin_v1 is re-enabled after the Board's
+ * admin_core_table fallback is fixed, and a host bridges only the
+ * `--a2ui-*` half (as clinic-demo does), the colors would half-flow while
+ * the structure stays soft — two design languages, one app.
+ *
+ * These definitions pin the admin vocabulary to neobrutalist structure so
+ * re-enabling the catalog cannot flip surfaces to slate/indigo. They are
+ * inert while the admin catalog is not loaded (nothing else reads
+ * `--ash-admin-*`), and a host may override any of them.
+ *
+ * What tokens CANNOT fix (accept consciously): the admin catalog hardcodes
+ * 1px border widths and its quiet-button structure in component CSS —
+ * re-enabling requires an ash_a2ui change for those, not a bridge.
+ * ------------------------------------------------------------------------- */
+:root {
+  /* Shadows: the hard offset replaces all three soft tiers. */
+  --ash-admin-shadow-1: 4px 4px 0px 0px var(--a2ui-color-border, #141414);
+  --ash-admin-shadow-2: 4px 4px 0px 0px var(--a2ui-color-border, #141414);
+  --ash-admin-shadow-3: 6px 6px 0px 0px var(--a2ui-color-border, #141414);
+
+  /* Radii: the system radius (5px), scaled down slightly for the admin
+   * density. */
+  --ash-admin-radius-s: 3px;
+  --ash-admin-radius-m: 5px;
+  --ash-admin-radius-l: 5px;
+  --ash-admin-radius-pill: 999px;
+
+  /* Lines: black, never slate. */
+  --ash-admin-border: var(--a2ui-color-border, #141414);
+  --ash-admin-border-strong: var(--a2ui-color-border, #141414);
+
+  /* Surfaces + text: white on the tinted page, black ink at every tier
+   * (the style's "no grey" rule — muted carries weight, not color). */
+  --ash-admin-surface: var(--a2ui-color-surface, #ffffff);
+  --ash-admin-surface-sunken: var(--a2ui-color-background, #d6ebfc);
+  --ash-admin-surface-raised: var(--a2ui-color-surface, #ffffff);
+  --ash-admin-text: var(--a2ui-color-on-surface, #141414);
+  --ash-admin-text-muted: #3a3a3a;
+  --ash-admin-text-faint: #3a3a3a;
+
+  /* Accent + interaction: the shared accent; hover tints tint, they do
+   * not grey; focus is the hard black ring, not a glow. */
+  --ash-admin-primary: var(--a2ui-color-primary, #3b82f6);
+  --ash-admin-on-primary: var(--a2ui-color-on-primary, #141414);
+  --ash-admin-primary-subtle: var(--a2ui-color-background, #d6ebfc);
+  --ash-admin-hover-tint: var(--a2ui-color-background, #d6ebfc);
+  --ash-admin-focus: var(--a2ui-color-border, #141414);
+
+  /* Feedback: saturated fills with black ink (chart-hue convention). */
+  --ash-admin-success: #05a05a;
+  --ash-admin-success-subtle: #d3f5e3;
+  --ash-admin-warning: #b98500;
+  --ash-admin-warning-subtle: #fff3c2;
+  --ash-admin-error: #c22c33;
+  --ash-admin-error-subtle: #ffd9db;
+  --ash-admin-error-strong: #141414;
 }

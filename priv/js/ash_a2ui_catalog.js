@@ -13,6 +13,12 @@
  *      option List — because the basic catalog has no combobox. Rendered
  *      literally, every option shows before the user searches and nothing
  *      overlays.
+ *   3. **The stock anatomy is not neobrutalist** (CLIN-10): badges are
+ *      11px grey italic captions, the primary Button hardcodes
+ *      `border: none`, buttons have no size scale (they inherit the 16px
+ *      page font), row actions and pagination render at full primary mass,
+ *      and the status region is a naked bound Text. No token reaches
+ *      those — see the CLIN-10 root-cause map.
  *
  * No amount of CSS-variable theming can fix either, because both are
  * structural. `createAshA2uiCatalog(deps)` builds a Catalog registered
@@ -38,6 +44,9 @@
  *     column rendering, which is also what any stock basic-catalog
  *     renderer shows — the emitted tree stays 100% basic catalog
  *     (progressive enhancement, no custom component types on the wire).
+ *   - **Text** → `<ash-a2ui-text>` and **Button** → `<ash-a2ui-button>`:
+ *     the CLIN-10 neobrutalist anatomy overrides — see the
+ *     "Neobrutalist anatomy overrides" section below the imports.
  *
  * ## Contract with the host bundle
  *
@@ -63,6 +72,15 @@
  *     });
  *     configureAshA2ui({MessageProcessor, catalogs: [catalog]});
  *
+ * The anatomy overrides additionally import the upstream element classes
+ * directly from `@a2ui/web_core/v0_9/basic_catalog` (the same specifier
+ * the host already resolves for `ChoicePickerApi`; the admin catalog set
+ * the precedent with `@a2ui/web_core/v0_9`). Subclassing keeps markdown
+ * rendering, controller wiring, action dispatch and `renderNode`
+ * semantics correct BY CONSTRUCTION — the overrides layer styles and
+ * id-keyed anatomy on top, and anything they do not match renders exactly
+ * upstream.
+ *
  * Verified against @a2ui/lit 0.10.1 / @a2ui/web_core 0.10.4:
  * `new Catalog(id, components, functions, themeSchema)` takes
  * `{...ComponentApi, tagName}` entries; the renderer resolves
@@ -73,8 +91,15 @@
  * dispatchAction}`) — the same seams the basic catalog uses.
  */
 
+import {
+  A2uiBasicTextElement,
+  A2uiBasicButtonElement,
+} from "@a2ui/web_core/v0_9/basic_catalog";
+
 const CHOICEPICKER_TAG = "ash-a2ui-choicepicker";
 const COLUMN_TAG = "ash-a2ui-column";
+const TEXT_TAG = "ash-a2ui-text";
+const BUTTON_TAG = "ash-a2ui-button";
 
 /**
  * Builds the merged catalog. See the module docs for the `deps` contract.
@@ -104,9 +129,19 @@ export function createAshA2uiCatalog(deps) {
 
   defineChoicePickerElement(deps);
   if (ColumnApi) defineColumnElement(deps);
+  defineAnatomyElements(deps);
 
   const overrides = new Map([["ChoicePicker", {...ChoicePickerApi, tagName: CHOICEPICKER_TAG}]]);
   if (ColumnApi) overrides.set("Column", {...ColumnApi, tagName: COLUMN_TAG});
+  // The CLIN-10 anatomy overrides spread the basic catalog's own API
+  // entries (the components map holds them) and swap only the tag.
+  for (const [type, tag] of [
+    ["Text", TEXT_TAG],
+    ["Button", BUTTON_TAG],
+  ]) {
+    const api = basicCatalog.components.get(type);
+    if (api) overrides.set(type, {...api, tagName: tag});
+  }
 
   const components = [...basicCatalog.components.values()].map(
     (component) => overrides.get(component.name) || component,
@@ -312,6 +347,501 @@ function defineChoicePickerElement({A2uiLitElement, A2uiController, ChoicePicker
   }
 
   customElements.define(CHOICEPICKER_TAG, AshA2uiChoicePickerElement);
+}
+
+// --- Neobrutalist anatomy overrides (CLIN-10) -------------------------------
+//
+// The stock basic-catalog anatomy cannot be reached with tokens (the
+// root-cause map's findings #1/#2/#7/#8): badges are 11px grey italic
+// captions, the primary Button hardcodes `border: none`, buttons inherit
+// the 16px page font with no size scale, and row actions + pagination
+// render at full primary mass. The overrides below subclass the upstream
+// Lit elements — markdown rendering, the controller, action dispatch and
+// renderNode are inherited, not reimplemented — and layer two things on
+// top: a neobrutalist stylesheet (appended AFTER the upstream styles, so
+// equal-specificity rules win by order) and id-keyed anatomy from the
+// encoder's frozen id vocabulary. The wire stays 100% stock basic catalog;
+// an id the rules do not know renders exactly upstream.
+//
+// Id keys (all long-standing encoder conventions, none new wire):
+//   `*_badge`           row-layout badge Texts → the badge anatomy
+//   `status_text`       the feedback region → the tone-aware banner
+//   `table_heading*`    section/lane headings → h2 with the section chip
+//   `surface_title`     the surface's h1 → the display tier
+//   `row_action_*_button`, `*_prev_button`, `*_next_button`
+//                      → the quiet utility tier (sm, shadowless)
+//
+// Tokens: everything reads `--a2ui-*` with the neobrutalism.dev literals
+// as fallbacks (2px black borders, 4px/4px/0 hard shadow, 5px radius,
+// black ink on every fill) — the tier defaults ship in
+// ash_a2ui_theme.css, and a host that already bridges `--a2ui-*` (as
+// clinic-demo does) needs zero new tokens.
+
+// The badge tone map: label text → tone class. The vocabulary matches the
+// clinic's lane/status language (the app's own badge_fill/1); anything
+// unmatched is the neutral white chip — "filled = needs attention, white
+// = metadata" per the digest.
+const BADGE_TONES = [
+  [/emergen/, "emergency"],
+  [/urgent|^high$/, "urgent"],
+  [/^soon$|^medium$/, "soon"],
+  [/routine|^low$/, "routine"],
+  [/^active$/, "routine"],
+  [/visit|checked.?in/, "visit"],
+  [/discharged|completed/, "discharged"],
+  [/scheduled|booked/, "booked"],
+];
+
+function badgeTone(label) {
+  const text = String(label ?? "").toLowerCase();
+  for (const [pattern, tone] of BADGE_TONES) if (pattern.test(text)) return tone;
+  return "neutral";
+}
+
+// The section-chip palette: headings cycle deterministically — the tone is
+// a hash of the heading text, so the same section keeps its color across
+// renders and pages.
+const SECTION_TONES = ["main", "violet", "cyan", "green", "orange", "pink"];
+
+function sectionTone(label) {
+  const text = String(label ?? "");
+  let hash = 0;
+  for (let index = 0; index < text.length; index++) hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+  return SECTION_TONES[hash % SECTION_TONES.length];
+}
+
+function componentIdOf(element) {
+  try {
+    return element.context?.componentModel?.id ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function defineAnatomyElements({lit}) {
+  if (!lit) return;
+  const {html, nothing} = lit;
+
+  class AshA2uiTextElement extends A2uiBasicTextElement {
+    static styles = [
+      super.styles,
+      lit.css`
+        /* The tier correction: captions are small BLACK metadata, not
+         * grey italics — the style has no grey text tier. */
+        .a2ui-text.caption,
+        .a2ui-text.caption em {
+          font-style: normal;
+          font-weight: var(--a2ui-label-font-weight, 500);
+          color: var(--a2ui-text-caption-color, var(--a2ui-color-on-surface, inherit));
+        }
+
+        /* The badge anatomy (digest §4): 2px black border, shared radius,
+         * text-xs floor, saturated fill with BLACK ink. Prominence is the
+         * fill + border — never size, never grey. */
+        .a2ui-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem;
+          box-sizing: border-box;
+          border: var(--a2ui-badge-border, 2px solid var(--a2ui-color-border, #141414));
+          border-radius: var(--a2ui-badge-border-radius, 5px);
+          padding: var(--a2ui-badge-padding, 0.125rem 0.625rem);
+          font-size: var(--a2ui-badge-font-size, 0.75rem);
+          font-weight: var(--a2ui-badge-font-weight, 500);
+          color: var(--a2ui-badge-color, var(--a2ui-color-on-surface, #141414));
+          white-space: nowrap;
+          width: fit-content;
+          overflow: hidden;
+        }
+        .a2ui-badge em {
+          font-style: normal;
+        }
+        .nb-tone-emergency {
+          background: var(--a2ui-badge-emergency-fill, #ff5c64);
+        }
+        .nb-tone-urgent {
+          background: var(--a2ui-badge-urgent-fill, #ffa94d);
+        }
+        .nb-tone-soon {
+          background: var(--a2ui-badge-soon-fill, #ffd83d);
+        }
+        .nb-tone-routine {
+          background: var(--a2ui-badge-routine-fill, #4fd07a);
+        }
+        .nb-tone-visit {
+          background: var(--a2ui-badge-visit-fill, #b78aff);
+        }
+        .nb-tone-discharged {
+          background: var(--a2ui-badge-discharged-fill, #38c8e8);
+        }
+        .nb-tone-booked {
+          background: var(--a2ui-badge-booked-fill, var(--a2ui-color-primary, #3b82f6));
+        }
+        .nb-tone-neutral {
+          background: var(--a2ui-badge-neutral-fill, var(--a2ui-color-surface, #ffffff));
+        }
+
+        /* The feedback banner (digest §5 Alert): bordered, filled by
+         * tone, hard shadow; destructive is the one sanctioned inversion
+         * — black card, white ink. Empty message + no tone renders
+         * nothing (the region is authoritative, not decorative). */
+        .a2ui-banner {
+          display: block;
+          box-sizing: border-box;
+          width: 100%;
+          border: var(--a2ui-banner-border, 2px solid var(--a2ui-color-border, #141414));
+          border-radius: var(--a2ui-banner-border-radius, 5px);
+          padding: var(--a2ui-banner-padding, 0.5rem 0.875rem);
+          font-size: var(--a2ui-font-size-m, 0.875rem);
+          font-weight: var(--a2ui-button-font-weight, 500);
+          box-shadow: var(--a2ui-banner-box-shadow, 4px 4px 0 0 var(--a2ui-color-border, #141414));
+          background: var(--a2ui-color-surface, #ffffff);
+          color: var(--a2ui-color-on-surface, #141414);
+          margin: var(--a2ui-banner-margin, 0 0 0.5rem 0);
+        }
+        .nb-banner-error {
+          background: var(--a2ui-banner-error-fill, #141414);
+          color: var(--a2ui-banner-error-color, #ffffff);
+        }
+        .nb-banner-warning {
+          background: var(--a2ui-banner-warning-fill, #ffd83d);
+          color: #141414;
+        }
+        .nb-banner-success {
+          background: var(--a2ui-banner-success-fill, #4fd07a);
+          color: #141414;
+        }
+
+        /* Section headings (digest: identity via color chips): a tilted
+         * saturated square before the h2 text, deterministic per label.
+         * ::before — the heading's DOM (and its aria) stays upstream's. */
+        .a2ui-text.nb-section {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .a2ui-text.nb-section::before {
+          content: "";
+          display: inline-block;
+          width: 0.875rem;
+          height: 0.875rem;
+          flex: none;
+          border: 2px solid var(--a2ui-color-border, #141414);
+          border-radius: 3px;
+          transform: rotate(-8deg);
+        }
+        .nb-section-tone-main::before {
+          background: var(--a2ui-badge-booked-fill, var(--a2ui-color-primary, #3b82f6));
+        }
+        .nb-section-tone-violet::before {
+          background: var(--a2ui-badge-visit-fill, #b78aff);
+        }
+        .nb-section-tone-cyan::before {
+          background: var(--a2ui-badge-discharged-fill, #38c8e8);
+        }
+        .nb-section-tone-green::before {
+          background: var(--a2ui-badge-routine-fill, #4fd07a);
+        }
+        .nb-section-tone-orange::before {
+          background: var(--a2ui-badge-urgent-fill, #ffa94d);
+        }
+        .nb-section-tone-pink::before {
+          background: var(--a2ui-badge-pink-fill, #ff9ec9);
+        }
+
+        /* The surface title: the display tier — one step above the h2
+         * sections, heading weight, the surface's one display statement. */
+        .a2ui-text.nb-title {
+          display: block;
+          font-size: var(--a2ui-font-size-2xl, 1.5rem);
+        }
+        .a2ui-text.nb-title h1 {
+          font-size: inherit;
+          line-height: var(--a2ui-line-height-headings, 1.2);
+          letter-spacing: -0.01em;
+        }
+      `,
+    ];
+
+    connectedCallback() {
+      super.connectedCallback();
+      this.__bannerUnsubscribes = null;
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.teardownBannerSubscriptions();
+    }
+
+    teardownBannerSubscriptions() {
+      for (const unsubscribe of this.__bannerUnsubscribes || []) unsubscribe();
+      this.__bannerUnsubscribes = null;
+    }
+
+    // The status banner re-renders when the feedback KIND flips — the
+    // tone is data (only the client sees it), so the banner subscribes to
+    // its own source of truth. Same pattern as the picker's data
+    // subscriptions.
+    willUpdate(changedProperties) {
+      super.willUpdate(changedProperties);
+      const id = componentIdOf(this);
+      if (id === "status_text" && !this.__bannerUnsubscribes) {
+        try {
+          const {dataModel} = this.context.dataContext.surface;
+          this.__bannerUnsubscribes = [
+            dataModel.subscribe("/ui/feedback/kind", () => this.requestUpdate()),
+          ];
+        } catch {
+          // No surface yet — the next context change retries.
+        }
+      }
+    }
+
+    readFeedbackKind() {
+      try {
+        return String(this.context.dataContext.surface.dataModel.get("/ui/feedback/kind") ?? "");
+      } catch {
+        return "";
+      }
+    }
+
+    render() {
+      const props = this.controller?.props;
+      if (!props) return nothing;
+      const id = componentIdOf(this);
+
+      if (id.endsWith("_badge")) {
+        const text = typeof props.text === "string" ? props.text : String(props.text ?? "");
+        const flexStyle = typeof props.weight === "number" ? `flex: ${props.weight};` : nothing;
+        return html`<span
+          class="a2ui-badge nb-tone-${badgeTone(text)}"
+          style=${flexStyle}
+          title=${text}
+        >${text}</span>`;
+      }
+
+      if (id === "status_text") {
+        const message = typeof props.text === "string" ? props.text : String(props.text ?? "");
+        const kind = this.readFeedbackKind();
+        if (message.trim() === "" && kind === "") return nothing;
+        const tone =
+          kind === "error" ? "error" : kind === "warning" ? "warning" : kind === "success" ? "success" : "info";
+        return html`<span
+          class="a2ui-banner nb-banner-${tone}"
+          role=${tone === "error" ? "alert" : "status"}
+          aria-live="polite"
+        >${message}</span>`;
+      }
+
+      return super.render();
+    }
+
+    // Headings and the title keep upstream's DOM; the anatomy classes (and
+    // their ::before chips) ride along without touching structure or aria.
+    updated(changedProperties) {
+      super.updated(changedProperties);
+      const id = componentIdOf(this);
+      const span = this.renderRoot.querySelector(".a2ui-text");
+      if (!span) return;
+      if (id.startsWith("table_heading")) {
+        span.classList.add("nb-section");
+        const variant = this.controller?.props?.variant || "body";
+        if (variant === "h2" || variant === "h3") {
+          const text = String(this.controller?.props?.text ?? "");
+          span.classList.add(`nb-section-tone-${sectionTone(text)}`);
+        }
+      } else if (id === "surface_title") {
+        span.classList.add("nb-title");
+      }
+    }
+  }
+
+  class AshA2uiButtonElement extends A2uiBasicButtonElement {
+    static styles = [
+      super.styles,
+      lit.css`
+        /* The neobrutalist button system (digest §3), layered after the
+         * upstream styles so equal specificity resolves to these. */
+        .a2ui-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          box-sizing: border-box;
+          min-height: var(--a2ui-button-height, 2.5rem);
+          font-size: var(--a2ui-button-font-size, 0.875rem);
+          font-weight: var(--a2ui-button-font-weight, 500);
+          line-height: 1.25;
+          border: var(
+            --a2ui-button-border,
+            var(--a2ui-border-width, 2px) solid var(--a2ui-color-border, #141414)
+          );
+          border-radius: var(--a2ui-button-border-radius, 5px);
+          box-shadow: var(--a2ui-button-box-shadow, 4px 4px 0 0 var(--a2ui-color-border, #141414));
+          padding: var(--a2ui-button-padding, 0.375rem 1rem);
+          margin: var(--a2ui-button-margin, 0 0.25rem 0.25rem 0);
+          color: var(--a2ui-color-on-surface, inherit);
+          background: var(--a2ui-button-background, var(--a2ui-color-surface, #ffffff));
+          transition:
+            transform 120ms var(--nb-ease-emphasized, cubic-bezier(0.2, 0, 0, 1)),
+            box-shadow 120ms var(--nb-ease-emphasized, cubic-bezier(0.2, 0, 0, 1)),
+            background-color 120ms ease;
+        }
+
+        /* The press, per the digest: hover/active collapse the button
+         * INTO its own shadow — translate +4px/+4px and the shadow goes
+         * none. No fill shift, no scale. */
+        .a2ui-button:hover:not(:disabled) {
+          transform: translate(4px, 4px);
+          box-shadow: var(--a2ui-button-box-shadow-none, none);
+          background: var(--a2ui-button-background, var(--a2ui-color-surface, #ffffff));
+        }
+        .a2ui-button:active:not(:disabled) {
+          transform: translate(4px, 4px);
+          box-shadow: none;
+        }
+
+        /* Focus: the hard 2px black ring with its white gap. */
+        .a2ui-button:focus-visible {
+          outline: 2px solid var(--a2ui-color-border, #141414);
+          outline-offset: 2px;
+        }
+
+        /* Primary: the accent fill with BLACK ink — and the 2px border
+         * RESTORED over upstream's hardcoded border:none rule (the
+         * root-cause map's finding #7). */
+        .a2ui-button.primary {
+          border: var(
+            --a2ui-button-border,
+            var(--a2ui-border-width, 2px) solid var(--a2ui-color-border, #141414)
+          );
+          background: var(--a2ui-color-primary, #3b82f6);
+          color: var(--a2ui-color-on-primary, #141414);
+          box-shadow: var(--a2ui-button-box-shadow, 4px 4px 0 0 var(--a2ui-color-border, #141414));
+        }
+        .a2ui-button.primary:hover:not(:disabled) {
+          background: var(--a2ui-color-primary, #3b82f6);
+          transform: translate(4px, 4px);
+          box-shadow: none;
+        }
+
+        /* Borderless stays the quiet link tier. */
+        .a2ui-button.borderless {
+          border: none;
+          box-shadow: none;
+          color: var(--a2ui-color-primary, inherit);
+          text-underline-offset: 2px;
+        }
+        .a2ui-button.borderless:hover:not(:disabled) {
+          transform: none;
+          text-decoration: underline;
+        }
+
+        /* The quiet utility tier: row actions and pagination — sm, white,
+         * shadowless. Utility chrome beside the one loud primary; hover is
+         * a tint, never the press (the press belongs to the buttons that
+         * carry shadows). */
+        .a2ui-button.nb-quiet {
+          min-height: var(--a2ui-button-height-sm, 2.25rem);
+          padding: var(--a2ui-button-padding-sm, 0.375rem 0.75rem);
+          font-size: var(--a2ui-button-font-size-sm, 0.8125rem);
+          box-shadow: none;
+        }
+        .a2ui-button.nb-quiet:hover:not(:disabled) {
+          transform: none;
+          box-shadow: none;
+          background: var(--a2ui-button-quiet-hover, var(--a2ui-color-background, #d6ebfc));
+        }
+        .a2ui-button.nb-quiet:active:not(:disabled) {
+          transform: none;
+          box-shadow: none;
+        }
+        .a2ui-button.nb-quiet.primary {
+          background: var(--a2ui-color-primary, #3b82f6);
+          color: var(--a2ui-color-on-primary, #141414);
+        }
+        .a2ui-button.nb-quiet.primary:hover:not(:disabled) {
+          background: var(--a2ui-color-primary, #3b82f6);
+        }
+
+        .a2ui-button:disabled {
+          opacity: 0.5;
+        }
+
+        /* The reduced-motion kill-switch. The scoping shim rewrites these
+         * selectors per instance and multiple instances' sheets reorder
+         * within the host scope, so equal-specificity ordering is not a
+         * reliable win — the media block carries the sanctioned
+         * !important (the same kill-switch nb_motion.css applies). State
+         * changes still land; only the travel drops. */
+        @media (prefers-reduced-motion: reduce) {
+          .a2ui-button,
+          .a2ui-button:hover:not(:disabled),
+          .a2ui-button:active:not(:disabled) {
+            transition: none !important;
+            transform: none !important;
+          }
+        }
+      `,
+    ];
+
+    render() {
+      // Upstream's render verbatim (click dispatch, disabled semantics,
+      // variant classes), plus the id-keyed quiet tier class.
+      const props = this.controller?.props;
+      if (!props) return nothing;
+
+      const isDisabled = props.isValid === false;
+      const variant = props.variant ?? "default";
+      const classes = {
+        "a2ui-button": true,
+        [variant]: true,
+        ["a2ui-button-" + variant]: true,
+        "nb-quiet": this.isQuietUtility(),
+      };
+
+      return html`
+        <button
+          type="button"
+          class=${classMapFallback(classes)}
+          @click=${() => {
+            if (isDisabled) return;
+            props.action?.();
+          }}          ?disabled=${isDisabled}
+        >
+          ${props.child ? html`${this.renderNode(props.child)}` : nothing}
+        </button>
+      `;
+    }
+
+    // The utility tier, keyed on the encoder's frozen button ids: row
+    // actions (invoke/prompt/confirm) and the query pager. The page's one
+    // loud CTA stays the Create/Submit primary — these are the doors, not
+    // the destination.
+    isQuietUtility() {
+      const id = componentIdOf(this);
+      return (
+        /(^|_)row_action_.*_button$/.test(id) ||
+        id.endsWith("_prev_button") ||
+        id.endsWith("_next_button")
+      );
+    }
+  }
+
+  if (!customElements.get(TEXT_TAG)) customElements.define(TEXT_TAG, AshA2uiTextElement);
+  if (!customElements.get(BUTTON_TAG)) customElements.define(BUTTON_TAG, AshA2uiButtonElement);
+}
+
+// classMap fallback: the deps contract passes `lit: {html, css, nothing}`
+// (and the hosts' lit instance exports classMap, but the merged catalog
+// only receives what it is handed). Tiny local copy — the shape is three
+// booleans.
+function classMapFallback(classes) {
+  return Object.entries(classes)
+    .filter(([, on]) => !!on)
+    .map(([name]) => name)
+    .join(" ");
 }
 
 // --- Column override (search-picker combobox / chip group) -------------------
