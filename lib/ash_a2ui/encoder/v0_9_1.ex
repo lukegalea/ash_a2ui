@@ -380,10 +380,32 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     [
       root
-      | context_sections ++
+      | surface_title_components(view) ++
+          context_sections ++
           table_sections ++ detail_sections ++ report_sections ++ form_components
     ] ++
       form_descendants(view, form, options) ++ [status | action_result_components()]
+  end
+
+  # The surface title, as the first root child (v2). Titles are declared
+  # on every surface and were silently dropped in basic mode — only the
+  # admin entityPage consumed them — leaving pages without an h1 and the
+  # first heading mislabeling the page (the CLIN-10 audit's finding #4).
+  # The merged catalog's Text override carries the display tier for this
+  # exact id; the wire shape is a plain heading Text either way.
+  defp surface_title_components(view) do
+    if AshA2ui.Experience.v2?() and is_binary(view.title) and view.title != "" do
+      [
+        %{
+          "id" => "surface_title",
+          "component" => "Text",
+          "text" => view.title,
+          "variant" => "h1"
+        }
+      ]
+    else
+      []
+    end
   end
 
   # Under experience v2 the status Text reads the typed feedback message
@@ -732,15 +754,17 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     if ResolvedView.multi_table?(view), do: "_#{table.name}", else: ""
   end
 
-  # Root order: under experience v2 the record-task panel (`form_slot`) is
-  # the FIRST root child — opening a create/view/edit task puts the form
-  # front-and-center instead of below every table (the visibility gate keeps
-  # it out of the browse layout, so the position only matters when a task is
-  # open) — and the feedback region (`status_text`, the single authoritative
-  # outcome line bound to /ui/feedback/message) is the SECOND: a near-action
-  # home, above the tables, so an invoke success or refusal is on screen
-  # without scrolling to the page bottom (the audit's offscreen-feedback
-  # finding; the panel-first ordering carries it into view when a task is
+  # Root order: under experience v2 the optional surface title
+  # (`surface_title`, emitted only when the declaration carries one) leads,
+  # then the record-task panel (`form_slot`) — opening a create/view/edit
+  # task puts the form front-and-center instead of below every table (the
+  # visibility gate keeps it out of the browse layout, so the position only
+  # matters when a task is open) — and the feedback region (`status_text`,
+  # the single authoritative outcome line bound to /ui/feedback/message)
+  # follows: a near-action home, above the tables, so an invoke success or
+  # refusal is on screen without scrolling to the page bottom (the audit's
+  # offscreen-feedback finding; the panel-first ordering carries it into
+  # view when a task is
   # open). Tables/details follow. The v1 experience keeps the frozen
   # pre-v2 root order with the always-rendered form and status last.
   defp root_children(view, form) do
@@ -752,12 +776,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     form_child = if form, do: [form_root_child()], else: []
 
     if AshA2ui.Experience.v2?() do
-      form_child ++
+      title_child(view) ++
+        form_child ++
         ["status_text"] ++ context_children ++ component_children ++ ["action_result_panel"]
     else
       context_children ++
         component_children ++ form_child ++ ["status_text", "action_result_panel"]
     end
+  end
+
+  # The v2 title child — present exactly when surface_title_components/1
+  # emits the component (the same guard, so the two can never disagree).
+  defp title_child(view) do
+    if is_binary(view.title) and view.title != "", do: ["surface_title"], else: []
   end
 
   # v2 roots the form at the form_slot visibility gate (the List templated
@@ -1732,20 +1763,40 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     # live behind the /ui/panel/form_visible gate (create/edit), the
     # read-only record display behind /ui/panel/view_visible (view) — so a
     # view task renders the derived display, never an empty editable form.
-    children =
+    #
+    # v2 also cards the panel: the form is the heaviest task surface on
+    # the page and floated uncared on the page background (the CLIN-10
+    # audit's finding #3) while the group sections 30 lines below already
+    # had the Card anatomy. The `form` id is kept (the hook's panel-reveal
+    # PANEL_IDS contract) — it becomes the Card, its content moves under a
+    # `form_body` Column, and the submit/cancel pair gains a footer zone
+    # (Divider + `form_footer` Column) so the card closes like the digest's
+    # CardFooter instead of trailing loose buttons.
+    {form_root, body_children, footer_components} =
       if AshA2ui.Experience.v2?() do
-        [
+        body = [
           "form_title",
           "panel_view_slot",
           "form_fields_slot",
-          "form_submit_slot",
-          "form_cancel_button"
+          "form_footer_divider",
+          "form_footer"
         ]
-      else
-        field_children ++ nested_children ++ ["form_submit_button"]
-      end
 
-    form_column = %{"id" => "form", "component" => "Column", "children" => children}
+        footer = [
+          %{"id" => "form_footer_divider", "component" => "Divider"},
+          %{
+            "id" => "form_footer",
+            "component" => "Column",
+            "children" => ["form_submit_slot", "form_cancel_button"]
+          }
+        ]
+
+        {%{"id" => "form", "component" => "Card", "child" => "form_body"}, body, footer}
+      else
+        children = field_children ++ nested_children ++ ["form_submit_button"]
+
+        {%{"id" => "form", "component" => "Column", "children" => children}, children, []}
+      end
 
     # v1 keeps the always-rendered form.
     if AshA2ui.Experience.v2?() do
@@ -1755,11 +1806,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "component" => "List",
           "children" => %{"componentId" => "form", "path" => "/ui/panel/visible"}
         },
-        form_column
-        | panel_mode_slots(view, form, field_children, nested_children)
+        form_root,
+        %{
+          "id" => "form_body",
+          "component" => "Column",
+          "children" => body_children
+        }
+        | footer_components ++ panel_mode_slots(view, form, field_children, nested_children)
       ] ++ group_components(view, form)
     else
-      [form_column] ++ group_components(view, form)
+      [form_root] ++ group_components(view, form)
     end
   end
 

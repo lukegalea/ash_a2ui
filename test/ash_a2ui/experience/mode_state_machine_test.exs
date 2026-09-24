@@ -267,4 +267,50 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
   defp components_by_id(components_message) do
     Map.new(components_message["updateComponents"]["components"], &{&1["id"], &1})
   end
+
+  describe "CLIN-10 v2 surface anatomy (title + carded form panel)" do
+    test "a declared title becomes the surface's first root child (v2)" do
+      messages = AshA2ui.Info.build_surface(AshA2ui.Test.Experience.EstateUser)
+      comps = components_by_id(Enum.find(messages, &Map.has_key?(&1, "updateComponents")))
+
+      assert %{"component" => "Text", "text" => "Legacy users", "variant" => "h1"} =
+               comps["surface_title"]
+
+      # Title first, then the gated panel, then the feedback region —
+      # an untitled surface keeps form_slot first (asserted above).
+      assert hd(comps["root"]["children"]) == "surface_title"
+      assert Enum.at(comps["root"]["children"], 1) == "form_slot"
+    end
+
+    test "an untitled surface emits no title component at all" do
+      messages = AshA2ui.Info.build_surface(Task)
+      comps = components_by_id(Enum.find(messages, &Map.has_key?(&1, "updateComponents")))
+
+      refute Map.has_key?(comps, "surface_title")
+      assert hd(comps["root"]["children"]) == "form_slot"
+    end
+
+    test "the form panel is carded with a footer zone (v2)" do
+      messages = AshA2ui.Info.build_surface(Task)
+      comps = components_by_id(Enum.find(messages, &Map.has_key?(&1, "updateComponents")))
+
+      # The form keeps its id (the hook's panel-reveal contract) but gains
+      # the Card anatomy: content under a form_body Column, submit/cancel
+      # behind a Divider in a footer Column.
+      assert %{"component" => "Card", "child" => "form_body"} = comps["form"]
+
+      assert comps["form_body"]["children"] == [
+               "form_title",
+               "panel_view_slot",
+               "form_fields_slot",
+               "form_footer_divider",
+               "form_footer"
+             ]
+
+      assert %{"component" => "Divider"} = comps["form_footer_divider"]
+
+      assert %{"component" => "Column", "children" => ["form_submit_slot", "form_cancel_button"]} =
+               comps["form_footer"]
+    end
+  end
 end

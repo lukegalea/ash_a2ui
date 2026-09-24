@@ -45,6 +45,11 @@ defmodule AshA2ui.Experience.CompatV1Test do
     |> Map.new(&{&1["updateDataModel"]["path"], &1["updateDataModel"]["value"]})
   end
 
+  defp components_by_id(messages) do
+    update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+    Map.new(update["updateComponents"]["components"], &{&1["id"], &1})
+  end
+
   test "the unpinned default is experience v2" do
     Application.delete_env(:ash_a2ui, :experience_version)
 
@@ -77,6 +82,18 @@ defmodule AshA2ui.Experience.CompatV1Test do
     refute Map.has_key?(comps, "form_submit_slot")
     refute Map.has_key?(comps, "form_title")
     refute Map.has_key?(comps, "form_cancel_button")
+
+    # the CLIN-10 v2 anatomy does not exist on the v1 wire: no carded
+    # form panel, no footer zone — and no surface title even on a
+    # declared one (the v1 emission never rendered titles).
+    assert %{"component" => "Column"} = comps["form"]
+    refute Map.has_key?(comps, "form_body")
+    refute Map.has_key?(comps, "form_footer")
+    refute Map.has_key?(comps, "form_footer_divider")
+
+    messages_legacy_title = AshA2ui.Info.build_surface(AshA2ui.Test.Experience.EstateUser)
+    comps_legacy_title = components_by_id(messages_legacy_title)
+    refute Map.has_key?(comps_legacy_title, "surface_title")
 
     # pagination is always present, regardless of result count (none here)
     assert %{"component" => "Row", "children" => pagination_children} =
