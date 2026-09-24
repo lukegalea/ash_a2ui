@@ -390,6 +390,13 @@ const BADGE_TONES = [
   [/visit|checked.?in/, "visit"],
   [/discharged|completed/, "discharged"],
   [/scheduled|booked/, "booked"],
+  // The compliance vocabulary (AshCompliance's bundle labels surface in
+  // row badges): compliant is the green "clear" read, noncompliant the
+  // red "blocked" one — the one place red means go/no-go rather than
+  // triage. Written broadly (compl- stems) to catch "Noncompliant",
+  // "Non-compliant", and "Compliant" alike.
+  [/non.?compliant/, "noncompliant"],
+  [/^compliant$/, "compliant"],
 ];
 
 function badgeTone(label) {
@@ -480,6 +487,15 @@ function defineAnatomyElements({lit}) {
         }
         .nb-tone-neutral {
           background: var(--a2ui-badge-neutral-fill, var(--a2ui-color-surface, #ffffff));
+        }
+        /* Compliance pair: green/red with BLACK ink (the black-on-color
+         * rule) — tokens mirror the routine/emergency hues so a host
+         * bridging the palette gets both families coherently. */
+        .nb-tone-compliant {
+          background: var(--a2ui-badge-compliant-fill, var(--a2ui-badge-routine-fill, #4fd07a));
+        }
+        .nb-tone-noncompliant {
+          background: var(--a2ui-badge-noncompliant-fill, var(--a2ui-badge-emergency-fill, #ff5c64));
         }
 
         /* The feedback banner (digest §5 Alert): bordered, filled by

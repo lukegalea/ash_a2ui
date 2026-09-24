@@ -220,6 +220,8 @@ async function main() {
           value: [
             {"id": "1", "_badge_is_active": "Active", "name": "Spring sale"},
             {"id": "2", "_badge_is_active": "Inactive", "name": "Winter sale"},
+            {"id": "3", "_badge_is_active": "Noncompliant", "name": "Bundle breach"},
+            {"id": "4", "_badge_is_active": "Compliant", "name": "Bundle clear"},
           ],
         },
       },
@@ -251,6 +253,38 @@ async function main() {
     console.log(
       `       badge: border ${badge["border-top-width"]}, ${badge["font-size"]}, fill rgb(${fill.join(",")})`,
     );
+  });
+
+  await check("compliance badge pair: Noncompliant red, Compliant green, black ink", async () => {
+    const badges = await page.evaluate(() => {
+      const found = [];
+      const search = (root) => {
+        for (const element of root.querySelectorAll(".a2ui-badge")) {
+          found.push({
+            text: element.textContent.trim(),
+            fill: getComputedStyle(element).getPropertyValue("background-color"),
+            color: getComputedStyle(element).getPropertyValue("color"),
+          });
+        }
+        for (const element of root.querySelectorAll("*")) if (element.shadowRoot) search(element.shadowRoot);
+      };
+      search(document);
+      return found;
+    });
+    const noncompliant = badges.find((badge) => badge.text === "Noncompliant");
+    const compliant = badges.find((badge) => badge.text === "Compliant");
+    if (!noncompliant || !compliant) throw new Error(`compliance badges missing (${badges.map((b) => b.text).join(", ")})`);
+    const rgb = (value) => (value.match(/\d+/g) ?? []).map(Number).slice(0, 3);
+    const bad = rgb(noncompliant.fill);
+    const good = rgb(compliant.fill);
+    expect(bad[0] > bad[1], true, `noncompliant reads red (got rgb(${bad.join(",")}))`);
+    expect(good[1] > good[0], true, `compliant reads green (got rgb(${good.join(",")}))`);
+    // Black-on-color: near-black ink on both fills.
+    for (const [label, badge] of [["noncompliant", noncompliant], ["compliant", compliant]]) {
+      const ink = rgb(badge.color);
+      expect(ink[0] < 60 && ink[1] < 60 && ink[2] < 60, true, `${label} ink is black (got rgb(${ink.join(",")}))`);
+    }
+    console.log(`       compliance: noncompliant rgb(${bad.join(",")}), compliant rgb(${good.join(",")}), black ink`);
   });
 
   await check("section heading: h2 with the tone chip", async () => {

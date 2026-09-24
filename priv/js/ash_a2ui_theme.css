@@ -119,6 +119,9 @@
   --a2ui-badge-padding: 0.125rem 0.625rem;
   --a2ui-badge-font-size: 0.75rem;
   --a2ui-badge-font-weight: 500;
+  /* Compliance pair (green clear / red blocked), black ink on both. */
+  --a2ui-badge-compliant-fill: #4fd07a;
+  --a2ui-badge-noncompliant-fill: #ff5c64;
 
   /* ---- Search pickers (merged-catalog combobox & chips) ------------- */
   --a2ui-combobox-max-height: 18rem;
