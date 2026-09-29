@@ -72,14 +72,18 @@
  *     });
  *     configureAshA2ui({MessageProcessor, catalogs: [catalog]});
  *
- * The anatomy overrides additionally import the upstream element classes
- * directly from `@a2ui/web_core/v0_9/basic_catalog` (the same specifier
- * the host already resolves for `ChoicePickerApi`; the admin catalog set
- * the precedent with `@a2ui/web_core/v0_9`). Subclassing keeps markdown
- * rendering, controller wiring, action dispatch and `renderNode`
- * semantics correct BY CONSTRUCTION — the overrides layer styles and
- * id-keyed anatomy on top, and anything they do not match renders exactly
- * upstream.
+ * The anatomy overrides subclass the upstream Text and Button elements.
+ * No published `@a2ui/web_core` or `@a2ui/lit` entry point exports those
+ * classes, so they are resolved at RUNTIME from the custom-element
+ * registry: `customElements.get(basicCatalog.components.get("Text").tagName)`.
+ * Importing `@a2ui/lit/v0_9` (which is where the host gets `basicCatalog`)
+ * registers them, so they are always present by the time the factory
+ * runs. Subclassing keeps markdown rendering, controller wiring, action
+ * dispatch and `renderNode` semantics correct BY CONSTRUCTION — the
+ * overrides layer styles and id-keyed anatomy on top, and anything they do
+ * not match renders exactly upstream. If an upstream element is not
+ * registered, that override is skipped with a console warning and the
+ * stock element renders.
  *
  * Verified against @a2ui/lit 0.10.1 / @a2ui/web_core 0.10.4:
  * `new Catalog(id, components, functions, themeSchema)` takes
@@ -90,11 +94,6 @@
  * (`componentModel.id`, `dataContext.surface.{dataModel,componentsModel,
  * dispatchAction}`) — the same seams the basic catalog uses.
  */
-
-import {
-  A2uiBasicTextElement,
-  A2uiBasicButtonElement,
-} from "@a2ui/web_core/v0_9/basic_catalog";
 
 const CHOICEPICKER_TAG = "ash-a2ui-choicepicker";
 const COLUMN_TAG = "ash-a2ui-column";
@@ -140,7 +139,7 @@ export function createAshA2uiCatalog(deps) {
     ["Button", BUTTON_TAG],
   ]) {
     const api = basicCatalog.components.get(type);
-    if (api) overrides.set(type, {...api, tagName: tag});
+    if (api && customElements.get(tag)) overrides.set(type, {...api, tagName: tag});
   }
 
   const components = [...basicCatalog.components.values()].map(
@@ -425,9 +424,27 @@ function componentIdOf(element) {
   }
 }
 
-function defineAnatomyElements({lit}) {
+// The upstream element class for a basic-catalog component type, taken from
+// the custom-element registry under the tag the basic catalog renders it
+// with. Returns undefined when the type or its element is not registered.
+function upstreamElementClass(basicCatalog, type) {
+  const tagName = basicCatalog?.components?.get(type)?.tagName;
+  return tagName ? customElements.get(tagName) : undefined;
+}
+
+function defineAnatomyElements({lit, basicCatalog}) {
   if (!lit) return;
   const {html, nothing} = lit;
+
+  const A2uiBasicTextElement = upstreamElementClass(basicCatalog, "Text");
+  const A2uiBasicButtonElement = upstreamElementClass(basicCatalog, "Button");
+  if (!A2uiBasicTextElement || !A2uiBasicButtonElement) {
+    console.warn(
+      "createAshA2uiCatalog: the upstream Text/Button elements are not registered " +
+        "(import @a2ui/lit/v0_9 first); the anatomy overrides are skipped.",
+    );
+    return;
+  }
 
   class AshA2uiTextElement extends A2uiBasicTextElement {
     static styles = [

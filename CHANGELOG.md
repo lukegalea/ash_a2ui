@@ -105,6 +105,16 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Bug Fixes:
 
+- The merged catalog asset (`priv/js/ash_a2ui_catalog.js`) bundles against
+  every published `@a2ui` release again. Its Text/Button anatomy overrides
+  statically imported `A2uiBasicTextElement` and `A2uiBasicButtonElement`
+  from `@a2ui/web_core/v0_9/basic_catalog`, which only 0.11.0 exports; on
+  0.10.x and 0.12.0 the host's esbuild failed outright. The classes are now
+  resolved at runtime from the custom-element registry under the basic
+  catalog's own tag names (`customElements.get(basicCatalog.components.get("Text").tagName)`),
+  and an override is skipped with a warning if its upstream element is not
+  registered.
+
 - Formless surfaces no longer render a per-row **Select** button.
   `select_row`'s only effect is populating `/form` for editing, so on
   surfaces without a `:form` component the button succeeded silently with
