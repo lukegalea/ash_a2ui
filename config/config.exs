@@ -35,6 +35,15 @@ if Mix.env() == :test do
 
   config :logger, level: :warning
 
+  # JUnit XML output for mix test — the evidence artifact .sdlc/verification.yaml
+  # declares (report.path: test/reports/junit/*.xml). junit_formatter writes
+  # the report at the end of every run, creating the directory if missing.
+  config :junit_formatter,
+    report_dir: "test/reports/junit",
+    report_file: "junit_report.xml",
+    automatic_create_dir?: true,
+    print_report_file: true
+
   # Minimal Phoenix endpoint used only by (future) LiveRenderer tests.
   # Skipped when the Phoenix stack is excluded (NO_PHOENIX=1, see mix.exs):
   # the endpoint module is never compiled or started in that case, and

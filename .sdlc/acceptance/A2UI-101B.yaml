@@ -24,8 +24,7 @@ criteria:
       test/ash_a2ui/experience/admin_catalog_contract_test.exs::catalog_declares_the_full_component_vocabulary
 
   - id: A2UI-101B/AC-2
-    given: an experience v2 core surface (table + form, no advanced features)
-      and config catalog: :admin_v1
+    given: "an experience v2 core surface (table + form, no advanced features) and config catalog: :admin_v1"
     when: the surface is encoded
     then: >-
       createSurface carries catalogId https://ash-a2ui.dev/catalogs/admin/v1,
@@ -112,7 +111,7 @@ criteria:
       test/ash_a2ui/experience/admin_catalog_fallback_test.exs::basic_catalog_output_is_unchanged
 
   - id: A2UI-101B/AC-9
-    given: experience_version 1 with config catalog: :admin_v1
+    given: "experience_version 1 with config catalog: :admin_v1"
     when: any surface is encoded
     then: >-
       output is byte-identical to basic v1 — admin requires the experience

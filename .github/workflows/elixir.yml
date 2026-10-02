@@ -46,3 +46,13 @@ jobs:
       - run: mix deps.get
       - run: mix compile --warnings-as-errors
       - run: mix test
+      # The JUnit XML evidence that .sdlc/verification.yaml declares
+      # (report.path). This is the repo-owned job (ash-ci above is a reusable
+      # upstream workflow that cannot gain steps), so the artifact upload
+      # lives here; junit_formatter writes the report on every mix test run.
+      - name: Upload JUnit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-report
+          path: test/reports/junit/*.xml
