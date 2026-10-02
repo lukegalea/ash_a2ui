@@ -199,7 +199,7 @@ criteria:
       no update occurs and an authorized-readable error response is returned,
       exactly as the pre-existing authorized path does today — the experience
       layer adds no new execution path
-    verify: security
+    verify: sast
     risk: high
     test: >-
       test/ash_a2ui/experience/feedback_and_validation_test.exs::forged_events_still_hit_authorized_actions

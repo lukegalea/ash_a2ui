@@ -28,7 +28,7 @@ criteria:
       while an actor with permission sees it authorized — and a
       client-constructed capability envelope is rejected: capabilities are
       server-derived data only
-    verify: security
+    verify: sast
     risk: high
     test: >-
       test/ash_a2ui/canvas/capability_security_test.exs::record_capabilities_obey_actor_policy
@@ -41,7 +41,7 @@ criteria:
       {:error, :unknown_object} is returned without converting any input to
       an atom or module, without loading unregistered modules, and without
       leaking registry contents in the error
-    verify: security
+    verify: sast
     risk: high
     test: >-
       test/ash_a2ui/canvas/object_resolver_security_test.exs::rejects_unregistered_module_input

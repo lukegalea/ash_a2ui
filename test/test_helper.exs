@@ -15,4 +15,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     )
 end
 
-ExUnit.start()
+# JUnitFormatter writes the JUnit XML evidence that .sdlc/verification.yaml
+# declares (test/reports/junit/*.xml, configured in config/config.exs);
+# CLIFormatter keeps the usual console output.
+ExUnit.start(formatters: [ExUnit.CLIFormatter, JUnitFormatter])

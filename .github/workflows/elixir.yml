@@ -46,3 +46,29 @@ jobs:
       - run: mix deps.get
       - run: mix compile --warnings-as-errors
       - run: mix test
+
+  # The JUnit XML evidence that .sdlc/verification.yaml declares (report.path).
+  # ash-ci above is a reusable upstream workflow that cannot gain steps, and
+  # no-phoenix runs a reduced suite, so this repo-owned job runs the full
+  # suite (Phoenix stack included) and uploads the report junit_formatter
+  # writes. A missing report fails the job instead of passing without evidence.
+  test-report:
+    name: mix test (JUnit report)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+      - run: mix deps.get
+      - run: mix test
+      - name: Upload JUnit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-report
+          path: test/reports/junit/*.xml
+          if-no-files-found: error

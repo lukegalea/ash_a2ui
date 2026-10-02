@@ -7,6 +7,10 @@
 # If you run "mix test --cover", coverage assets end up here.
 /cover/
 
+# JUnit XML evidence written by junit_formatter on every mix test run
+# (see config/config.exs / .sdlc/verification.yaml). Never commit these.
+/test/reports/
+
 # The directory Mix downloads your dependencies sources to.
 /deps/
 
