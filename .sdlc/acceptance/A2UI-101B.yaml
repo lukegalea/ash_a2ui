@@ -24,7 +24,8 @@ criteria:
       test/ash_a2ui/experience/admin_catalog_contract_test.exs::catalog_declares_the_full_component_vocabulary
 
   - id: A2UI-101B/AC-2
-    given: "an experience v2 core surface (table + form, no advanced features) and config catalog: :admin_v1"
+    given: "an experience v2 core surface (table + form, no advanced features)
+      and config catalog: :admin_v1"
     when: the surface is encoded
     then: >-
       createSurface carries catalogId https://ash-a2ui.dev/catalogs/admin/v1,
@@ -100,7 +101,7 @@ criteria:
       test/ash_a2ui/experience/admin_catalog_fallback_test.exs::advanced_features_stay_basic_composed
 
   - id: A2UI-101B/AC-8
-    given: default configuration (catalog unset or :basic)
+    given: "default configuration (catalog unset or :basic)"
     when: any v2 surface is encoded
     then: >-
       output is byte-identical to the A2UI-101 basic-v2 emission — the admin

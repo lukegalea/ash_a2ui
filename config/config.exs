@@ -42,7 +42,10 @@ if Mix.env() == :test do
     report_dir: "test/reports/junit",
     report_file: "junit_report.xml",
     automatic_create_dir?: true,
-    print_report_file: true
+    print_report_file: true,
+    # Adds file= to each testcase so a report entry traces back to the
+    # acceptance file's `test: path::name` reference.
+    include_filename?: true
 
   # Minimal Phoenix endpoint used only by (future) LiveRenderer tests.
   # Skipped when the Phoenix stack is excluded (NO_PHOENIX=1, see mix.exs):
