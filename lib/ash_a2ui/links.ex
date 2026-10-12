@@ -43,9 +43,10 @@ defmodule AshA2ui.Links do
   `resource`: the linked relationship (with its label calculation, when the
   label is one) or the relationship prefix of an `id_path`.
   """
-  @spec loads(module, [atom], %{atom => AshA2ui.Field.t()}) :: list
+  @spec loads(module, [atom] | nil, %{atom => AshA2ui.Field.t()}) :: list
   def loads(resource, field_names, fields) do
     field_names
+    |> List.wrap()
     |> Enum.map(&Map.get(fields, &1))
     |> Enum.filter(&link_field?/1)
     |> Enum.flat_map(&field_loads(resource, &1))
@@ -107,12 +108,12 @@ defmodule AshA2ui.Links do
   per field here, with `opts[:actor]`/`opts[:tenant]`). `nil` when none of
   the fields link — `row_data/3` then adds nothing.
   """
-  @spec context(module, %{atom => AshA2ui.Field.t()}, [atom], keyword) :: t()
+  @spec context(module, %{atom => AshA2ui.Field.t()}, [atom] | nil, keyword) :: t()
   def context(resource, fields, field_names, opts) do
     resolver_context = %{actor: opts[:actor], tenant: opts[:tenant]}
 
     specs =
-      for name <- Enum.uniq(field_names),
+      for name <- field_names |> List.wrap() |> Enum.uniq(),
           field = Map.get(fields, name),
           link_field?(field),
           spec = spec(resource, field, resolver_context),
