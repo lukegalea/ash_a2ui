@@ -220,7 +220,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
            |> put_report_state(resolved_view)
            |> put_export_state(resolved_view)
            |> put_bulk_state(resolved_view)
-           |> put_experience_state(resolved_view)}
+           |> put_experience_state(resolved_view)
+           |> put_lane_totals(resolved_view)}
       end
 
     %{
@@ -386,7 +387,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       Enum.flat_map(view.context_order, &context_picker_components(view, view.contexts[&1]))
 
     table_sections =
-      Enum.flat_map(view.tables, fn table ->
+      view.tables
+      |> Enum.reject(&AshA2ui.Board.lane?/1)
+      |> Enum.flat_map(fn table ->
         sfx = table_suffix(view, table)
 
         table_components(view, table, sfx) ++
@@ -396,6 +399,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           table_descendants(view, table, sfx) ++
           empty_state_components(view, table, sfx)
       end)
+      |> Kernel.++(board_components(view))
 
     detail_sections = Enum.flat_map(view.details, &detail_components(view, &1))
     report_sections = Enum.flat_map(view.reports, &report_components(view, &1))
@@ -518,9 +522,17 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # dynamic sections, no export controls, no inline cell editing — the
   # contract's advanced-feature list. Everything else (and the form's
   # nested_form case below) falls back to its byte-equal basic-v2 subtree.
+  # Expanded section tables carry `section` (their template's `sections`
+  # key is gone), so both mark a dynamic table set.
   defp admin_core_table?(table) do
-    is_nil(table.sections) and is_nil(table.export) and is_nil(table.editable) and
-      not AshA2ui.Bulk.enabled?(table)
+    is_nil(Map.get(table, :sections)) and is_nil(Map.get(table, :section)) and
+      is_nil(table.export) and is_nil(table.editable) and not AshA2ui.Bulk.enabled?(table)
+  end
+
+  # Board lanes fall back to the basic board composition (the board
+  # container rides on its template's first lane).
+  defp admin_table_section(view, %{component: %{display: :board}} = table, _options) do
+    {board_lane_components(view, table), component_root_children(view, table.component)}
   end
 
   defp admin_table_section(view, table, _options) do
@@ -989,6 +1001,17 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     if AshA2ui.Experience.v2?(), do: "form_slot", else: "form"
   end
 
+  # A board's lanes share one root child, the board container, placed at
+  # its first lane.
+  defp component_root_children(view, %{name: :table, display: :board} = component) do
+    table = Enum.find(view.tables, &(&1.component == component))
+
+    case AshA2ui.Board.template_lanes(view.tables, table.section.template) do
+      [^table | _rest] -> [board_id(table)]
+      _later_lane -> []
+    end
+  end
+
   defp component_root_children(view, %{name: :table} = component) do
     table = Enum.find(view.tables, &(&1.component == component))
     sfx = table_suffix(view, table)
@@ -1130,6 +1153,125 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     else
       []
     end
+  end
+
+  # --- boards (display :board) ---
+
+  # A board renders its template's lanes side by side: the container Column
+  # (`board_<template>`: an h2 heading, the v2 create affordance, and a
+  # horizontal List of lane Columns — a List, not a Row, because the basic
+  # Row cannot wrap or scroll). Each lane Column (`lane<sfx>`) holds a
+  # header Row (the lane heading Text plus its total, bound to
+  # `/_lane_total_<lane>`), the lane's query controls when its query
+  # declares any, the card list, the v2 empty state, the pagination and the
+  # export controls. Card rows, row actions, visibility slots and the query
+  # buttons are the list composition's, under the lane's runtime suffix.
+  defp board_components(view) do
+    view.tables
+    |> Enum.filter(&AshA2ui.Board.lane?/1)
+    |> Enum.flat_map(&board_lane_components(view, &1))
+  end
+
+  defp board_lane_components(view, table) do
+    sfx = table_suffix(view, table)
+    controls? = lane_controls?(table)
+
+    lane = %{
+      "id" => "lane#{sfx}",
+      "component" => "Column",
+      "children" => lane_children(view, table, sfx, controls?)
+    }
+
+    header = [
+      %{
+        "id" => "lane#{sfx}_header",
+        "component" => "Row",
+        "align" => "center",
+        "children" => ["table_heading#{sfx}", "lane#{sfx}_total"]
+      },
+      %{
+        "id" => "table_heading#{sfx}",
+        "component" => "Text",
+        "text" => table.section.label,
+        "variant" => "h3"
+      },
+      %{
+        "id" => "lane#{sfx}_total",
+        "component" => "Text",
+        "text" => %{"path" => AshA2ui.Board.total_path(table)},
+        "variant" => "caption"
+      },
+      %{
+        "id" => "records_list#{sfx}",
+        "component" => "List",
+        "children" => %{"componentId" => "record_row#{sfx}", "path" => table.records_path}
+      }
+    ]
+
+    controls = if controls?, do: query_control_components(view, table, sfx), else: []
+
+    board_container_components(view, table) ++
+      [lane | header] ++
+      controls ++
+      pagination_components(view, table, sfx) ++
+      table_export_components(view, table, sfx) ++
+      table_descendants(view, table, sfx) ++
+      empty_state_components(view, table, sfx)
+  end
+
+  # The container is emitted once, with the template's first lane.
+  defp board_container_components(view, table) do
+    case AshA2ui.Board.template_lanes(view.tables, table.section.template) do
+      [^table | _rest] = lanes ->
+        template = table.section.template
+        board = board_id(table)
+
+        [
+          %{
+            "id" => board,
+            "component" => "Column",
+            "children" =>
+              ["#{board}_heading"] ++
+                create_button_ids(view, table, "_#{template}") ++ ["#{board}_lanes"]
+          },
+          %{
+            "id" => "#{board}_heading",
+            "component" => "Text",
+            "text" => humanize(template),
+            "variant" => "h2"
+          },
+          %{
+            "id" => "#{board}_lanes",
+            "component" => "List",
+            "direction" => "horizontal",
+            "align" => "start",
+            "children" => Enum.map(lanes, &"lane#{table_suffix(view, &1)}")
+          }
+        ] ++ create_button_components(view, table, "_#{template}")
+
+      _later_lane ->
+        []
+    end
+  end
+
+  defp board_id(table), do: "board_#{table.section.template}"
+
+  defp lane_children(view, table, sfx, controls?) do
+    ["lane#{sfx}_header"] ++
+      ((controls? && ["query#{sfx}_controls"]) || []) ++
+      ["records_list#{sfx}"] ++
+      empty_state_ids(view, table, sfx) ++
+      ((table.query && ["query#{sfx}_pagination"]) || []) ++
+      ((table.export && ["export#{sfx}_controls"]) || [])
+  end
+
+  # Lanes show query controls only when there is something to control: a
+  # query used for page size or default sort alone adds no per-lane Card.
+  defp lane_controls?(%{query: nil}), do: false
+
+  defp lane_controls?(%{query: query}) do
+    query.search_fields != [] or query.presets != [] or query.filters != [] or
+      query.range_filters != []
   end
 
   # --- query controls (search / filters / pagination) ---
@@ -3176,6 +3318,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     else
       value["records"] || []
     end
+  end
+
+  # Board lanes carry their total at the reserved /_lane_total_<lane> path
+  # (see AshA2ui.Board); a no-op on surfaces without boards.
+  defp put_lane_totals(value, view) do
+    view.tables
+    |> Enum.filter(&AshA2ui.Board.lane?/1)
+    |> Enum.reduce(value, fn table, acc ->
+      rows = rows_at(value, view, table)
+      state = table.query && get_in(value, ["query", to_string(table.name)])
+
+      Map.put(acc, "_lane_total_#{table.name}", AshA2ui.Board.total_text(length(rows), state))
+    end)
   end
 
   # --- record serialization ---

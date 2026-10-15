@@ -1,0 +1,48 @@
+defmodule AshA2ui.Test.BoardTask do
+  @moduledoc """
+  Fixture resource for boards (sections over an attribute's enumerated
+  values): `status` is an atom with a `one_of` constraint (the board's lane
+  attribute, moved by the `:claim` / `:complete` transitions) and
+  `severity` an `Ash.Type.Enum` (`AshA2ui.Test.Severity`).
+  """
+
+  use Ash.Resource,
+    domain: AshA2ui.Test.Domain,
+    data_layer: Ash.DataLayer.Ets
+
+  ets do
+    private? true
+  end
+
+  attributes do
+    uuid_primary_key :id
+
+    attribute :name, :string, public?: true, allow_nil?: false
+
+    attribute :status, :atom,
+      public?: true,
+      constraints: [one_of: [:open, :claimed, :completed, :archived]],
+      default: :open
+
+    attribute :priority, :atom,
+      public?: true,
+      constraints: [one_of: [:low, :high]],
+      default: :low
+
+    attribute :severity, AshA2ui.Test.Severity, public?: true
+  end
+
+  actions do
+    defaults [:read, :destroy, create: :*, update: :*]
+
+    update :claim do
+      accept []
+      change set_attribute(:status, :claimed)
+    end
+
+    update :complete do
+      accept []
+      change set_attribute(:status, :completed)
+    end
+  end
+end
