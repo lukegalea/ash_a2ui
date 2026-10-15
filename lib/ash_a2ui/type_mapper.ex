@@ -91,8 +91,7 @@ defmodule AshA2ui.TypeMapper do
     end
   end
 
-  defp one_of(constraints) when is_list(constraints), do: Keyword.get(constraints, :one_of) || []
-  defp one_of(_constraints), do: []
+  defp one_of(constraints), do: Keyword.get(constraints, :one_of) || []
 
   # `Ash.Type.Enum.label/1` is nil unless the enum declared explicit labels.
   defp enum_label(type, value) do
