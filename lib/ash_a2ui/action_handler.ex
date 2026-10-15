@@ -85,6 +85,22 @@ defmodule AshA2ui.ActionHandler do
       `""` otherwise) and clearing `/errors`. No Ash write happens — the
       write is the subsequent `"invoke"` from the Modal's confirm button.
 
+    * `"bulk_invoke"` / `"bulk_select"` — bulk actions over a row selection
+      on tables declaring `bulk_actions` (see `AshA2ui.Bulk` and the Bulk
+      Actions topic). `bulk_invoke` takes `%{"action" => name, "component"
+      => table, "records" => rows}`: the action must be in the view's
+      `bulk_actions` (else refused before any read), the `"id"`s of rows
+      whose `"_selected"` is `true` (non-empty, at most one page) are
+      re-read through the table's read action and scope as the actor, ids
+      the read does not return are refused, records failing `visible_when`
+      are skipped, and every remaining record runs through the same
+      dispatch as `invoke` (one call each, no shared transaction). The
+      outcome goes to `/bulk/<table>/result` and the status line (typed v2
+      feedback is `"warning"` on partial success); targets refresh once,
+      and not at all when nothing was written. `bulk_select` takes
+      `%{"component", "selected" => boolean}` and rewrites the table's
+      re-read rows with `"_selected"` set.
+
     * `"select_row"` — context `%{"recordId" => id}`. Returns a single
       `updateDataModel` populating `/form` with the record's field values
       (edit-form population), including `"id"`.
@@ -164,6 +180,7 @@ defmodule AshA2ui.ActionHandler do
   require Ash.Query
 
   alias Ash.Resource.Info, as: ResourceInfo
+  alias AshA2ui.Bulk
   alias AshA2ui.Conditions
   alias AshA2ui.ContextRunner
   alias AshA2ui.Csv
@@ -345,6 +362,15 @@ defmodule AshA2ui.ActionHandler do
       ok -> ok
     end
   end
+
+  defp dispatch("bulk_invoke", context, %{view: view} = env) do
+    case bulk_invoke(context, env) do
+      {:error, messages} -> {:error, messages ++ invoke_feedback(view, messages)}
+      ok -> ok
+    end
+  end
+
+  defp dispatch("bulk_select", context, env), do: bulk_select(context, env)
 
   defp dispatch("prompt", context, %{view: view, ash_opts: ash_opts}) do
     requested = Map.get(context, "action")
@@ -1226,22 +1252,28 @@ defmodule AshA2ui.ActionHandler do
        ) do
     case fetch_record(view, record_id, ash_opts) do
       {:ok, record} ->
-        context = %{
-          record: record,
-          actor: ash_opts[:actor],
-          tenant: ash_opts[:tenant],
-          action: env.invoked,
-          surface_id: view.surface_id,
-          selected: env.selected
-        }
-
         module
-        |> apply(function, [context | List.wrap(extra_args)])
+        |> call_via(function, extra_args, record, env)
         |> via_result(env)
 
       {:error, error} ->
         {:error, error_messages(view, error)}
     end
+  end
+
+  # The delegate call itself, shared by a single-row invoke and each record
+  # of a bulk run: the raw MFA return, no follow-ups.
+  defp call_via(module, function, extra_args, record, %{view: view, ash_opts: ash_opts} = env) do
+    context = %{
+      record: record,
+      actor: ash_opts[:actor],
+      tenant: ash_opts[:tenant],
+      action: env.invoked,
+      surface_id: view.surface_id,
+      selected: env.selected
+    }
+
+    apply(module, function, [context | List.wrap(extra_args)])
   end
 
   defp via_result(:ok, %{invoked: action_name} = env),
@@ -1318,9 +1350,7 @@ defmodule AshA2ui.ActionHandler do
   defp invoke_destroy(action_name, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
     result =
       with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
-        record
-        |> Ash.Changeset.for_destroy(action_name, params, ash_opts)
-        |> Ash.destroy()
+        destroy_record(record, action_name, params, ash_opts)
       end
 
     after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
@@ -1333,15 +1363,31 @@ defmodule AshA2ui.ActionHandler do
   defp invoke_update(action_name, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
     result =
       with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
-        record
-        |> Ash.Changeset.for_update(action_name, params, ash_opts)
-        |> Ash.update()
+        update_record(record, action_name, params, ash_opts)
       end
 
     after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
   end
 
+  defp destroy_record(record, action_name, params, ash_opts) do
+    record
+    |> Ash.Changeset.for_destroy(action_name, params, ash_opts)
+    |> Ash.destroy()
+  end
+
+  defp update_record(record, action_name, params, ash_opts) do
+    record
+    |> Ash.Changeset.for_update(action_name, params, ash_opts)
+    |> Ash.update()
+  end
+
   defp invoke_generic(action, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
+    view
+    |> run_generic(action, record_id, params, ash_opts)
+    |> generic_result(env, "Action #{inspect(to_string(action.name))} completed.")
+  end
+
+  defp run_generic(view, action, record_id, params, ash_opts) do
     view.resource
     |> Ash.ActionInput.for_action(
       action.name,
@@ -1349,7 +1395,6 @@ defmodule AshA2ui.ActionHandler do
       ash_opts
     )
     |> Ash.run_action()
-    |> generic_result(env, "Action #{inspect(to_string(action.name))} completed.")
   end
 
   # --- prompt ----------------------------------------------------------------
@@ -1438,6 +1483,164 @@ defmodule AshA2ui.ActionHandler do
       %{}
     end
   end
+
+  # --- bulk actions ----------------------------------------------------------
+
+  # A bulk run over a row selection (see AshA2ui.Bulk). The allowlist is
+  # checked first, so nothing is read for a refused action; then the target
+  # table, the selection (non-empty, page-capped), the authorized re-read
+  # through the table's read action and scope, and one single-row dispatch
+  # per re-read record (the same `via` / destroy / update / generic calls an
+  # `invoke` makes). Records do not share a transaction: one failure never
+  # rolls back the others. The targets refresh once, as `invoke` does —
+  # and not at all when no record was written.
+  defp bulk_invoke(context, %{view: view} = env) do
+    with {:ok, action_name} <- Bulk.allowed_action(view, context),
+         {:ok, table} <- Bulk.target_table(view, context, action_name, "bulk_invoke"),
+         {:ok, ids} <- Bulk.selection(table, context) do
+      setting = Map.get(view.actions, action_name)
+      env = env |> Map.put(:invoked, action_name) |> Map.put(:setting, setting)
+
+      bulk_run(table, action_name, setting, ids, env)
+    else
+      {:error, text} -> {:error, [status(view, text)]}
+    end
+  end
+
+  defp bulk_run(table, action_name, setting, ids, %{view: view} = env) do
+    conditions = (setting && setting.visible_when) || []
+    loads = Enum.uniq(table.loads ++ Conditions.condition_loads(view.resource, conditions))
+
+    case bulk_records(view, table, ids, loads, env) do
+      {:ok, records} ->
+        outcomes = Enum.map(records, &bulk_outcome(action_name, setting, conditions, &1, env))
+        bulk_messages(table, action_name, length(ids), Bulk.result(length(ids), outcomes), env)
+
+      {:error, error} ->
+        {:error, error_messages(view, error)}
+    end
+  end
+
+  # An unmet require_context means the table shows nothing: every id is
+  # refused, without a read.
+  defp bulk_records(view, table, ids, loads, env) do
+    case ContextRunner.table_scope(view, table, env.selected) do
+      :require_unmet -> {:ok, []}
+      {:ok, scope} -> Bulk.read_selected(table, ids, scope, loads, env.ash_opts)
+    end
+  end
+
+  # visible_when is the single-row predicate (Conditions.visible?/3) applied
+  # to each re-read record; records that fail it are skipped, never written.
+  defp bulk_outcome(action_name, setting, conditions, record, %{view: view} = env) do
+    if Conditions.visible?(view.resource, conditions, record) do
+      action_name
+      |> bulk_dispatch(setting, record, env)
+      |> bulk_record_outcome(record, view)
+    else
+      :skipped
+    end
+  end
+
+  defp bulk_dispatch(_action_name, %{via: {module, function, extra_args}}, record, env)
+       when not is_nil(module) do
+    call_via(module, function, extra_args, record, env)
+  end
+
+  defp bulk_dispatch(action_name, _setting, record, %{view: view, ash_opts: ash_opts}) do
+    case ResourceInfo.action(view.resource, action_name) do
+      %{type: :destroy} -> destroy_record(record, action_name, %{}, ash_opts)
+      %{type: :update} -> update_record(record, action_name, %{}, ash_opts)
+      %{type: :action} = action -> run_generic(view, action, Map.get(record, :id), %{}, ash_opts)
+      _other -> {:error, "cannot run as a bulk action"}
+    end
+  end
+
+  defp bulk_record_outcome(:ok, _record, _view), do: :ok
+  defp bulk_record_outcome({:ok, _result}, _record, _view), do: :ok
+
+  defp bulk_record_outcome({:error, error}, record, view),
+    do: {:failed, bulk_record_id(record), bulk_error_text(view, error)}
+
+  defp bulk_record_outcome(other, record, _view) do
+    {:failed, bulk_record_id(record),
+     "returned an invalid result (expected :ok, {:ok, term}, or {:error, term}): " <>
+       inspect(other)}
+  end
+
+  defp bulk_record_id(record), do: json_value(Map.get(record, :id))
+
+  # One line per failed record: its field errors ("score: must be ..."), or
+  # the status text a single-row invoke would have shown.
+  defp bulk_error_text(_view, text) when is_binary(text), do: text
+
+  defp bulk_error_text(view, error) do
+    case field_errors(error) do
+      [] ->
+        view |> error_messages(error) |> feedback_message()
+
+      fields ->
+        Enum.map_join(fields, "; ", fn {segments, text} ->
+          Enum.map_join(segments, ".", &to_string/1) <> ": " <> text
+        end)
+    end
+  end
+
+  # The run's follow-ups: the /bulk/<table>/result write, then — when at
+  # least one record was written — the standard success follow-ups
+  # (refreshes honoring `refreshes`, status, and typed v2 feedback that is
+  # "warning" on partial success); otherwise an error status and no refresh.
+  defp bulk_messages(table, action_name, selected, result, %{view: view} = env) do
+    text = Bulk.status_text(action_name, selected, result)
+    result_write = update_data_model(view, Bulk.result_path(table), result)
+
+    if result["ok"] == 0 do
+      {:error, [result_write, status(view, text, "ACTION_FAILED")]}
+    else
+      env = Map.put(env, :feedback_kind, Bulk.feedback_kind(selected, result))
+      extra = if view.spec_version == :v1_0, do: %{"result" => result}, else: []
+
+      case success(env, text, extra) do
+        {:ok, messages} -> {:ok, [result_write | messages]}
+        {:error, messages} -> {:error, messages}
+      end
+    end
+  end
+
+  # "Select page" / "Clear": the table is re-read exactly as a refresh
+  # would read it (carried query state, context scope, as the actor) and its
+  # rows are rewritten with "_selected" set — the client's rows are never
+  # echoed back.
+  defp bulk_select(context, %{view: view} = env) do
+    selected = Map.get(context, "selected")
+
+    with {:ok, table} <- Bulk.target_table(view, context, nil, "bulk_select"),
+         :ok <- bulk_selected_flag(selected) do
+      case table_refresh(view, table, env.refresh[table.name], env.ash_opts, env.selected) do
+        {:ok, messages} -> {:ok, Enum.map(messages, &mark_selected(&1, table, selected))}
+        {:error, error} -> {:error, error_messages(view, error)}
+      end
+    else
+      {:error, text} -> {:error, [status(view, text)]}
+    end
+  end
+
+  defp bulk_selected_flag(selected) when is_boolean(selected), do: :ok
+
+  defp bulk_selected_flag(_selected),
+    do: {:error, ~s(Malformed bulk_select action: "selected" must be true or false.)}
+
+  defp mark_selected(
+         %{"updateDataModel" => %{"path" => path, "value" => rows} = update} = message,
+         %{records_path: path} = table,
+         selected
+       )
+       when is_list(rows) do
+    rows = Enum.map(rows, &Map.merge(&1, Bulk.row_data(table, selected)))
+    %{message | "updateDataModel" => %{update | "value" => rows}}
+  end
+
+  defp mark_selected(message, _table, _selected), do: message
 
   # --- select_row ------------------------------------------------------------
 
@@ -2041,9 +2244,11 @@ defmodule AshA2ui.ActionHandler do
   # Text actually binds (the classic /ui/status keeps flowing alongside for
   # programmatic consumers — under v2 nothing renders it). Failures carry
   # the error value through invoke_feedback/2 and task_error_feedback/2.
-  defp success_feedback(%{view: view} = _env, status_text) do
+  # A bulk run passes `:feedback_kind` ("warning" on partial success).
+  defp success_feedback(%{view: view} = env, status_text) do
     if Experience.v2?() do
-      [update_data_model(view, "/ui/feedback", Experience.feedback("success", status_text))]
+      kind = Map.get(env, :feedback_kind, "success")
+      [update_data_model(view, "/ui/feedback", Experience.feedback(kind, status_text))]
     else
       []
     end
@@ -2213,6 +2418,7 @@ defmodule AshA2ui.ActionHandler do
       |> Map.merge(Conditions.row_visibility(view, table, record))
       |> Map.merge(AshA2ui.RowLayout.badge_data(table.component.row_layout, record))
       |> Map.merge(AshA2ui.Links.row_data(links, record, row))
+      |> Map.merge(AshA2ui.Bulk.row_data(table))
     end)
   end
 
