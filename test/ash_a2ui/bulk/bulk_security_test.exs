@@ -12,7 +12,7 @@ defmodule AshA2ui.Bulk.BulkSecurityTest do
   import AshA2ui.Test.BulkHelpers
 
   alias AshA2ui.ActionHandler
-  alias AshA2ui.Test.BulkTasksUI
+  alias AshA2ui.Test.{BulkPresetsUI, BulkTasksUI}
 
   setup do
     reset!()
@@ -94,30 +94,93 @@ defmodule AshA2ui.Bulk.BulkSecurityTest do
           do: task!(title, %{project_id: project.id})
 
     # nothing selected
-    assert {:error, messages} =
+    assert {:error, empty_messages} =
              bulk_invoke(%{
                "action" => "reject",
                "component" => "table",
                "records" => rows(tasks, [])
              })
 
-    assert value_at(messages, "/ui/status") == "Select at least one record first."
+    assert value_at(empty_messages, "/ui/status") == "Select at least one record first."
 
     # six selected on a table whose query caps pages at five
-    assert {:error, messages} =
+    assert {:error, oversized_messages} =
              bulk_invoke(%{
                "action" => "reject",
                "component" => "table",
                "records" => rows(tasks, tasks)
              })
 
-    assert value_at(messages, "/ui/status") =~ ~r/^Too many records selected \(6\)/
+    assert value_at(oversized_messages, "/ui/status") =~ ~r/^Too many records selected \(6\)/
 
-    for messages <- [messages] do
+    for messages <- [empty_messages, oversized_messages] do
+      Enum.each(messages, &assert_valid_server_message/1)
       refute Enum.any?(paths(messages), &String.starts_with?(&1, "/records"))
       refute Enum.any?(paths(messages), &String.starts_with?(&1, "/bulk"))
     end
 
     assert Enum.all?(statuses(tasks), &(&1 == :open))
+  end
+
+  describe "under query presets" do
+    defp preset_invoke(action, rows, query) do
+      context =
+        %{"action" => action, "component" => "table", "records" => rows}
+        |> then(&if(query, do: Map.put(&1, "query", query), else: &1))
+
+      ActionHandler.handle(BulkPresetsUI, envelope("bulk_invoke", context), actor: actor())
+    end
+
+    test "the re-read uses the default preset's read action" do
+      archived = for title <- ["A", "B"], do: task!(title, %{archived: true})
+      active = task!("C")
+      selection = archived ++ [active]
+
+      # no carried query state: the default preset (:archived) applies, so
+      # the archived rows the table shows are written and the active one,
+      # which that view never showed, is refused
+      assert {:ok, messages} = preset_invoke("reject", rows(selection, selection), nil)
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      assert statuses(archived) == [:rejected, :rejected]
+      assert statuses([active]) == [:open]
+
+      assert %{"ok" => 2, "refused" => 1} = value_at(messages, "/bulk/table/result")
+    end
+
+    test "the re-read follows the carried preset, filter included" do
+      approved = task!("A", %{status: :approved})
+      open = task!("B")
+      archived = task!("C", %{archived: true, status: :approved})
+      selection = [approved, open, archived]
+
+      # :approved reads through the table's :active and ANDs status ==
+      # :approved: only the approved active row is re-read
+      assert {:ok, messages} =
+               preset_invoke("reject", rows(selection, selection), %{"preset" => "approved"})
+
+      assert statuses(selection) == [:rejected, :open, :approved]
+      assert %{"ok" => 1, "refused" => 2} = value_at(messages, "/bulk/table/result")
+
+      # an explicit ["archived"] (the ChoicePicker's list form) re-reads
+      # through :archived
+      assert {:ok, _messages} =
+               preset_invoke("reject", rows(selection, selection), %{"preset" => ["archived"]})
+
+      assert statuses(selection) == [:rejected, :open, :rejected]
+    end
+
+    test "an unknown carried preset falls back to the default preset" do
+      archived = task!("A", %{archived: true})
+      active = task!("B")
+
+      assert {:ok, messages} =
+               preset_invoke("reject", rows([archived, active], [archived, active]), %{
+                 "preset" => "no_such_preset"
+               })
+
+      assert statuses([archived, active]) == [:rejected, :open]
+      assert %{"ok" => 1, "refused" => 1} = value_at(messages, "/bulk/table/result")
+    end
   end
 end

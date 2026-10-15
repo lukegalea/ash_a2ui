@@ -7,6 +7,9 @@ defmodule AshA2ui.Verifiers.VerifyBulkActions do
       `bulk_actions`, as it may not declare `row_actions`,
     * every entry names an existing action of type `:update`, `:destroy` or
       `:action` (generic),
+    * a generic bulk action declares a `:record_id` argument (it is how the
+      action learns which selected record each call is for; without it every
+      call would run with the same empty input),
     * a bulk action may not declare `prompt_fields` (one shared prompt for
       many records is not supported),
     * the table's resource has a single primary key (the selection is a
@@ -73,29 +76,36 @@ defmodule AshA2ui.Verifiers.VerifyBulkActions do
 
   defp verify_actions(component, target, module) do
     Enum.reduce_while(component.bulk_actions, :ok, fn name, :ok ->
-      case Info.action(target, name) do
-        %{type: type} when type in @bulk_types ->
-          {:cont, :ok}
-
-        nil ->
-          {:halt,
-           error(
-             module,
-             component,
-             "bulk action #{inspect(name)} does not exist on the resource: every " <>
-               "bulk_actions entry must name an update, destroy or generic action"
-           )}
-
-        %{type: type} ->
-          {:halt,
-           error(
-             module,
-             component,
-             "bulk action #{inspect(name)} is a #{inspect(type)} action: bulk_actions must " <>
-               "name update, destroy or generic actions"
-           )}
+      case verify_action(name, Info.action(target, name)) do
+        :ok -> {:cont, :ok}
+        {:error, message} -> {:halt, error(module, component, message)}
       end
     end)
+  end
+
+  defp verify_action(name, %{type: :action, arguments: arguments}) do
+    if Enum.any?(arguments, &(&1.name == :record_id)) do
+      :ok
+    else
+      {:error,
+       "bulk action #{inspect(name)} is a generic action without a :record_id " <>
+         "argument: a generic bulk action runs once per selected record and must " <>
+         "declare `argument :record_id` to receive that record's id"}
+    end
+  end
+
+  defp verify_action(_name, %{type: type}) when type in @bulk_types, do: :ok
+
+  defp verify_action(name, nil) do
+    {:error,
+     "bulk action #{inspect(name)} does not exist on the resource: every " <>
+       "bulk_actions entry must name an update, destroy or generic action"}
+  end
+
+  defp verify_action(name, %{type: type}) do
+    {:error,
+     "bulk action #{inspect(name)} is a #{inspect(type)} action: bulk_actions must " <>
+       "name update, destroy or generic actions"}
   end
 
   defp verify_no_prompts(component, settings, module) do

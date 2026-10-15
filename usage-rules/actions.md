@@ -172,19 +172,24 @@ end
   list) or it is refused before anything is read. Only the `"id"` of rows
   whose `"_selected"` is `true` is used; an empty selection is an error
   and more than one page (the query's `max_page_size`) is refused.
-- The ids are **re-read** through the table's read action with its context
-  and section scope, as the actor. Ids the read does not return (forged,
-  hidden by policy, out of scope) count as `refused` and never reach the
-  action. Each remaining record is checked against `visible_when`
-  (`skipped` when it fails) and then runs through the same dispatch as
-  `invoke`, one call per record, without a shared transaction.
+- The ids are **re-read** through the table's read under its active query
+  preset (from the carried `"query"`, else `default_preset`: a
+  `read_action` preset swaps the read, a `filter` preset ANDs on) with its
+  context and section scope, as the actor. Ids the read does not return
+  (forged, hidden by policy, out of scope or preset) count as `refused` and
+  never reach the action. Each remaining record is checked against
+  `visible_when` (`skipped` when it fails) and then runs through the same
+  dispatch as `invoke`, one call per record, without a shared transaction.
+- A **generic** bulk action must declare `argument :record_id` (compile-time
+  verified): each call gets the record's id there.
 - The handler writes `/bulk/<table>/result` and a status line, sends
   typed v2 feedback (`"warning"` on partial success, `"error"` when
   nothing was written) and refreshes the targets once. Nothing is
   refreshed when nothing was written.
 - `"bulk_select"` — context `%{"component", "selected" => true | false}`:
   the server re-reads the page and rewrites its rows with `_selected` set
-  (Select page / Clear). Carried rows are never echoed back.
+  (Select page / Clear). Carried rows are never echoed back. On a table
+  without a query, Select page marks at most the bulk cap's worth of rows.
 - No `prompt_fields` on bulk actions, no bulk actions on related tables,
   and bulk actions are not exposed as AG-UI tools. Full contract in the
   bulk-actions topic.

@@ -58,7 +58,7 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
     v1_components = by_id(create["createSurface"]["components"])
     assert_bulk_flat_table(v1_components)
 
-    assert v1_components["bulk_approve_button"]["action"]["event"]["wantResponse"] == true
+    assert v1_components["bulk_action_approve_button"]["action"]["event"]["wantResponse"] == true
     assert Enum.all?(create["createSurface"]["dataModel"]["records"], &(&1["_selected"] == false))
 
     # card rows: the CheckBox leads the card header; a table without bulk
@@ -84,7 +84,7 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
       assert components["record_row_inbox_selected"]["value"] == %{"path" => "_selected"}
 
       assert components["bulk_inbox_toolbar"]["children"] == [
-               "bulk_inbox_reject_button",
+               "bulk_inbox_action_reject_button",
                "bulk_inbox_select_page_button",
                "bulk_inbox_clear_button"
              ]
@@ -137,14 +137,14 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
     assert Enum.at(root_children, toolbar_at + 1) == "records_list"
 
     assert components["bulk_toolbar"]["children"] == [
-             "bulk_approve_button",
-             "bulk_reject_button",
-             "bulk_destroy_button",
+             "bulk_action_approve_button",
+             "bulk_action_reject_button",
+             "bulk_action_destroy_button",
              "bulk_select_page_button",
              "bulk_clear_button"
            ]
 
-    approve = components["bulk_approve_button"]["action"]["event"]
+    approve = components["bulk_action_approve_button"]["action"]["event"]
     assert approve["name"] == "bulk_invoke"
 
     assert %{
@@ -155,7 +155,7 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
              "contexts" => %{"path" => "/context"}
            } = approve["context"]
 
-    assert components["bulk_approve_text"]["text"] == "Approve"
+    assert components["bulk_action_approve_text"]["text"] == "Approve"
 
     for {id, selected} <- [{"bulk_select_page_button", true}, {"bulk_clear_button", false}] do
       event = components[id]["action"]["event"]
@@ -167,5 +167,32 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
                "records" => %{"path" => "/records"}
              } = event["context"]
     end
+  end
+
+  test "a bulk action named like a fixed control gets its own component ids" do
+    defmodule BulkClearUI do
+      @moduledoc false
+      use AshA2ui.Standalone
+
+      a2ui do
+        for_resource AshA2ui.Test.BulkTask
+        surface_id "bulk_clear"
+
+        component :table do
+          fields [:title]
+          bulk_actions [:clear]
+        end
+      end
+    end
+
+    [_create, components_message, _data] = AshA2ui.Info.build_surface(BulkClearUI, actor: actor())
+    components = components_message["updateComponents"]["components"]
+    ids = Enum.map(components, & &1["id"])
+
+    assert ids == Enum.uniq(ids)
+
+    by_id = by_id(components)
+    assert by_id["bulk_action_clear_button"]["action"]["event"]["name"] == "bulk_invoke"
+    assert by_id["bulk_clear_button"]["action"]["event"]["name"] == "bulk_select"
   end
 end

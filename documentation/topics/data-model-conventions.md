@@ -423,7 +423,8 @@ keys).
 Rows of a table that declares `bulk_actions` carry `"_selected"`, bound by
 the row's CheckBox (see [Bulk Actions](bulk-actions.md)). The server writes
 `false` on every row it sends (initial render, refreshes, a successful
-`bulk_invoke`), and `true` or `false` on a `bulk_select` rewrite. The client
+`bulk_invoke`), and `true` or `false` on a `bulk_select` rewrite (on a
+table without a query, "Select page" marks at most the bulk cap). The client
 toggles it in place; `bulk_invoke` reads only `"id"` and `"_selected"` from
 the carried rows, and every id is re-read through an authorized, scoped read
 before anything is written. Rows of tables without bulk actions carry no

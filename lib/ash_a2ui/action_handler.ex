@@ -1201,20 +1201,21 @@ defmodule AshA2ui.ActionHandler do
     end
   end
 
-  # The direct path dispatches on the mapped Ash action's type: destroy and
-  # update get dedicated invokers, generic actions the parameterized one.
-  defp dispatch_by_action_type(view, action_name, record_id, params, env) do
-    case ResourceInfo.action(view.resource, action_name) do
-      %{type: :destroy} ->
-        invoke_destroy(action_name, record_id, params, env)
+  # The direct path runs the mapped Ash action through run_direct/6 (shared
+  # with bulk runs), then renders writes through after_write and generic
+  # results through generic_result.
+  defp dispatch_by_action_type(view, action_name, record_id, params, %{ash_opts: ash_opts} = env) do
+    fetch = fn -> fetch_record(view, record_id, ash_opts) end
+    completed = "Action #{inspect(to_string(action_name))} completed."
 
-      %{type: :update} ->
-        invoke_update(action_name, record_id, params, env)
+    case run_direct(view, action_name, record_id, fetch, params, ash_opts) do
+      {:write, result} ->
+        after_write(result, env, completed)
 
-      %{type: :action} = action ->
-        invoke_generic(action, record_id, params, env)
+      {:generic, result} ->
+        generic_result(result, env, completed)
 
-      _other ->
+      :not_invocable ->
         {:error,
          [
            status(
@@ -1222,6 +1223,33 @@ defmodule AshA2ui.ActionHandler do
              "Action #{inspect(action_name)} cannot be invoked as a row action."
            )
          ]}
+    end
+  end
+
+  # One direct (non-`via`) call of `action_name`, shared by a single-row
+  # invoke and each record of a bulk run so both dispatch identically:
+  # destroy and update actions run on the record `fetch` yields (invoke
+  # fetches it by id, a bulk run passes its re-read record), generic actions
+  # get the record id. Returns the raw Ash result tagged `:write` or
+  # `:generic`, or `:not_invocable` for any other action type.
+  defp run_direct(view, action_name, record_id, fetch, params, ash_opts) do
+    case ResourceInfo.action(view.resource, action_name) do
+      %{type: :destroy} ->
+        {:write,
+         with(
+           {:ok, record} <- fetch.(),
+           do: destroy_record(record, action_name, params, ash_opts)
+         )}
+
+      %{type: :update} ->
+        {:write,
+         with({:ok, record} <- fetch.(), do: update_record(record, action_name, params, ash_opts))}
+
+      %{type: :action} = action ->
+        {:generic, run_generic(view, action, record_id, params, ash_opts)}
+
+      _other ->
+        :not_invocable
     end
   end
 
@@ -1347,44 +1375,20 @@ defmodule AshA2ui.ActionHandler do
 
   defp prompt_params(_view, _setting, _action_name, _values), do: %{}
 
-  defp invoke_destroy(action_name, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
-    result =
-      with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
-        destroy_record(record, action_name, params, ash_opts)
-      end
-
-    after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
-  end
-
-  # An `invoke` on an update-type row action runs *that* action on the
-  # identified record — with empty params (touch-style actions whose changes
-  # come from `change` blocks / defaults), or with the cast prompt values
-  # when the action declares prompt_fields. Never the form's update action.
-  defp invoke_update(action_name, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
-    result =
-      with {:ok, record} <- fetch_record(view, record_id, ash_opts) do
-        update_record(record, action_name, params, ash_opts)
-      end
-
-    after_write(result, env, "Action #{inspect(to_string(action_name))} completed.")
-  end
-
   defp destroy_record(record, action_name, params, ash_opts) do
     record
     |> Ash.Changeset.for_destroy(action_name, params, ash_opts)
     |> Ash.destroy()
   end
 
+  # An update-type row action runs *that* action on the identified record —
+  # with empty params (touch-style actions whose changes come from `change`
+  # blocks / defaults), or with the cast prompt values when the action
+  # declares prompt_fields. Never the form's update action.
   defp update_record(record, action_name, params, ash_opts) do
     record
     |> Ash.Changeset.for_update(action_name, params, ash_opts)
     |> Ash.update()
-  end
-
-  defp invoke_generic(action, record_id, params, %{view: view, ash_opts: ash_opts} = env) do
-    view
-    |> run_generic(action, record_id, params, ash_opts)
-    |> generic_result(env, "Action #{inspect(to_string(action.name))} completed.")
   end
 
   defp run_generic(view, action, record_id, params, ash_opts) do
@@ -1522,11 +1526,17 @@ defmodule AshA2ui.ActionHandler do
   end
 
   # An unmet require_context means the table shows nothing: every id is
-  # refused, without a read.
+  # refused, without a read. The re-read runs under the table's active
+  # preset (the carried query state, parsed like a refresh's, else the
+  # default preset), so a preset that swaps the read action — a "deleted"
+  # view, say — re-reads the rows it showed.
   defp bulk_records(view, table, ids, loads, env) do
     case ContextRunner.table_scope(view, table, env.selected) do
-      :require_unmet -> {:ok, []}
-      {:ok, scope} -> Bulk.read_selected(table, ids, scope, loads, env.ash_opts)
+      :require_unmet ->
+        {:ok, []}
+
+      {:ok, scope} ->
+        Bulk.read_selected(table, env.refresh[table.name], ids, scope, loads, env.ash_opts)
     end
   end
 
@@ -1548,11 +1558,16 @@ defmodule AshA2ui.ActionHandler do
   end
 
   defp bulk_dispatch(action_name, _setting, record, %{view: view, ash_opts: ash_opts}) do
-    case ResourceInfo.action(view.resource, action_name) do
-      %{type: :destroy} -> destroy_record(record, action_name, %{}, ash_opts)
-      %{type: :update} -> update_record(record, action_name, %{}, ash_opts)
-      %{type: :action} = action -> run_generic(view, action, Map.get(record, :id), %{}, ash_opts)
-      _other -> {:error, "cannot run as a bulk action"}
+    case run_direct(
+           view,
+           action_name,
+           Map.get(record, :id),
+           fn -> {:ok, record} end,
+           %{},
+           ash_opts
+         ) do
+      {_kind, result} -> result
+      :not_invocable -> {:error, "cannot run as a bulk action"}
     end
   end
 
@@ -1617,8 +1632,12 @@ defmodule AshA2ui.ActionHandler do
     with {:ok, table} <- Bulk.target_table(view, context, nil, "bulk_select"),
          :ok <- bulk_selected_flag(selected) do
       case table_refresh(view, table, env.refresh[table.name], env.ash_opts, env.selected) do
-        {:ok, messages} -> {:ok, Enum.map(messages, &mark_selected(&1, table, selected))}
-        {:error, error} -> {:error, error_messages(view, error)}
+        {:ok, messages} ->
+          messages = Enum.map(messages, &mark_selected(&1, table, selected))
+          {:ok, messages ++ capped_selection_status(view, table, messages, selected)}
+
+        {:error, error} ->
+          {:error, error_messages(view, error)}
       end
     else
       {:error, text} -> {:error, [status(view, text)]}
@@ -1630,13 +1649,30 @@ defmodule AshA2ui.ActionHandler do
   defp bulk_selected_flag(_selected),
     do: {:error, ~s(Malformed bulk_select action: "selected" must be true or false.)}
 
+  defp capped_selection_status(view, table, messages, selected) do
+    count =
+      Enum.find_value(messages, 0, fn
+        %{"updateDataModel" => %{"path" => path, "value" => rows}}
+        when path == table.records_path and is_list(rows) ->
+          length(rows)
+
+        _other ->
+          nil
+      end)
+
+    case Bulk.capped_selection_text(table, count, selected) do
+      nil -> []
+      text -> [status(view, text)]
+    end
+  end
+
   defp mark_selected(
          %{"updateDataModel" => %{"path" => path, "value" => rows} = update} = message,
          %{records_path: path} = table,
          selected
        )
        when is_list(rows) do
-    rows = Enum.map(rows, &Map.merge(&1, Bulk.row_data(table, selected)))
+    rows = Bulk.mark_rows(table, rows, selected)
     %{message | "updateDataModel" => %{update | "value" => rows}}
   end
 

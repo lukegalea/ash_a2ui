@@ -163,11 +163,12 @@ end
 - **Bulk actions are a second allowlist.** `bulk_actions [:approve]` on a
   `:table` adds a row CheckBox (row key `_selected`) and a toolbar; the
   `"bulk_invoke"` action re-reads the selected ids through the table's
-  read action and scope as the actor, then runs the action once per record
-  through the same dispatch as `invoke` (`visible_when`, `via`, `refreshes`
-  apply per record; no shared transaction). Update, destroy or generic
-  actions only; no `prompt_fields`; not on related tables (compile-time
-  verified). One page per run. Keep the list as small as `row_actions` —
+  read under its active query preset and scope as the actor, then runs the
+  action once per record through the same dispatch as `invoke`
+  (`visible_when`, `via`, `refreshes` apply per record; no shared
+  transaction). Update, destroy or generic actions only (a generic one
+  must declare `argument :record_id`); no `prompt_fields`; not on related
+  tables (compile-time verified). One page per run. Keep the list as small as `row_actions` —
   see the bulk-actions topic and `ash_a2ui:actions`.
 - A row action whose click must run through a **host-provided function**
   instead of the mapped Ash action (e.g. an engine facade that completes an

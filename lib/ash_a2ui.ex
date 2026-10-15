@@ -919,10 +919,12 @@ defmodule AshA2ui do
         Each row gets a CheckBox bound to its reserved `_selected` key, and a
         toolbar above the list carries one button per bulk action plus
         "Select page" and "Clear". The server re-reads the selected ids
-        through the table's read action and scope, as the actor, and runs the
-        action once per record; `visible_when`, `via` and `refreshes` on the
-        action's `action` entity apply per record. No `prompt_fields`; not on
-        related tables. See the Bulk Actions topic.
+        through the table's read under its active query preset, with its
+        scope, as the actor, and runs the action once per record;
+        `visible_when`, `via` and `refreshes` on the action's `action` entity
+        apply per record. A generic bulk action must declare a `:record_id`
+        argument. No `prompt_fields`; not on related tables. See the Bulk
+        Actions topic.
         """
       ],
       query: [

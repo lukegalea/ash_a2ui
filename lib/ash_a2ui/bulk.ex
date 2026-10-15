@@ -31,9 +31,12 @@ defmodule AshA2ui.Bulk do
       `true`. Nothing else in the carried rows is read.
     * An empty selection is an error. A selection larger than the table's
       page size cap (`cap/1`) is refused.
-    * Ids are re-read through the table's read action with the table's
-      context and section scope, as the actor. Ids the read does not return
-      are counted as `refused` and are never passed to an action.
+    * Ids are re-read through the table's read under its active query
+      preset (the preset's `read_action`, or the table's, with a `filter`
+      preset's conditions ANDed on — see `AshA2ui.QueryRunner.preset_read/3`)
+      and the table's context and section scope, as the actor. Ids the read
+      does not return are counted as `refused` and are never passed to an
+      action.
   """
 
   import Ash.Expr
@@ -42,6 +45,7 @@ defmodule AshA2ui.Bulk do
 
   alias Ash.Resource.Info, as: ResourceInfo
   alias AshA2ui.ContextRunner
+  alias AshA2ui.QueryRunner
 
   @selected_key "_selected"
 
@@ -215,25 +219,66 @@ defmodule AshA2ui.Bulk do
   end
 
   @doc """
-  The authorized, scoped re-read of the selected ids: the table's read
-  action as the actor (`ash_opts`), with the table's context and section
-  scope (`ContextRunner.table_scope/3`) and `<primary key> in ids`. Ids
-  that do not cast to the primary key's type are dropped before the read
-  (they are counted as refused like any id the read does not return).
+  The rows a `bulk_select` writes back: `"_selected"` set to `selected` on
+  every row, except that "Select page" marks at most `cap/1` rows (in
+  order), since a bulk run refuses a larger selection. Only a table without
+  a query can show more rows than its cap: it reads every row at once.
   """
-  @spec read_selected(map, [term], [{atom, term}], list, keyword) ::
-          {:ok, [Ash.Resource.record()]} | {:error, term}
-  def read_selected(table, ids, scope, loads, ash_opts) do
+  @spec mark_rows(map, [map], boolean) :: [map]
+  def mark_rows(table, rows, selected) do
+    cap = cap(table)
+
+    rows
+    |> Enum.with_index()
+    |> Enum.map(fn {row, index} -> Map.merge(row, row_data(table, selected and index < cap)) end)
+  end
+
+  @doc """
+  The status line of a "Select page" that marked only the first `cap/1` of
+  `count` rows, or `nil` when every row was marked.
+  """
+  @spec capped_selection_text(map, non_neg_integer, boolean) :: String.t() | nil
+  def capped_selection_text(table, count, true = _selected) do
+    cap = cap(table)
+
+    if count > cap do
+      "Selected the first #{cap} of #{count} records: a bulk action runs on at most " <>
+        "#{cap} records."
+    end
+  end
+
+  def capped_selection_text(_table, _count, _selected), do: nil
+
+  @doc """
+  The authorized, scoped re-read of the selected ids, as the actor
+  (`ash_opts`): the read the table performs under the active preset of
+  `params` (the handler's parsed carried query state, falling back to the
+  query's `default_preset`; `nil` for a table without a query), see
+  `AshA2ui.QueryRunner.preset_read/3`, with the table's context and section
+  scope (`ContextRunner.table_scope/3`) and `<primary key> in ids`. Search,
+  filters and paging are not applied: they narrow what the user looks at,
+  while the preset decides which read the rows come from. Ids that do not
+  cast to the primary key's type are dropped before the read (they are
+  counted as refused like any id the read does not return).
+  """
+  @spec read_selected(
+          map,
+          QueryRunner.params() | nil,
+          [term],
+          [{atom, term}],
+          list,
+          keyword
+        ) :: {:ok, [Ash.Resource.record()]} | {:error, term}
+  def read_selected(table, params, ids, scope, loads, ash_opts) do
     case castable_ids(table.resource, ids) do
       [] ->
         {:ok, []}
 
       cast ->
         [key] = ResourceInfo.primary_key(table.resource)
-        ash_opts = Keyword.put(ash_opts, :domain, ResourceInfo.domain(table.resource))
 
-        table.resource
-        |> Ash.Query.for_read(table.read_action, %{}, ash_opts)
+        table
+        |> QueryRunner.preset_read(params, ash_opts)
         |> ContextRunner.apply_scope(scope)
         |> Ash.Query.filter(^ref(key) in ^cast)
         |> Ash.Query.load(loads)
@@ -316,12 +361,14 @@ defmodule AshA2ui.Bulk do
     records = %{"path" => table.records_path}
     component = to_string(table.name)
 
+    # Action buttons are namespaced under "_action_" so an action named
+    # :select_page or :clear cannot collide with the fixed controls.
     actions =
       Enum.map(table.bulk_actions, fn action ->
         context =
           bind.(%{"action" => to_string(action), "component" => component, "records" => records})
 
-        button("#{base}_#{action}", humanize(action), "bulk_invoke", context)
+        button("#{base}_action_#{action}", humanize(action), "bulk_invoke", context)
       end)
 
     selects =

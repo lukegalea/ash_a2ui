@@ -98,6 +98,26 @@ defmodule AshA2ui.Bulk.BulkVerifierTest do
       end)
 
     assert missing =~ ~r/bulk action :no_such_action does not exist on the resource/
+
+    generic_without_record_id =
+      capture_io(:stderr, fn ->
+        defmodule BulkGenericWithoutRecordId do
+          @moduledoc false
+          use AshA2ui.Standalone
+
+          a2ui do
+            for_resource AshA2ui.Test.BulkTask
+
+            component :table do
+              fields [:title]
+              bulk_actions [:ping]
+            end
+          end
+        end
+      end)
+
+    assert generic_without_record_id =~
+             ~r/bulk action :ping is a generic action without a :record_id argument: a generic bulk action runs once per selected record/
   end
 
   test "a valid bulk table with per-record visible_when compiles cleanly" do
@@ -112,7 +132,7 @@ defmodule AshA2ui.Bulk.BulkVerifierTest do
 
             component :table do
               fields [:title, :status]
-              bulk_actions [:approve, :destroy]
+              bulk_actions [:approve, :destroy, :stamp]
             end
 
             action :approve do

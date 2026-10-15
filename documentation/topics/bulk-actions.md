@@ -43,6 +43,10 @@ Compile-time rules (`AshA2ui.Verifiers.VerifyBulkActions`):
 - Only `:table` components may declare `bulk_actions`.
 - Every entry names an existing update, destroy or generic action. Read and
   create actions are refused.
+- A generic bulk action must declare a `:record_id` argument. Each call
+  receives the id of the record it runs for; without the argument every
+  call would run with the same empty input and never learn which record it
+  is for.
 - A bulk action may not declare `prompt_fields`. One shared prompt for many
   records is not supported.
 - A related table (`resource` set to another resource) may not declare
@@ -60,8 +64,11 @@ v1.0 and with any basic-catalog renderer:
   (`record_row<sfx>_selected`); on `row_layout` cards it leads the card
   header.
 - Above the list, a toolbar Row (`bulk<sfx>_toolbar`) holds one Button per
-  bulk action (`bulk<sfx>_<action>_button`, labelled with the humanized
-  action name), then **Select page** and **Clear**.
+  bulk action (`bulk<sfx>_action_<action>_button`, labelled with the
+  humanized action name), then **Select page** (`bulk<sfx>_select_page_button`)
+  and **Clear** (`bulk<sfx>_clear_button`). The `_action_` segment keeps an
+  action named `:clear` or `:select_page` from colliding with the fixed
+  controls.
 
 `<sfx>` is the multi-table suffix (`""` on a single-table surface,
 `"_<table>"` otherwise), as everywhere else.
@@ -112,15 +119,23 @@ contexts, as on every write action. The handler then:
    error. A selection larger than one page is refused: the cap is the
    table query's `max_page_size`, otherwise the read action's pagination
    `default_limit`, otherwise 100.
-3. Re-reads those ids through the table's read action, with the table's
-   context and section scope, as the actor. Ids the read does not return
-   are counted as `refused` and never reach an action. That covers a forged
-   id, an id the actor's policies hide, an id outside the selected context
-   or lane, and an id that does not cast to the primary key's type.
+3. Re-reads those ids through the read the table performs under its
+   active query preset, with the table's context and section scope, as the
+   actor. The preset comes from the carried `"query"` state, parsed as a
+   refresh parses it (a missing or invalid state means the query's
+   `default_preset`). A `read_action` preset re-reads through that action,
+   so bulk buttons work on a "deleted" view; a `filter` preset ANDs its
+   conditions on. Search, filters and paging are not re-applied: they
+   narrow what the user looks at, the preset decides which read the rows
+   come from. Ids the read does not return are counted as `refused` and
+   never reach an action. That covers a forged id, an id the actor's
+   policies hide, an id outside the selected context, lane or preset, and
+   an id that does not cast to the primary key's type.
 4. Checks each re-read record against the action's `visible_when`, with the
    same predicate a single-row `invoke` uses. Failures count as `skipped`.
 5. Runs each remaining record through the same dispatch as a single-row
-   `invoke` (`via`, destroy, update or generic), one call per record.
+   `invoke` (`via`, destroy, update or generic), one call per record. A
+   generic action receives the record's id as its `:record_id` argument.
    Records do not share a transaction, so one failure does not roll back
    the others. Policies, changes, hooks and notifications behave exactly
    as they do for a single click.
@@ -144,6 +159,12 @@ same `"query"`/`"contexts"` bindings. The server re-reads the table exactly
 as a refresh would (current query state, context scope, as the actor) and
 rewrites its rows with `_selected` set. It never echoes the carried rows
 back, so a forged row cannot appear in the table.
+
+A table with a query shows at most one page, so Select page marks every
+row. A table without a query reads all its rows at once; there Select page
+marks only the first rows up to the bulk cap (step 2 above) and says so in
+the status line ("Selected the first 100 of 140 records: ..."), so the
+selection it leaves is one a bulk run accepts.
 
 ## Limits
 

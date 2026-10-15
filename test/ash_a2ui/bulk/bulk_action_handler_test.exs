@@ -13,7 +13,7 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
   import AshA2ui.Test.BulkHelpers
 
   alias AshA2ui.ActionHandler
-  alias AshA2ui.Test.BulkTasksUI
+  alias AshA2ui.Test.{BulkCardsUI, BulkPresetsUI, BulkTasksUI}
 
   setup do
     Application.put_env(:ash_a2ui, :experience_version, 2)
@@ -200,5 +200,87 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
 
     # nothing was written
     assert Enum.all?(visible, &(reload!(&1).status == :open))
+  end
+
+  test "a generic bulk action runs once per record with its record_id" do
+    [a, b, c] = for title <- ["A", "B", "C"], do: task!(title, %{archived: true})
+
+    assert {:ok, messages} =
+             ActionHandler.handle(
+               BulkPresetsUI,
+               envelope("bulk_invoke", %{
+                 "action" => "stamp",
+                 "component" => "table",
+                 "records" => rows([a, b, c], [a, c])
+               }),
+               actor: actor()
+             )
+
+    Enum.each(messages, &assert_valid_server_message/1)
+
+    # :stamp sets the score of the record its :record_id names: each call
+    # got its own record, the unselected one was not touched
+    assert Enum.map([a, b, c], &reload!(&1).score) == [7, 0, 7]
+    assert %{"ok" => 2, "refused" => 0} = value_at(messages, "/bulk/table/result")
+  end
+
+  describe "a table without a query" do
+    defp inbox_table do
+      BulkCardsUI
+      |> AshA2ui.ResolvedView.resolve()
+      |> Map.fetch!(:tables)
+      |> Enum.find(&(&1.name == :inbox))
+    end
+
+    defp inbox_rows(messages) do
+      Enum.find_value(messages, fn
+        %{"updateDataModel" => %{"path" => path, "value" => rows}}
+        when is_list(rows) and path != "/records" ->
+          if String.contains?(path, "inbox"), do: rows
+
+        _other ->
+          nil
+      end)
+    end
+
+    test "select page marks at most the bulk cap and the run is accepted" do
+      # the inbox reads through BulkTask's default :read, whose pagination
+      # max_page_size (Ash's default, 250) is the bulk cap: one row more
+      cap = AshA2ui.Bulk.cap(inbox_table())
+      assert cap == 250
+
+      for n <- 1..(cap + 1), do: task!("Task #{String.pad_leading(to_string(n), 3, "0")}")
+
+      assert {:ok, messages} =
+               ActionHandler.handle(
+                 BulkCardsUI,
+                 envelope("bulk_select", %{"component" => "inbox", "selected" => true}),
+                 actor: actor()
+               )
+
+      Enum.each(messages, &assert_valid_server_message/1)
+
+      rows = inbox_rows(messages)
+      assert length(rows) == cap + 1
+      assert Enum.count(rows, & &1["_selected"]) == cap
+      assert rows |> Enum.take(cap) |> Enum.all?(& &1["_selected"])
+
+      assert value_at(messages, "/ui/status") ==
+               "Selected the first 250 of 251 records: a bulk action runs on at most 250 records."
+
+      # the selection the page now holds is one a bulk run accepts
+      assert {:ok, messages} =
+               ActionHandler.handle(
+                 BulkCardsUI,
+                 envelope("bulk_invoke", %{
+                   "action" => "reject",
+                   "component" => "inbox",
+                   "records" => rows
+                 }),
+                 actor: actor()
+               )
+
+      assert %{"ok" => 250, "refused" => 0} = value_at(messages, "/bulk/inbox/result")
+    end
   end
 end
