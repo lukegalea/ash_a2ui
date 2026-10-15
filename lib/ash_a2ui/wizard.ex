@@ -40,7 +40,8 @@ defmodule AshA2ui.Wizard do
   over `/ui/wizard/<step>_visible`, and a `form_wizard_nav` Row holding the
   Back (`wizard_back`) and Next (`wizard_next`) buttons behind their nav
   sentinels. A review step renders `form_review_<field>` caption/value rows
-  bound to `/form/<field>`. Under experience v1 the submit button sits behind
+  bound to `/form/<field>` (`/select/<field>/label` for a searchable
+  select). Under experience v1 the submit button sits behind
   `/ui/wizard/nav/submit_visible`; under v2 the panel's
   `/ui/panel/submit_visible` gate already hides it before the last step, and
   the Next button's label binds `/ui/panel/primary_label` (which reads
@@ -105,7 +106,9 @@ defmodule AshA2ui.Wizard do
   @doc """
   Filters a client-carried `/form` map down to the form's own fields
   (string keys compared against the compile-time field names). Unknown
-  keys are dropped before anything is cast; a non-map yields `%{}`.
+  keys are dropped before anything is cast; a non-map yields `%{}`. The
+  handler applies it on a stepped form's `wizard_next` and `submit_form`
+  alike (one shared changeset path).
   """
   @spec form_values(map, term) :: map
   def form_values(view, values) when is_map(values) do
@@ -278,8 +281,10 @@ defmodule AshA2ui.Wizard do
     ] ++ description ++ body
   end
 
-  # The review summary: one caption/value pair per form field, bound to the
-  # carried /form values (read-only Texts).
+  # The review summary: one caption/value pair per form field (read-only
+  # Texts). A searchable select shows the picked record's label from
+  # /select/<field>/label, which option_select and the record population
+  # already maintain; every other field binds its carried /form value.
   defp review_rows(view, form) do
     rows =
       Enum.flat_map(form.fields, fn field ->
@@ -300,12 +305,19 @@ defmodule AshA2ui.Wizard do
           %{
             "id" => "#{base}_value",
             "component" => "Text",
-            "text" => %{"path" => "/form/#{field}"}
+            "text" => %{"path" => review_path(view, field)}
           }
         ]
       end)
 
     {Enum.map(form.fields, &"form_review_#{&1}"), rows}
+  end
+
+  defp review_path(view, field) do
+    case view.selects[field] do
+      %{search_fields: [_ | _]} -> "/select/#{field}/label"
+      _not_searchable -> "/form/#{field}"
+    end
   end
 
   defp nav_components(_view) do

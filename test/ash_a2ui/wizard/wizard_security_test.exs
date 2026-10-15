@@ -1,7 +1,8 @@
 defmodule AshA2ui.Wizard.WizardSecurityTest do
   @moduledoc """
   A2UI-106/AC-7: client-carried wizard state is re-validated server-side —
-  /form keys outside the form's fields never reach the changeset, the
+  /form keys outside the form's fields never reach the changeset (on Next
+  and on the final submit_form alike), the
   carried index is clamped (or refused when it is not an integer), and no
   atom is created from client input.
   """
@@ -33,6 +34,23 @@ defmodule AshA2ui.Wizard.WizardSecurityTest do
     end)
   end
 
+  # The attributes of the first changeset the probe reported; any further
+  # reports from the same call (an atomic update re-runs the change) are
+  # drained so the next call starts from an empty mailbox.
+  defp probe! do
+    assert_received {:wizard_probe, attributes, _arguments}
+    drain_probe()
+    attributes
+  end
+
+  defp drain_probe do
+    receive do
+      {:wizard_probe, _attributes, _arguments} -> drain_probe()
+    after
+      0 -> :ok
+    end
+  end
+
   defp unique_key, do: "wizard_probe_key_#{System.unique_integer([:positive])}"
 
   @tag ac: "A2UI-106/AC-7"
@@ -59,6 +77,45 @@ defmodule AshA2ui.Wizard.WizardSecurityTest do
     # no atom was created for the unknown key
     assert_raise ArgumentError, fn -> String.to_existing_atom(unknown) end
     assert Ash.read!(Enrollment, authorize?: false) == []
+  end
+
+  @tag ac: "A2UI-106/AC-7"
+  test "submit_form on a stepped form casts the same filtered values Next validated" do
+    values = %{
+      "name" => "Ada",
+      "email" => "ada@example.com",
+      "team" => "Core",
+      # accepted by the Ash action, but not a field of the form
+      "internal_note" => "smuggled"
+    }
+
+    assert {:ok, _messages} = handle("wizard_next", %{"values" => values, "index" => 1})
+    next_attributes = probe!()
+
+    assert {:ok, _messages} = handle("submit_form", %{"values" => values})
+    submit_attributes = probe!()
+
+    # Next and Submit built the changeset from the same values
+    assert submit_attributes == next_attributes
+    refute Map.has_key?(submit_attributes, :internal_note)
+
+    assert [record] = Ash.read!(Enrollment, authorize?: false)
+    assert record.name == "Ada"
+    assert record.internal_note == nil
+
+    # the same holds for an edit
+    edit = Map.put(values, "name", "Grace")
+
+    assert {:ok, _messages} =
+             handle("wizard_next", %{"values" => edit, "index" => 1, "recordId" => record.id})
+
+    next_attributes = probe!()
+
+    assert {:ok, _messages} = handle("submit_form", %{"values" => edit, "recordId" => record.id})
+    submit_attributes = probe!()
+
+    assert submit_attributes == next_attributes
+    assert [%{name: "Grace", internal_note: nil}] = Ash.read!(Enrollment, authorize?: false)
   end
 
   @tag ac: "A2UI-106/AC-7"

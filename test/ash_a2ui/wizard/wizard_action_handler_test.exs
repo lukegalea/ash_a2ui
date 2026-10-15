@@ -33,8 +33,10 @@ defmodule AshA2ui.Wizard.WizardActionHandlerTest do
     }
   end
 
-  defp handle(name, context) do
-    {tag, messages} = ActionHandler.handle(Enrollment, envelope(name, context))
+  defp handle(name, context), do: handle_on(Enrollment, name, context)
+
+  defp handle_on(module, name, context) do
+    {tag, messages} = ActionHandler.handle(module, envelope(name, context))
     Enum.each(messages, &assert_valid_server_message/1)
     {tag, messages}
   end
@@ -204,5 +206,50 @@ defmodule AshA2ui.Wizard.WizardActionHandlerTest do
 
     assert {:ok, messages} = handle("submit_form", edit)
     assert value_at(messages, "/ui/wizard")["index"] == 0
+  end
+
+  @tag ac: "A2UI-106/AC-6"
+  test "a v1 row select resets the step; a v2 row action leaves the open task alone" do
+    record =
+      Ash.create!(Enrollment, %{name: "Ada", email: "ada@example.com", team: "Core"},
+        authorize?: false
+      )
+
+    # v1: select_row loads the record into the form and restarts the wizard
+    assert {:ok, messages} = handle("select_row", %{"recordId" => record.id})
+    assert value_at(messages, "/form")["name"] == "Ada"
+    assert value_at(messages, "/ui/wizard")["index"] == 0
+    assert List.last(paths(messages)) == "/ui/wizard"
+
+    # v1: any other success clears /form, and the wizard restarts with it
+    other = Ash.create!(Enrollment, %{name: "Bob", team: "Ops"}, authorize?: false)
+
+    assert {:ok, messages} =
+             handle_on(AshA2ui.Test.EnrollmentRowActionsUI, "invoke", %{
+               "action" => "destroy",
+               "recordId" => other.id
+             })
+
+    assert value_at(messages, "/ui/wizard")["index"] == 0
+
+    # v2: a row action is not the task. The open task's step, panel label
+    # and submit gate are left as they are (nothing moves /ui/wizard
+    # without also rewriting the label).
+    Application.put_env(:ash_a2ui, :experience_version, 2)
+
+    assert {:ok, messages} =
+             handle_on(AshA2ui.Test.EnrollmentRowActionsUI, "invoke", %{
+               "action" => "destroy",
+               "recordId" => record.id
+             })
+
+    assert records() == []
+    refute "/ui/wizard" in paths(messages)
+    refute "/ui/panel/primary_label" in paths(messages)
+
+    # v2: select_row is not a task open either
+    kept = Ash.create!(Enrollment, %{name: "Cy", team: "Ops"}, authorize?: false)
+    assert {:ok, messages} = handle("select_row", %{"recordId" => kept.id})
+    refute "/ui/wizard" in paths(messages)
   end
 end

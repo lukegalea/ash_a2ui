@@ -51,18 +51,25 @@ The compiler checks the declaration (`AshA2ui.Verifiers.VerifySteps`):
 
 | Action | Context | What happens |
 |---|---|---|
-| `"wizard_next"` | `{"values": /form, "recordId": /form/id, "index": /ui/wizard/index}` | Builds the **full** changeset (`Ash.Changeset.for_create`, or `for_update` on the record read through the surface's read action) over the carried values, without submitting it. Errors on fields of the current or an earlier step go to `/errors/<field>` and the index stays; otherwise `/errors` clears and the index advances. Nothing is written to the data layer. |
+| `"wizard_next"` | `{"values": /form, "recordId": /form/id, "index": /ui/wizard/index}` | Builds the **full** changeset over the carried values, through the same code path `submit_form` writes with (`Ash.Changeset.for_create`, or `for_update` on the record read through the surface's read action), without submitting it. Errors on fields of the current or an earlier step go to `/errors/<field>` and the index stays; otherwise `/errors` clears and the index advances. Nothing is written to the data layer. |
 | `"wizard_back"` | `{"index": /ui/wizard/index, "recordId": /form/id}` | Moves back one step. No validation; `/form` is not touched. |
-| `"submit_form"` | unchanged | The usual create/update. On failure the index jumps to the earliest step owning an erroring field; an error on no step's field stays on the last step with the status line. |
+| `"submit_form"` | unchanged | The usual create/update, over the same filtered values Next validated. On failure the index jumps to the earliest step owning an erroring field; an error on no step's field stays on the last step with the status line. |
 
-`start_create`, `view_record`, `start_edit`, `cancel_record_task` and every
-successful write (which clears `/form`) reset the index to step 0.
+`start_create`, `view_record`, `start_edit`, `cancel_record_task` and a
+successful `submit_form` reset the index to step 0. Under experience v1,
+`select_row` (which loads a record into the form) and every other
+successful action (which clears `/form`) reset it as well. Under v2 a
+successful row action leaves an open task's step alone, so the step and
+the panel's primary label stay in agreement.
 
 Everything the client carries is re-checked:
 
-- `/form` keys outside the form's own fields are dropped before the cast.
-  A key the Ash action accepts but the form does not render never reaches
-  the changeset. Keys are compared as strings; no atom is created.
+- `/form` keys outside the form's own fields are dropped before the cast,
+  on `wizard_next` and on the final `submit_form` alike (both build the
+  changeset through one shared path). A key the Ash action accepts but the
+  form does not render never reaches the changeset. Keys are compared as
+  strings; no atom is created. Forms without steps are unchanged:
+  `submit_form` still casts every key the action accepts.
 - The carried index is clamped into the step range. A value that is not an
   integer (or an integer string) is refused with a status message.
 - Next validates every step up to the (clamped) index, so a client cannot
@@ -114,7 +121,9 @@ works on v0.9.1 and v1.0 alike:
     `/ui/wizard/<step>_visible`, rendering `form_step_<step>`: a heading,
     the optional description, and the step's usual `form_input_<field>` /
     `form_error_<field>` pairs. A review step renders `form_review_<field>`
-    rows instead: a caption and a `Text` bound to `/form/<field>`;
+    rows instead: a caption and a `Text` bound to `/form/<field>`, or to
+    `/select/<field>/label` for a searchable select (so the picked
+    record's label shows, not its id);
   - `form_wizard_nav` — a `Row` with the Back and Next buttons, each behind
     its `/ui/wizard/nav/*_visible` sentinel.
 - Experience v1: the form `Column`'s submit is wrapped in
@@ -127,7 +136,15 @@ works on v0.9.1 and v1.0 alike:
 - The admin catalog (`catalog: :admin_v1`) keeps a stepped form on the
   basic composition, as it does for nested forms.
 
-Forms without steps emit exactly what they did before.
+Forms without steps emit exactly what they did before; a test compares
+their full surfaces against snapshots taken before steps existed.
+
+The review step shows choice fields (enums, `one_of` constraints and
+non-searchable relationship selects) by their stored value, not their
+option label: the review `Text` binds the raw `/form` value, and a
+single-select choice is carried as a one-element list. If that matters for
+a form, put such fields on an earlier step and leave them out of the
+review, or render your own summary.
 
 ## When to use something else
 

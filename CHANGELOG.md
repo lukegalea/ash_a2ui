@@ -54,9 +54,13 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   into pages over the one form and the one Ash action. New client actions
   `"wizard_next"` (builds the full changeset over the carried `/form`
   without submitting it and keeps only errors on fields of reached steps)
-  and `"wizard_back"` (no validation); a failed `submit_form` jumps to the
-  earliest step owning an erroring field; task open/cancel and every
-  successful write reset to step 0. New reserved path `/ui/wizard`
+  and `"wizard_back"` (no validation). Next and the final `submit_form`
+  build the changeset through one shared path, so on a stepped form both
+  drop `/form` keys outside the form's fields. A failed `submit_form`
+  jumps to the earliest step owning an erroring field; task open/cancel,
+  a successful submit and (under experience v1) a row select or any other
+  success reset to step 0. The review step shows a searchable select's
+  label. New reserved path `/ui/wizard`
   (`index`, `steps`, `<step>_visible`, `nav`). Composed from basic
   components on v0.9.1 and v1.0; under experience v2 the panel primary
   label reads "Next" until the last step; the admin catalog falls back to

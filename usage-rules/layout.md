@@ -57,8 +57,12 @@ topics for the full contracts.
   until the last step's normal `submit_form`. A failed submit jumps back to
   the earliest step owning an erroring field.
 - The server re-checks carried state: `/form` keys outside the form's fields
-  are dropped, the index is clamped, a non-integer index is refused. Don't
-  rely on the client to keep the user on a step.
+  are dropped (on `wizard_next` and on the final `submit_form` — one shared
+  changeset path), the index is clamped, a non-integer index is refused.
+  Don't rely on the client to keep the user on a step.
+- The review step binds raw `/form` values (a searchable select shows its
+  `/select/<field>/label`); choice fields show their stored value, not the
+  option label.
 - State lives at `/ui/wizard` (`index`, `steps`, `<step>_visible`, `nav`) —
   see the Data Model Conventions topic. Forms without steps are unchanged.
 - Under experience v2 the panel's primary label reads "Next" until the last

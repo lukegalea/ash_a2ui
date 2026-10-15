@@ -17,9 +17,32 @@ defmodule AshA2ui.Wizard.WizardEncoderTest do
   alias AshA2ui.Test.KitchenSinkV1UI
 
   setup do
-    on_exit(fn -> Application.delete_env(:ash_a2ui, :experience_version) end)
+    on_exit(fn ->
+      Application.delete_env(:ash_a2ui, :experience_version)
+      Application.put_env(:ash_a2ui, :catalog, :basic)
+    end)
+
     :ok
   end
+
+  # Full surfaces of forms without steps, captured from the base branch
+  # (notes/pyro-maniac-borrowings, 08f8173) before wizard steps existed:
+  # v0.9.1 and v1.0, under experience v1, v2 and the v2 admin catalog.
+  @baseline_dir Path.expand("baseline", __DIR__)
+
+  @baseline_fixtures [
+    {"kitchen_sink", KitchenSink},
+    {"kitchen_sink_v1", KitchenSinkV1UI},
+    {"experience_task", AshA2ui.Test.Experience.Task},
+    {"ticket", AshA2ui.Test.Ticket},
+    {"ticket_search", AshA2ui.Test.TicketSearchUI}
+  ]
+
+  @baseline_configs [
+    {"exp1_basic", 1, :basic},
+    {"exp2_basic", 2, :basic},
+    {"exp2_admin", 2, :admin_v1}
+  ]
 
   defp v0_9_1(module) do
     [create, components, data] = AshA2ui.Info.build_surface(module)
@@ -200,5 +223,36 @@ defmodule AshA2ui.Wizard.WizardEncoderTest do
              "form_error_team",
              "form_submit_button"
            ]
+  end
+
+  @tag ac: "A2UI-106/AC-1"
+  test "forms without steps encode exactly as they did before wizard steps" do
+    for {config, experience, catalog} <- @baseline_configs,
+        {fixture, module} <- @baseline_fixtures do
+      Application.put_env(:ash_a2ui, :experience_version, experience)
+      Application.put_env(:ash_a2ui, :catalog, catalog)
+
+      path = Path.join(@baseline_dir, "#{fixture}.#{config}.json")
+      encoded = module |> AshA2ui.Info.build_surface() |> Jason.encode!() |> Jason.decode!()
+
+      assert encoded == path |> File.read!() |> Jason.decode!(),
+             "#{fixture} (#{config}) no longer matches #{Path.relative_to_cwd(path)}"
+    end
+  end
+
+  @tag ac: "A2UI-106/AC-1"
+  test "the review step shows a searchable select's label, not its id" do
+    for version <- [1, 2] do
+      Application.put_env(:ash_a2ui, :experience_version, version)
+
+      {comps, model} = v0_9_1(AshA2ui.Test.TicketWizardUI)
+
+      assert comps["form_review_author_id_value"]["text"] == %{
+               "path" => "/select/author_id/label"
+             }
+
+      assert comps["form_review_subject_value"]["text"] == %{"path" => "/form/subject"}
+      assert model["select"]["author_id"] == %{"search" => "", "label" => ""}
+    end
   end
 end

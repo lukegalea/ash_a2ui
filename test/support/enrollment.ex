@@ -108,3 +108,79 @@ defmodule AshA2ui.Test.EnrollmentV1UI do
     end
   end
 end
+
+defmodule AshA2ui.Test.EnrollmentRowActionsUI do
+  @moduledoc """
+  `AshA2ui.Test.Enrollment`'s stepped form next to a table with a
+  `:destroy` row action: a successful action that is not a form submit,
+  for the wizard reset rules.
+  """
+
+  use AshA2ui.Standalone
+
+  a2ui do
+    for_resource AshA2ui.Test.Enrollment
+    surface_id "enrollments_row_actions"
+
+    component :table do
+      fields [:name, :team]
+      read_action :read
+      row_actions [:destroy]
+    end
+
+    component :form do
+      fields [:name, :email, :role, :team]
+      create_action :create
+      update_action :update
+
+      step :who do
+        fields [:name, :email]
+      end
+
+      step :what do
+        fields [:role, :team]
+      end
+
+      step :confirm do
+        review? true
+      end
+    end
+  end
+end
+
+defmodule AshA2ui.Test.TicketWizardUI do
+  @moduledoc """
+  A stepped form over `AshA2ui.Test.Ticket` with a searchable `belongs_to`
+  select (`:author_id`), so the review step's value binding for a select
+  can be checked.
+  """
+
+  use AshA2ui.Standalone
+
+  a2ui do
+    for_resource AshA2ui.Test.Ticket
+    surface_id "tickets_wizard"
+
+    component :form do
+      fields [:subject, :author_id]
+      create_action :create
+      update_action :update
+
+      step :what do
+        fields [:subject]
+      end
+
+      step :who do
+        fields [:author_id]
+      end
+
+      step :confirm do
+        review? true
+      end
+    end
+
+    field :author_id do
+      option_search [:name, :email]
+    end
+  end
+end
