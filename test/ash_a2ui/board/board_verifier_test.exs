@@ -1,7 +1,8 @@
 defmodule AshA2ui.Board.BoardVerifierTest do
   @moduledoc """
   Compile-time rules for boards (A2UI-105): source-less sections need an
-  enumerable `scope_by`, `values`/`labels` must name enumerated values,
+  enumerable `scope_by`, `values`/`labels` must name enumerated values, no
+  two lanes may share a runtime name, `limit` may not drop lanes,
   `label`/`value`/`sort`/`read_action` require a source (and
   `values`/`labels` its absence), and `display :board` needs a `:table`
   with `sections` and a `row_layout`. Uses the `capture_io(:stderr)` +
@@ -78,6 +79,34 @@ defmodule AshA2ui.Board.BoardVerifierTest do
     # values outside the enumeration.
     assert compile_ui(board("scope_by :status\nvalues [:open, :bogus]")) =~
              ~r/values entry :bogus is not an enumerated value of scope_by/
+
+    # A value listed twice — also by string form — would render two lanes
+    # with the same component ids and data-model paths.
+    assert compile_ui(board("scope_by :status\nvalues [:open, :open, :claimed]")) =~
+             ~r/values lists :open more than once/
+
+    assert compile_ui(board("scope_by :status\nvalues [:open, \"open\", :claimed]")) =~
+             ~r/values lists :open more than once/
+
+    # Two enumerated values that sanitize to the same lane name, whether
+    # enumerated in full or listed in values.
+    assert compile_ui(board("scope_by :stage")) =~
+             ~r/lane values :"in-progress" and :in_progress collide on the runtime name board_in_progress/
+
+    assert compile_ui(board("scope_by :stage\nvalues [:in_progress, :\"in-progress\"]")) =~
+             ~r/lane values :in_progress and :"in-progress" collide/
+
+    assert compile_ui(board("scope_by :stage\nvalues [:in_progress, :done]")) == ""
+
+    # Without a source, limit caps lanes: a limit below the lane count
+    # would drop lanes silently.
+    assert compile_ui(board("scope_by :status\nvalues [:open, :claimed, :completed]\nlimit 2")) =~
+             ~r/limit 2 is below the 3 lanes \(:open, :claimed, :completed\)/
+
+    assert compile_ui(board("scope_by :status\nlimit 3")) =~
+             ~r/limit 3 is below the 4 lanes/
+
+    assert compile_ui(board("scope_by :status\nvalues [:open, :claimed]\nlimit 2")) == ""
 
     # labels keys outside the enumeration.
     assert compile_ui(board("scope_by :status\nlabels bogus: \"Nope\"")) =~

@@ -741,7 +741,7 @@ defmodule AshA2ui do
         type: :pos_integer,
         default: 50,
         doc:
-          "Maximum number of sections rendered (the source read's limit; caps enumerated values too)."
+          "Maximum number of sections rendered (the source read's limit). Without a source it caps the lanes, not the cards per lane, and may not be below the lane count."
       ]
     ]
   }

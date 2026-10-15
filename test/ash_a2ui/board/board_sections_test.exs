@@ -157,6 +157,15 @@ defmodule AshA2ui.Board.BoardSectionsTest do
              %{value: :archived, label: "Done and dusted"},
              %{value: :open, label: "Open"}
            ]
+
+    # Runtime guard behind the verifier: a repeated value (by string form)
+    # and values whose lane names collide keep their first occurrence, so
+    # lane component ids and data-model paths stay unique.
+    assert AshA2ui.Board.lanes(BoardTask, %{scope_by: :status, values: [:open, "open", :claimed]}) ==
+             [%{value: :open, label: "Open"}, %{value: :claimed, label: "Claimed"}]
+
+    assert AshA2ui.Board.lanes(BoardTask, %{scope_by: :stage, values: nil}) ==
+             [%{value: :"in-progress", label: "In-progress"}, %{value: :done, label: "Done"}]
   end
 
   @tag ac: "A2UI-105/AC-3"

@@ -17,7 +17,9 @@ defmodule AshA2ui.Verifiers.VerifySections do
       `label` / `value` / `sort` / `read_action` are not declared, `scope_by`
       has enumerable values (an `Ash.Type.Enum` or a `one_of` constraint),
       every `values` entry is one of them, and every `labels` key is one of
-      them.
+      them; no two lanes share a runtime name (a value listed twice, or two
+      values that sanitize alike), and `limit` is not below the number of
+      lanes (it caps lanes, not cards per lane).
 
   Raises `Spark.Error.DslError` (surfaced by Spark as a compile-time
   diagnostic) on failure. Skipped checks degrade gracefully when the target
@@ -196,8 +198,11 @@ defmodule AshA2ui.Verifiers.VerifySections do
 
     case AshA2ui.Board.enumerated_values(resource, sections.scope_by) do
       {:ok, all} ->
-        with :ok <- verify_known_values(sections.values || [], all, :values, key, module) do
-          verify_known_values(labelled, all, :labels, key, module)
+        with :ok <- verify_known_values(sections.values || [], all, :values, key, module),
+             :ok <- verify_known_values(labelled, all, :labels, key, module),
+             lanes = Enum.map(sections.values || all, &AshA2ui.Board.match_value(&1, all)),
+             :ok <- verify_distinct_lanes(sections, lanes, key, module) do
+          verify_lane_limit(sections, lanes, key, module)
         end
 
       :error ->
@@ -228,6 +233,63 @@ defmodule AshA2ui.Verifiers.VerifySections do
                "scope_by (#{Enum.map_join(all, ", ", &inspect/1)})"
          )}
     end
+  end
+
+  # Every lane is a table with its own component ids and data-model paths
+  # (`AshA2ui.Sections.section_name/2`), so two lanes may not share a
+  # runtime name: neither a value listed twice in `values` (`:open` and
+  # `"open"` are the same value) nor two values that sanitize alike
+  # (`:"in-progress"` and `:in_progress`).
+  defp verify_distinct_lanes(sections, lanes, key, module) do
+    clash =
+      lanes
+      |> Enum.group_by(&AshA2ui.Sections.section_name(key, &1))
+      |> Enum.find(fn {_name, values} -> length(values) > 1 end)
+
+    case clash do
+      nil ->
+        :ok
+
+      {name, values} ->
+        option = if sections.values, do: :values, else: :scope_by
+
+        message =
+          case Enum.uniq(values) do
+            [value] ->
+              "values lists #{inspect(value)} more than once: each lane is " <>
+                "rendered once, as #{name}"
+
+            distinct ->
+              "lane values #{Enum.map_join(distinct, " and ", &inspect/1)} collide " <>
+                "on the runtime name #{name}: list only one of them in values"
+          end
+
+        {:error,
+         DslError.exception(
+           module: module,
+           path: [:a2ui, :component, key, :sections, option],
+           message: message
+         )}
+    end
+  end
+
+  # Without a source, `limit` caps the number of lanes, not the cards per
+  # lane (a lane's page size comes from its query); a limit below the lane
+  # count would drop the trailing lanes silently.
+  defp verify_lane_limit(%{limit: limit}, lanes, _key, _module) when limit >= length(lanes),
+    do: :ok
+
+  defp verify_lane_limit(sections, lanes, key, module) do
+    {:error,
+     DslError.exception(
+       module: module,
+       path: [:a2ui, :component, key, :sections, :limit],
+       message:
+         "limit #{sections.limit} is below the #{length(lanes)} lanes " <>
+           "(#{Enum.map_join(lanes, ", ", &inspect/1)}): without a source, limit " <>
+           "caps the number of lanes, not the cards per lane (set a lane's page " <>
+           "size with its query's page_size); narrow the lanes with values instead"
+     )}
   end
 
   defp verify_source_attribute(sections, option, key, module) do

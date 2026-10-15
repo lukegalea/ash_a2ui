@@ -87,7 +87,12 @@ full contracts.
 - `scope_by` must have enumerable values (an `Ash.Type.Enum` type or a
   `one_of` constraint); `values` entries and `labels` keys must be among
   them; `label`/`value`/`sort`/`read_action` need a `source` and
-  `values`/`labels` its absence (all compile-verified).
+  `values`/`labels` its absence; no value twice in `values`, no two values
+  that sanitize to the same lane name (`:"in-progress"` / `:in_progress`)
+  (all compile-verified).
+- On a board, `limit` caps the number of **lanes**, not cards per lane, and
+  may not be below the lane count. Set a lane's page size with the lane
+  query's `page_size`.
 - Moving a card = running a transition: a row action on the resource,
   gated by `visible_when` on the lane attribute, that refreshes the
   template key. There is no drag-and-drop; don't generate a generic
@@ -96,7 +101,9 @@ full contracts.
 - Each lane is an expanded table (`/records/<lane>`, `/query/<lane>`,
   `scope_by == value` ANDed onto every read, so a client filter cannot pull
   in another lane's records). Its heading total is the reserved
-  `/_lane_total_<lane>` string. Empty lanes stay on the board.
+  `/_lane_total_<lane>` string, rewritten by action refreshes and `query`
+  actions but not by a `scope: :records` push. Empty lanes stay on the
+  board.
 - Attach a `query` for per-lane pagination; lanes show query controls only
   when the query declares search, presets, filters or ranges.
 - `display :list` (the default) keeps the stacked rendering, so source-less

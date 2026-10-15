@@ -3138,24 +3138,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   defp choice_options(resource, field_name) do
-    type = attribute_type(resource, field_name)
-
-    if AshA2ui.TypeMapper.enum_type?(type) do
-      Enum.map(type.values(), &%{"label" => enum_label(type, &1), "value" => to_string(&1)})
-    else
-      resource
-      |> attribute_constraints(field_name)
-      |> Keyword.get(:one_of, [])
-      |> Enum.map(&%{"label" => humanize(&1), "value" => to_string(&1)})
-    end
-  end
-
-  # `Ash.Type.Enum.label/1` is nil unless the enum declared explicit labels.
-  defp enum_label(type, value) do
-    case type.label(value) do
-      nil -> humanize(value)
-      label -> to_string(label)
-    end
+    resource
+    |> AshA2ui.TypeMapper.choices(field_name)
+    |> Enum.map(fn {value, label} -> %{"label" => label, "value" => to_string(value)} end)
   end
 
   defp numeric?(resource, field_name),
@@ -3394,16 +3379,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp humanize_choice(value, _resource, _name), do: value
 
   defp choice_labels(resource, name) do
-    type = attribute_type(resource, name)
-
-    if AshA2ui.TypeMapper.enum_type?(type) do
-      Map.new(type.values(), &{to_string(&1), enum_label(type, &1)})
-    else
-      resource
-      |> attribute_constraints(name)
-      |> Keyword.get(:one_of, [])
-      |> Map.new(&{to_string(&1), humanize(&1)})
-    end
+    resource
+    |> AshA2ui.TypeMapper.choices(name)
+    |> Map.new(fn {value, label} -> {to_string(value), label} end)
   end
 
   defp walk_source(record, [attribute]), do: Map.get(record, attribute)

@@ -24,16 +24,26 @@ defmodule AshA2ui.Board do
   Each lane's heading shows its total, served at the reserved root path
   `/_lane_total_<lane>` as a string: the lane query's `totalCount` when it
   has one, else the number of rows in the lane (with a `+` suffix when the
-  query reports more rows but no count). Every records rewrite of a lane
-  (initial data model, refreshes, `"query"` actions) rewrites it.
+  query reports more rows but no count). The initial data model, refreshes
+  driven by actions (`refreshes`) and `"query"` actions rewrite it beside
+  the lane's records. A records-only push
+  (`encode_data_model(view, records, scope: :records)`) replaces `/records`
+  alone and leaves every `/_lane_total_<lane>` as it was, like the
+  `_empty_visible` sentinels: push a full data model when the totals must
+  move with the records.
+
+  ## Lanes and `limit`
+
+  On sections without a source, `limit` caps the number of lanes, not the
+  cards per lane: a lane's page size comes from its query (`page_size`).
+  The verifier rejects a `limit` below the number of lanes, so no lane is
+  dropped silently.
 
   The vocabulary (kanban lanes over an attribute's values) comes from
   PyroManiac (<https://github.com/frankdugan3/pyro_maniac>), an Ash UI DSL.
   This is our own implementation over `sections`; see
   `notes/2026-10-15-pyro-maniac-borrowings.md`.
   """
-
-  alias Ash.Resource.Info, as: ResourceInfo
 
   @typedoc "One synthesized lane record (the source-less section record)."
   @type lane :: %{value: atom | String.t(), label: String.t()}
@@ -46,9 +56,9 @@ defmodule AshA2ui.Board do
   """
   @spec enumerated_values(module | map, atom) :: {:ok, [atom | String.t()]} | :error
   def enumerated_values(resource, name) do
-    case enumeration(resource, name) do
-      {:ok, values, _labeller} -> {:ok, values}
-      :error -> :error
+    case AshA2ui.TypeMapper.choices(resource, name) do
+      [_ | _] = choices -> {:ok, Enum.map(choices, &elem(&1, 0))}
+      [] -> :error
     end
   end
 
@@ -64,14 +74,18 @@ defmodule AshA2ui.Board do
   """
   @spec lanes(module, map) :: [lane]
   def lanes(resource, config) do
-    case enumeration(resource, config.scope_by) do
-      {:ok, all, labeller} ->
+    case AshA2ui.TypeMapper.choices(resource, config.scope_by) do
+      [_ | _] = choices ->
+        all = Enum.map(choices, &elem(&1, 0))
+
         config
         |> Map.get(:values)
         |> chosen_values(all)
-        |> Enum.map(&%{value: &1, label: lane_label(&1, Map.get(config, :labels, []), labeller)})
+        |> Enum.map(fn value ->
+          %{value: value, label: lane_label(value, Map.get(config, :labels, []), choices)}
+        end)
 
-      :error ->
+      [] ->
         raise ArgumentError,
               "sections without a source need enumerable values: scope_by " <>
                 "#{inspect(config.scope_by)} of #{inspect(resource)} is neither an " <>
@@ -117,65 +131,24 @@ defmodule AshA2ui.Board do
     Enum.filter(tables, &(lane?(&1) and &1.section.template == template))
   end
 
-  # --- enumeration ---------------------------------------------------------
+  # --- enumeration ---
 
-  defp chosen_values(nil, all), do: all
-
+  # Duplicates, and entries whose runtime lane names collide, keep their
+  # first occurrence: the verifier rejects both at compile time, and this
+  # keeps component ids and data-model paths unique where it could not run.
   defp chosen_values(values, all) do
-    values
+    (values || all)
     |> Enum.map(&match_value(&1, all))
     |> Enum.reject(&is_nil/1)
+    |> Enum.uniq_by(&AshA2ui.Sections.section_name(:lane, &1))
   end
 
-  defp lane_label(value, labels, labeller) do
+  # Headings: a `labels` override, else the shared choice label
+  # (`AshA2ui.TypeMapper.choices/2`, the ChoicePicker's labels).
+  defp lane_label(value, labels, choices) do
     case Enum.find(labels, fn {key, _label} -> to_string(key) == to_string(value) end) do
       {_key, label} -> to_string(label)
-      nil -> labeller.(value)
+      nil -> choices |> List.keyfind(value, 0) |> elem(1)
     end
-  end
-
-  defp enumeration(resource, name) do
-    case field_type(resource, name) do
-      {type, constraints} ->
-        cond do
-          AshA2ui.TypeMapper.enum_type?(type) ->
-            {:ok, type.values(), &enum_label(type, &1)}
-
-          match?([_ | _], one_of(constraints)) ->
-            {:ok, one_of(constraints), &humanize/1}
-
-          true ->
-            :error
-        end
-
-      nil ->
-        :error
-    end
-  end
-
-  defp field_type(resource, name) do
-    case ResourceInfo.attribute(resource, name) || ResourceInfo.calculation(resource, name) do
-      %{type: type, constraints: constraints} -> {type, constraints || []}
-      _missing -> nil
-    end
-  end
-
-  defp one_of(constraints) when is_list(constraints), do: Keyword.get(constraints, :one_of)
-  defp one_of(_constraints), do: nil
-
-  # `Ash.Type.Enum.label/1` is nil unless the enum declared explicit labels
-  # (same rule as the encoder's choice options).
-  defp enum_label(type, value) do
-    case type.label(value) do
-      nil -> humanize(value)
-      label -> to_string(label)
-    end
-  end
-
-  defp humanize(value) do
-    value
-    |> to_string()
-    |> String.replace("_", " ")
-    |> String.capitalize()
   end
 end

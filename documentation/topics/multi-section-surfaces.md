@@ -244,7 +244,17 @@ every sectioned table.
 
 **Totals.** `/_lane_total_<lane>` is the lane query's `totalCount` when it
 has one, else the lane's row count (`"5+"` when the query reports more rows
-without a count). Every records rewrite of a lane rewrites it.
+without a count). The initial render, action refreshes and `query` actions
+rewrite it beside the lane's records. A records-only push
+(`encode_data_model(view, records, scope: :records)`) replaces `/records`
+alone and leaves the totals as they were; push a full data model when they
+must follow.
+
+**`limit` caps lanes.** Without a `source`, `limit` (default 50) is the
+maximum number of lanes, as it is the maximum number of sections with one.
+It is not a per-lane card limit: a lane's page size comes from its query
+(`page_size`). A `limit` below the number of lanes is a compile error, so no
+lane is dropped silently.
 
 **Moves.** A card moves when a transition runs: a row action gated by
 `visible_when` on the lane attribute that refreshes the template key. The
@@ -264,6 +274,11 @@ from another lane. Only declared lanes are addressable components.
 - Without `source`, `scope_by` must have enumerable values, every `values`
   entry and every `labels` key must be one of them, and `label`, `value`,
   `sort` and `read_action` are not allowed.
+- No two lanes may share a runtime name: a value listed twice in `values`
+  (`:open` and `"open"` count as the same value) and two values that
+  sanitize alike (`:"in-progress"` and `:in_progress`, both
+  `board_in_progress`) are rejected.
+- Without `source`, `limit` may not be below the number of lanes.
 - With `source`, `values` and `labels` are not allowed.
 - `display :board` needs a `:table` with a `sections` block and a
   `row_layout`.

@@ -40,8 +40,12 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   actions (`visible_when` + `refreshes` on the template key); there is no
   drag-and-drop. The lane scope is ANDed onto every read, so a client
   filter cannot widen it. Compile-time rules cover enumerability,
-  `values`/`labels` membership, source-only options and the board's
-  `sections` + `row_layout` requirement. `display :list` (the default)
+  `values`/`labels` membership, lanes that would share a runtime name
+  (a repeated value, or values that sanitize alike), a `limit` below the
+  lane count (on a board `limit` caps lanes, not cards per lane),
+  source-only options and the board's `sections` + `row_layout`
+  requirement. ChoicePicker options, choice text in rows and lane headings
+  share one labelling rule (`AshA2ui.TypeMapper.choices/2`). `display :list` (the default)
   output is unchanged. The kanban vocabulary comes from PyroManiac
   (frankdugan3/pyro_maniac); see
   `notes/2026-10-15-pyro-maniac-borrowings.md`.
