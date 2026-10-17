@@ -262,8 +262,10 @@ end
   filter. Every picked value is re-read through the scope by
   `option_select` and again by `invoke` for the row being invoked on: a
   value outside the row's scope fails on `/errors/<field>` like any
-  unavailable option. The field, read action and argument are
-  compile-verified.
+  unavailable option. A current value outside the row's scope is
+  pre-filled as `""`. The field, read action and argument are
+  compile-verified, and the read action must require no other argument
+  without a default.
 - `visible_when` is simple ANDed equality on public attributes or
   expression calculations (`nil` = is_nil, list = membership) —
   deliberately not a rules engine. Rendering hides the button per row in

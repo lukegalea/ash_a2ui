@@ -1292,7 +1292,8 @@ defmodule AshA2ui do
       record_argument: [
         type: :atom,
         required: true,
-        doc: "The argument of `read_action` that receives the row's primary key."
+        doc:
+          "The argument of `read_action` that receives the row's primary key. The scope read passes no other input, so any other argument the read action requires needs a default."
       ]
     ]
   }

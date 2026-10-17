@@ -973,6 +973,56 @@ function defineAnatomyElements({lit, basicCatalog}) {
   if (!customElements.get(BUTTON_TAG)) customElements.define(BUTTON_TAG, AshA2uiButtonElement);
 }
 
+// --- Action outcomes ------------------------------------------------------------
+//
+// Every AshA2ui action reply writes its outcome as a path write at
+// /ui/feedback (both wire versions) and, on v1.0, /ui/response.
+// Subscribing to those OBJECT paths fires on every such write, also one
+// that leaves the value unchanged: the data model hands an object signal a
+// fresh copy on every write at, above or below it.
+//
+// It also fires when the whole data model is replaced. A LiveRenderer
+// PubSub refresh or URL-state change writes `path: "/"`, which resets
+// /ui/feedback to clear. That write is not the dispatched action's outcome,
+// and one queued ahead of the reply would otherwise end the wait early.
+// The root object tells them apart: a path write changes the model in
+// place, a root write swaps the root.
+
+/**
+ * Calls `onOutcome()` on each path write at or below one of `paths`, and
+ * skips writes that replace the data model's root. Each path gets its own
+ * data-model subscription, and each skips a root write on its own. Returns
+ * the subscriptions (each with `unsubscribe()`); see
+ * `unsubscribeActionOutcomes`.
+ *
+ * Shared with `createAshAdminCatalog` (its busy buttons' settle).
+ */
+export function subscribeActionOutcomes(dataModel, paths, onOutcome) {
+  return paths.map((path) => {
+    let root = dataModel.get("/");
+    return dataModel.subscribe(path, () => {
+      const current = dataModel.get("/");
+      if (current !== root) {
+        root = current;
+        return;
+      }
+      onOutcome();
+    });
+  });
+}
+
+/** Releases the subscriptions `subscribeActionOutcomes` returned. */
+export function unsubscribeActionOutcomes(subscriptions) {
+  for (const subscription of subscriptions || []) {
+    try {
+      // DataModel.subscribe returns {value, unsubscribe()}, not a function.
+      subscription.unsubscribe();
+    } catch {
+      // The data model may already be gone (surface torn down).
+    }
+  }
+}
+
 // --- Prompt Modal -------------------------------------------------------------
 //
 // A row action declaring `prompt_fields` renders, in the basic composition
@@ -983,18 +1033,22 @@ function defineAnatomyElements({lit, basicCatalog}) {
 // open over cleared fields (clinic-demo's board Complete / Delegate).
 //
 // <ash-a2ui-modal> subclasses the upstream Modal (resolved from the
-// custom-element registry, like the anatomy overrides) and changes one
-// thing: a click on a Button inside the open dialog whose action is an
-// `invoke` event marks the dialog as awaiting that outcome. The next write
-// to /ui/feedback (subscribed as an object path, so a write fires even when
-// it leaves the value unchanged — see the admin catalog's SETTLE_PATHS)
-// settles it: `kind == "success"` closes the dialog, anything else leaves
-// it open with the field errors and the feedback message showing. The
-// server contract (`prompt`, `invoke` with `values`) is unchanged, and the
-// emitted tree stays basic catalog — a stock renderer still shows the
-// stock Modal.
+// custom-element registry, like the anatomy overrides). A click on a
+// Button inside the open dialog whose action is an `invoke` event makes
+// the dialog wait for that outcome: the next path write to /ui/feedback
+// (see "Action outcomes" — a whole-model refresh in between is skipped)
+// that carries a `kind` settles it. `kind == "success"` closes the dialog.
+// Any other kind leaves it open, with the per-field `/errors/<field>`
+// captions the prompt content binds and, below the content, the outcome's
+// /ui/feedback message. The prompt content has no binding of its own for
+// that message, and the surface's status Text sits behind the dialog's
+// backdrop, so without it a Forbidden or stale-row error would show
+// nothing. The server contract (`prompt`, `invoke` with `values`) is
+// unchanged, and the emitted tree stays basic catalog: a stock renderer
+// still shows the stock Modal.
 
 const PROMPT_SETTLE_PATH = "/ui/feedback";
+const PROMPT_ERROR_CLASS = "ash-a2ui-prompt-error";
 
 function definePromptModalElement(basicCatalog) {
   if (customElements.get(MODAL_TAG)) return true;
@@ -1004,9 +1058,11 @@ function definePromptModalElement(basicCatalog) {
   class AshA2uiModalElement extends A2uiBasicModalElement {
     constructor() {
       super();
-      this._ashPromptSubscription = null;
+      this._ashPromptSubscriptions = null;
       this._ashOnDialogClick = (event) => this.onDialogClick(event);
+      this._ashOnDialogClose = () => this.onDialogClose();
       this._ashDialog = null;
+      this._ashErrorEl = null;
     }
 
     updated(changed) {
@@ -1014,8 +1070,12 @@ function definePromptModalElement(basicCatalog) {
       const dialog = this.dialog;
       if (dialog === this._ashDialog) return;
       this._ashDialog?.removeEventListener("click", this._ashOnDialogClick);
+      this._ashDialog?.removeEventListener("close", this._ashOnDialogClose);
+      this._ashErrorEl?.remove();
+      this._ashErrorEl = null;
       this._ashDialog = dialog || null;
       this._ashDialog?.addEventListener("click", this._ashOnDialogClick);
+      this._ashDialog?.addEventListener("close", this._ashOnDialogClose);
     }
 
     disconnectedCallback() {
@@ -1039,33 +1099,62 @@ function definePromptModalElement(basicCatalog) {
       if (!this._ashDialog?.open) return;
       const model = this.clickedButtonModel(event);
       if (model?.properties?.action?.event?.name !== "invoke") return;
+      this.showPromptError("");
       this.awaitPromptOutcome();
+    }
+
+    // Closed by ×, Escape or a success: the next opening starts clean.
+    onDialogClose() {
+      this.dropPromptSubscription();
+      this.showPromptError("");
     }
 
     awaitPromptOutcome() {
       const dataModel = this.context?.dataContext?.surface?.dataModel;
       if (!dataModel || typeof dataModel.subscribe !== "function") return;
       this.dropPromptSubscription();
-      this._ashPromptSubscription = dataModel.subscribe(PROMPT_SETTLE_PATH, () => {
-        this.dropPromptSubscription();
+      const subscriptions = subscribeActionOutcomes(dataModel, [PROMPT_SETTLE_PATH], () => {
         // Read once the whole outcome batch has landed (a v1.0 reply
         // writes /ui/response before its /ui/feedback mirror).
         Promise.resolve().then(() => {
-          if (dataModel.get(`${PROMPT_SETTLE_PATH}/kind`) === "success" && this._ashDialog?.open) {
-            this._ashDialog.close();
+          if (this._ashPromptSubscriptions !== subscriptions) return;
+          const feedback = dataModel.get(PROMPT_SETTLE_PATH) || {};
+          // A write that leaves the feedback clear is not this outcome.
+          if (feedback.kind === undefined || feedback.kind === null || feedback.kind === "") return;
+          this.dropPromptSubscription();
+          if (feedback.kind === "success") {
+            if (this._ashDialog?.open) this._ashDialog.close();
+          } else {
+            this.showPromptError(typeof feedback.message === "string" ? feedback.message : "");
           }
         });
       });
+      this._ashPromptSubscriptions = subscriptions;
     }
 
     dropPromptSubscription() {
-      if (!this._ashPromptSubscription) return;
-      try {
-        this._ashPromptSubscription.unsubscribe();
-      } catch {
-        // The data model may already be gone (surface torn down).
+      if (!this._ashPromptSubscriptions) return;
+      unsubscribeActionOutcomes(this._ashPromptSubscriptions);
+      this._ashPromptSubscriptions = null;
+    }
+
+    // The outcome message line, appended to the dialog after the content
+    // (outside lit's rendered parts, which leave unknown nodes alone).
+    showPromptError(message) {
+      const dialog = this._ashDialog;
+      if (!dialog) return;
+      if (!this._ashErrorEl) {
+        if (!message) return;
+        const line = document.createElement("p");
+        line.className = PROMPT_ERROR_CLASS;
+        line.setAttribute("role", "alert");
+        line.style.cssText =
+          "margin: 12px 0 0; color: var(--ash-admin-error, #c22c33); font-size: 0.875em;";
+        dialog.appendChild(line);
+        this._ashErrorEl = line;
       }
-      this._ashPromptSubscription = null;
+      this._ashErrorEl.textContent = message;
+      this._ashErrorEl.hidden = !message;
     }
   }
 

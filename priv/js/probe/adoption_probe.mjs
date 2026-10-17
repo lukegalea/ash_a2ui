@@ -13,12 +13,15 @@
  *       releases its data-model subscriptions;
  *     - the read-only View panel has a control that closes it;
  *     - View then Cancel leaves the View button enabled (the settle fires
- *       on every outcome write, also one leaving /ui/feedback unchanged).
+ *       on every outcome write, also one leaving /ui/feedback unchanged),
+ *       and a whole-model refresh before the outcome does not settle it.
  *   prompt Modals (the basic composition's prompts: boards under both
  *   catalogs, basic tables)
  *     - a failed confirm keeps the dialog open, a successful one closes it
  *       (the merged catalog, and the admin catalog over the merged or the
- *       stock basic catalog).
+ *       stock basic catalog); a non-field error shows its message inside
+ *       the dialog; a whole-model refresh before the outcome does not end
+ *       the wait.
  *   boards (JobBoardUI, basic composition)
  *     - lanes share the board's width instead of sizing to their cards, on
  *       the stock basic catalog and on the AshA2ui merged catalog (where
@@ -377,6 +380,15 @@ async function main() {
       expect(state.dispatched, ["invoke"], "the row action dispatched");
       expect(state.busy, state.baseline + 2, "busy subscribes to the two outcome paths");
 
+      // A PubSub refresh queued ahead of the reply rewrites the whole data
+      // model (resetting /ui/feedback): not the outcome, so still busy.
+      await feed(page, "adoption_admin_refresh");
+      const refreshed = await page.evaluate(() => ({
+        settled: window.__settled,
+        busy: !!window.__deepAll("*").find((el) => el._amBusyRowAction),
+      }));
+      expect(refreshed, {settled: 0, busy: true}, "a whole-model refresh does not settle");
+
       await writeFeedback(`Locked ${Date.now()}`);
       await page.waitForTimeout(100);
       await writeFeedback(`Later feedback ${Date.now()}`);
@@ -533,6 +545,13 @@ async function main() {
         return page.evaluate(() => window.__dispatched.map((d) => d.name));
       };
 
+      // The outcome message line <ash-a2ui-modal> shows below the content.
+      const promptError = () =>
+        page.evaluate(() => {
+          const line = window.__openModal()?.querySelector(".ash-a2ui-prompt-error");
+          return line && !line.hidden ? line.textContent : null;
+        });
+
       if (!kase.noError) {
         await check(`${kase.name}: a failed prompt confirm keeps the dialog open`, async () => {
           await openPrompt();
@@ -542,6 +561,17 @@ async function main() {
           await feed(page, `${kase.prefix}_error`);
           expect(await page.evaluate(() => !!window.__openModal()), true, "still open on the error");
         });
+
+        // A row gone since the board rendered: an error with no field.
+        await check(`${kase.name}: a non-field error shows its message inside the dialog`, async () => {
+          if (!(await page.evaluate(() => !!window.__openModal()))) await openPrompt();
+          expect(await confirm(), ["invoke"], "Confirm dispatched invoke");
+          await feed(page, `${kase.prefix}_missing`);
+          expect(await page.evaluate(() => !!window.__openModal()), true, "still open on the error");
+          const message = await page.evaluate(() => window.__surface.dataModel.get("/ui/feedback/message"));
+          truthy(/not found/.test(message), `the fixture's feedback message (${message})`);
+          expect(await promptError(), message, "the message shows in the dialog");
+        });
       }
 
       await check(`${kase.name}: a successful prompt confirm closes the dialog`, async () => {
@@ -549,6 +579,11 @@ async function main() {
         truthy(await page.evaluate(() => !!window.__openModal()), "the prompt is open");
         await typeNote("Called the owner");
         expect(await confirm(), ["invoke"], "Confirm dispatched invoke");
+        expect(await promptError(), null, "a new confirm clears the previous message");
+        // A PubSub refresh queued ahead of the reply rewrites the whole
+        // data model (resetting /ui/feedback): the dialog keeps waiting.
+        await feed(page, `${kase.prefix}_refresh`);
+        expect(await page.evaluate(() => !!window.__openModal()), true, "still open after a refresh");
         await feed(page, `${kase.prefix}_ok`);
         expect(await page.evaluate(() => !!window.__openModal()), false, "closed on success");
       });
@@ -556,6 +591,7 @@ async function main() {
       await check(`${kase.name}: the closed prompt reopens`, async () => {
         await openPrompt();
         expect(await page.evaluate(() => !!window.__openModal()), true, "open again");
+        expect(await promptError(), null, "with no message left over");
       });
 
       await check(`no console errors (${kase.name} prompts)`, async () => {

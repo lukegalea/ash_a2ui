@@ -276,7 +276,14 @@ catalog version and id are unchanged: no prop was added or changed.
   button kept its spinner until another action reported. The server
   contract is unchanged: every AshA2ui action these components dispatch
   writes `/ui/feedback` (and, on v1.0, `/ui/response`). A server ack was
-  not needed.
+  not needed. Only path writes count: a write that replaces the whole
+  data model (`path: "/"`, from a LiveRenderer PubSub refresh or a
+  URL-state change) also fires those subscriptions, and resets
+  `/ui/feedback` to clear, but it is not the action's outcome. The
+  renderer skips it by the root object's identity (a path write changes
+  the model in place). Without that, a refresh queued ahead of the reply
+  re-enabled the button early. The shared helper is
+  `subscribeActionOutcomes` in `ash_a2ui_catalog.js`.
 - **Prompt Modals close on success.** Boards (and every basic-composed
   prompt) render a prompt as the basic `Modal`, whose stock element closes
   only through its × button. After a successful Confirm the server reset
@@ -286,9 +293,13 @@ catalog version and id are unchanged: no prop was added or changed.
   This is a subclass of the upstream element, defined once in
   `ash_a2ui_catalog.js` (`promptModalComponent`). When a Button inside the
   open dialog dispatches an `invoke`, the element waits for the next
-  `/ui/feedback` write. On `kind == "success"` it closes. On anything else it
-  stays open over the field errors. This matches the `dataGrid` prompt
-  dialog (1.2). The emitted tree is still basic `Modal`.
+  `/ui/feedback` path write that carries a `kind` (a whole-model refresh
+  is skipped, as above). On `kind == "success"` it closes. On anything else
+  it stays open over the field errors and shows the `/ui/feedback` message
+  below the content: the basic prompt content binds only the per-field
+  `/errors/<field>` captions, and the status Text sits behind the dialog's
+  backdrop. This matches the `dataGrid` prompt dialog (1.2), which shows
+  the message as `prompt.error`. The emitted tree is still basic `Modal`.
 - **Per-row prompt options** (`prompt_options` on the `action` entity). A
   scoped relationship prompt field renders as the option-list composite
   (`row_action<sfx>_<action>_prompt_select_<field>`). Its `_options` List

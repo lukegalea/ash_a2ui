@@ -71,6 +71,20 @@ defmodule AshA2ui.Test.PromptScope.Principal do
       argument :task_id, :uuid, allow_nil?: false
       prepare AshA2ui.Test.PromptScope.CandidatesForTask
     end
+
+    # Verification fixtures: a second required argument the scope read
+    # cannot fill, and one with a default it need not.
+    read :candidates_in_org do
+      argument :task_id, :uuid, allow_nil?: false
+      argument :org, :string, allow_nil?: false
+      prepare AshA2ui.Test.PromptScope.CandidatesForTask
+    end
+
+    read :candidates_paged do
+      argument :task_id, :uuid, allow_nil?: false
+      argument :page_size, :integer, allow_nil?: false, default: 25
+      prepare AshA2ui.Test.PromptScope.CandidatesForTask
+    end
   end
 end
 

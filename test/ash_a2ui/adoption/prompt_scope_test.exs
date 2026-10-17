@@ -259,9 +259,9 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
       assert write_at(messages, "/prompt/record/delegate") == review.id
     end
 
-    test "the pre-filled value shows its label only when it is in the row's scope",
+    test "the current value is pre-filled, with its label, only when it is in the row's scope",
          %{rhea: rhea, ravi: ravi} do
-      for {principal, label} <- [{rhea, "Rhea"}, {ravi, ""}] do
+      for {principal, value, label} <- [{rhea, rhea.id, "Rhea"}, {ravi, "", ""}] do
         task =
           Ash.create!(
             Task,
@@ -280,9 +280,41 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
                    "recordId" => task.id
                  })
 
-        assert write_at(messages, "/prompt/values/delegate") == %{"principal_id" => principal.id}
+        assert write_at(messages, "/prompt/values/delegate") == %{"principal_id" => value}
         assert write_at(messages, "/prompt/select/delegate")["principal_id"]["label"] == label
       end
+    end
+
+    # The displayed selection and the submitted value agree: confirming the
+    # pre-filled values as they are never fails as "not one of the
+    # available options" on a field that showed no selection.
+    test "confirming an out-of-scope current value unchanged is a required-field error",
+         %{rhea: rhea, ravi: ravi} do
+      task =
+        Ash.create!(
+          Task,
+          %{title: "Delegated", team: "red", candidate_ids: [rhea.id], principal_id: ravi.id},
+          authorize?: false
+        )
+
+      assert {:ok, messages} =
+               handle(TasksUI, "scoped_tasks", "prompt", %{
+                 "action" => "delegate",
+                 "recordId" => task.id
+               })
+
+      values = write_at(messages, "/prompt/values/delegate")
+
+      assert {:error, messages} =
+               handle(TasksUI, "scoped_tasks", "invoke", %{
+                 "action" => "delegate",
+                 "recordId" => task.id,
+                 "values" => values
+               })
+
+      error = write_at(messages, "/errors/principal_id")
+      assert is_binary(error)
+      refute error =~ "available options"
     end
 
     test "a row the actor cannot read has no prompt", %{hidden: hidden} do
@@ -501,6 +533,25 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
 
       assert result =~
                ~r/record_argument :job_id is not an argument of read action :candidates_for_task/
+    end
+
+    test "the read action's other arguments must not be required" do
+      result =
+        define(
+          scoped_ui(:principal_id, read_action: :candidates_in_org, record_argument: :task_id)
+        )
+
+      assert result =~
+               ~r/read action :candidates_in_org on AshA2ui.Test.PromptScope.Principal has other required arguments \[:org\]/
+    end
+
+    test "a required argument with a default is no obstacle" do
+      result =
+        define(
+          scoped_ui(:principal_id, read_action: :candidates_paged, record_argument: :task_id)
+        )
+
+      refute result =~ "error"
     end
 
     test "the field must be a relationship select" do

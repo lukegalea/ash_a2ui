@@ -155,7 +155,10 @@ search text and the picked label live at `/prompt/select/<action>/<field>`,
 results at `/options/<field>`, and each result dispatches `option_select`
 with `"prompt": "<action>"`, which re-reads the picked record as the actor and
 writes its value to `/prompt/values/<action>/<field>` (never `/form`). The
-`prompt` pre-fill writes the current value's label there too.
+`prompt` pre-fill writes the current value's label there too. A current
+value the actor could not pick (unreadable, or outside a `prompt_options`
+scope) is pre-filled as `""`, so the field shows no selection and submits
+none.
 
 Under the admin catalog the prompt is a dialog the dataGrid opens: the
 action's `rowActions` entry carries `prompt` (`content` — a grid child
@@ -237,8 +240,9 @@ The scope stays server-authoritative:
 - A success resets the prompt's options and row with its values.
 - Verified at compile time: the field is one of the action's
   `prompt_fields` and a relationship select, `read_action` is a read action
-  of the relationship's destination, and `record_argument` is one of its
-  arguments.
+  of the relationship's destination, `record_argument` is one of its
+  arguments, and it requires no other argument without a default (the
+  scope read passes only `record_argument`).
 
 An unscoped prompt over the same field (another action) keeps its full
 list, and form selects are unaffected.

@@ -233,11 +233,25 @@ defmodule AshA2ui.Verifiers.VerifyActions do
                "record_argument receives a single key value"
            end),
          {:ok, destination} <- prompt_destination(target, declared, scope.field),
-         {:ok, read} <- scope_read_action(destination, scope.read_action) do
-      check(Enum.any?(read.arguments, &(&1.name == scope.record_argument)), fn ->
-        "prompt_options #{name}: record_argument #{inspect(scope.record_argument)} is not an " <>
-          "argument of read action #{inspect(scope.read_action)} on #{inspect(destination)} " <>
-          "(arguments: #{inspect(Enum.map(read.arguments, & &1.name))})"
+         {:ok, read} <- scope_read_action(destination, scope.read_action),
+         :ok <-
+           check(Enum.any?(read.arguments, &(&1.name == scope.record_argument)), fn ->
+             "prompt_options #{name}: record_argument #{inspect(scope.record_argument)} is not an " <>
+               "argument of read action #{inspect(scope.read_action)} on #{inspect(destination)} " <>
+               "(arguments: #{inspect(Enum.map(read.arguments, & &1.name))})"
+           end) do
+      # The scope read receives record_argument and nothing else, so any
+      # other argument it requires would fail every prompt on the field.
+      required =
+        for %{allow_nil?: false, default: nil, name: arg} <- read.arguments,
+            arg != scope.record_argument,
+            do: arg
+
+      check(required == [], fn ->
+        "prompt_options #{name}: read action #{inspect(scope.read_action)} on " <>
+          "#{inspect(destination)} has other required arguments #{inspect(required)}; the " <>
+          "scope read passes only record_argument #{inspect(scope.record_argument)}, so give " <>
+          "them a default or allow_nil? true"
       end)
     end
   end

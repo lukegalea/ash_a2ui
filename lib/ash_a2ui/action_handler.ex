@@ -1788,42 +1788,46 @@ defmodule AshA2ui.ActionHandler do
   end
 
   defp prompt_prefill_messages(view, setting, record, ash_opts) do
-    prefill =
+    stored =
       Map.new(setting.prompt_fields, fn field ->
         {Atom.to_string(field), prefill_value(view.resource, record, field)}
       end)
+
+    {prefill, select_state} = prompt_select_prefill(view, setting.name, stored, record, ash_opts)
 
     with {:ok, scoped} <- prompt_scope_prefill(view, setting.name, record, ash_opts) do
       {:ok,
        [
          update_data_model(view, "/prompt/values/#{setting.name}", prefill),
          update_data_model(view, "/errors", %{})
-       ] ++ prompt_select_prefill(view, setting.name, prefill, record, ash_opts) ++ scoped}
+       ] ++ select_state ++ scoped}
     end
   end
 
   # Searchable and scoped relationship prompt fields show the pre-filled
-  # value's label (read as the actor, through the row's scope when scoped:
-  # a value the actor could not pick shows no label).
+  # value's label, read as the actor (through the row's scope when scoped).
+  # A stored value the actor could not pick (unreadable, or outside the
+  # row's scope) is not pre-filled: the field shows no selection and
+  # submits none, rather than a blank selection invoke would refuse as
+  # unavailable. Returns {prefill, messages}.
   defp prompt_select_prefill(view, action, prefill, record, ash_opts) do
     composite =
       for %{widget: :select, select: %{} = select} = field <- Map.get(view.prompts, action, []),
           match?(%{search_fields: [_ | _]}, select) or scoped_select?(select),
-          do: {field.name, select}
+          do: {Atom.to_string(field.name), select}
 
     if composite == [] do
-      []
+      {prefill, []}
     else
-      state =
-        Map.new(composite, fn {name, select} ->
-          {Atom.to_string(name),
-           %{
-             "search" => "",
-             "label" => prefill_label(select, prefill[Atom.to_string(name)], record, ash_opts)
-           }}
+      {prefill, state} =
+        Enum.reduce(composite, {prefill, %{}}, fn {name, select}, {prefill, state} ->
+          {value, label} = prefill_option(select, prefill[name], record, ash_opts)
+
+          {Map.put(prefill, name, value),
+           Map.put(state, name, %{"search" => "", "label" => label})}
         end)
 
-      [update_data_model(view, "/prompt/select/#{action}", state)]
+      {prefill, [update_data_model(view, "/prompt/select/#{action}", state)]}
     end
   end
 
@@ -1864,14 +1868,18 @@ defmodule AshA2ui.ActionHandler do
   defp scoped_select?(%{scope: %{}}), do: true
   defp scoped_select?(_select), do: false
 
-  defp prefill_label(select, value, record, ash_opts) when is_binary(value) and value != "" do
+  # {value, label} of a pre-filled option: unchanged with its label when
+  # the actor can pick it, {"", ""} when the read finds nothing. A read
+  # that fails keeps the value, without a label.
+  defp prefill_option(select, value, record, ash_opts) when is_binary(value) and value != "" do
     case fetch_option(select, value, ash_opts, record) do
-      {:ok, option} -> AshA2ui.Info.option_entry(option, select)["label"]
-      _not_found_or_error -> ""
+      {:ok, option} -> {value, AshA2ui.Info.option_entry(option, select)["label"]}
+      :not_found -> {"", ""}
+      {:error, _error} -> {value, ""}
     end
   end
 
-  defp prefill_label(_select, _value, _record, _ash_opts), do: ""
+  defp prefill_option(_select, value, _record, _ash_opts), do: {value, ""}
 
   # The row's primary key: what a scope's record_argument receives, and (as
   # a string) the id written to /prompt/record/<action>.

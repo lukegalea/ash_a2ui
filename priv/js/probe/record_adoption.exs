@@ -47,10 +47,18 @@ reply = fn ui, surface, name, context ->
   messages
 end
 
+# A LiveRenderer PubSub refresh: the whole data model rewritten at "/"
+# (resetting /ui/feedback), which is not an action's outcome.
+refresh = fn ui -> [AshA2ui.Info.build_data_model(ui, actor: actor)] end
+
+# A row that no longer exists: a non-field error (no /errors/<field>).
+missing_id = Ash.UUID.generate()
+
 # --- admin catalog: prompts, per-row visibility, the View panel ---------------
 Application.put_env(:ash_a2ui, :catalog, :admin_v1)
 
 write.("adoption_admin_payload.json", AshA2ui.Info.build_surface(JobsUI, actor: actor))
+write.("adoption_admin_refresh_payload.json", refresh.(JobsUI))
 
 write.(
   "adoption_admin_view_payload.json",
@@ -85,18 +93,20 @@ write.(
 
 # A board's prompt row actions (clinic-demo's Complete / Delegate): the
 # dialog closes on a successful confirm and stays open on an error.
-board_annotate = fn values ->
+board_annotate = fn values, record_id ->
   reply.(PromptBoardUI, "adoption_prompt_board", "invoke", %{
     "action" => "annotate",
-    "recordId" => open.id,
+    "recordId" => record_id,
     "component" => "board_open",
     "values" => values
   })
 end
 
 write.("adoption_prompt_board_admin_payload.json", AshA2ui.Info.build_surface(PromptBoardUI, actor: actor))
-write.("adoption_prompt_board_admin_ok_payload.json", board_annotate.(%{"note" => "Called the owner"}))
-write.("adoption_prompt_board_admin_error_payload.json", board_annotate.(%{"note" => ""}))
+write.("adoption_prompt_board_admin_ok_payload.json", board_annotate.(%{"note" => "Called the owner"}, open.id))
+write.("adoption_prompt_board_admin_error_payload.json", board_annotate.(%{"note" => ""}, open.id))
+write.("adoption_prompt_board_admin_missing_payload.json", board_annotate.(%{"note" => "x"}, missing_id))
+write.("adoption_prompt_board_admin_refresh_payload.json", refresh.(PromptBoardUI))
 
 # --- basic catalog: the board, prompt widgets --------------------------------
 Application.put_env(:ash_a2ui, :catalog, :basic)
@@ -105,8 +115,10 @@ write.("adoption_board_payload.json", AshA2ui.Info.build_surface(JobBoardUI, act
 write.("adoption_basic_payload.json", AshA2ui.Info.build_surface(JobsUI, actor: actor))
 
 write.("adoption_prompt_board_payload.json", AshA2ui.Info.build_surface(PromptBoardUI, actor: actor))
-write.("adoption_prompt_board_ok_payload.json", board_annotate.(%{"note" => "Called the owner"}))
-write.("adoption_prompt_board_error_payload.json", board_annotate.(%{"note" => ""}))
+write.("adoption_prompt_board_ok_payload.json", board_annotate.(%{"note" => "Called the owner"}, open.id))
+write.("adoption_prompt_board_error_payload.json", board_annotate.(%{"note" => ""}, open.id))
+write.("adoption_prompt_board_missing_payload.json", board_annotate.(%{"note" => "x"}, missing_id))
+write.("adoption_prompt_board_refresh_payload.json", refresh.(PromptBoardUI))
 
 write.(
   "adoption_basic_annotate_ok_payload.json",
@@ -117,5 +129,7 @@ write.(
     "values" => %{"note" => "Called the owner"}
   })
 )
+
+write.("adoption_basic_annotate_refresh_payload.json", refresh.(JobsUI))
 
 IO.puts("recorded")

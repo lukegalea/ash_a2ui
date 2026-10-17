@@ -1005,7 +1005,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`read_action`](#a2ui-action-prompt_options-read_action){: #a2ui-action-prompt_options-read_action .spark-required} | `atom` |  | A read action of the relationship's destination returning the options for one row. Its preparations and policies run as the actor, so it can read anything the row's candidates depend on. |
-| [`record_argument`](#a2ui-action-prompt_options-record_argument){: #a2ui-action-prompt_options-record_argument .spark-required} | `atom` |  | The argument of `read_action` that receives the row's primary key. |
+| [`record_argument`](#a2ui-action-prompt_options-record_argument){: #a2ui-action-prompt_options-record_argument .spark-required} | `atom` |  | The argument of `read_action` that receives the row's primary key. The scope read passes no other input, so any other argument the read action requires needs a default. |
 
 
 
