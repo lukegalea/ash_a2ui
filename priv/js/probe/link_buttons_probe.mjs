@@ -5,8 +5,10 @@
  *
  *   merged catalog (createAshA2uiCatalog)
  *     - a `<value id>_link` Button reads as a link: the page font (not the
- *       user-agent button font), the link colour on the Text inside, an
- *       underline, no button box, and a focus ring on keyboard focus;
+ *       user-agent button font), the ink colour on the Text inside (AA
+ *       contrast on its background), a primary-coloured underline that
+ *       `--a2ui-link-hover-decoration` can turn off on hover, no button
+ *       box, and a focus ring on keyboard focus;
  *     - activating one dispatches `open_surface` with the row's bound
  *       surface and record id; the detail's link does the same after the
  *       context_select reply;
@@ -183,7 +185,7 @@ async function main() {
     /* --- merged catalog: links look like links ---------------------------- */
     let page = await openCase(browser, base, "catalog=ash");
 
-    await check("ash: a link Button reads as a link (page font, link colour, underline, no box)", async () => {
+    await check("ash: a link Button reads as a link (page font, ink colour, underline, no box)", async () => {
       const style = await page.evaluate((id) => {
         const host = window.__linkHost(id);
         if (!host) return null;
@@ -191,9 +193,11 @@ async function main() {
         const ink = window.__linkInk(host);
         const b = getComputedStyle(button);
         const probe = document.createElement("span");
-        probe.style.color = "var(--a2ui-link-color, var(--a2ui-color-primary))";
+        probe.style.color = "var(--a2ui-link-color, var(--a2ui-color-on-surface))";
+        probe.style.backgroundColor = "var(--a2ui-color-primary)";
         document.body.appendChild(probe);
         const linkColor = getComputedStyle(probe).color;
+        const primary = getComputedStyle(probe).backgroundColor;
         probe.remove();
         return {
           text: window.__deepText(button),
@@ -204,6 +208,8 @@ async function main() {
           inkColor: ink && getComputedStyle(ink).color,
           linkColor,
           decoration: b.textDecorationLine,
+          decorationColor: b.textDecorationColor,
+          primary,
           padding: b.paddingTop + " " + b.paddingLeft,
           border: b.borderTopWidth,
           shadow: b.boxShadow,
@@ -219,12 +225,73 @@ async function main() {
       expect(style.buttonColor, style.linkColor, "button colour");
       expect(style.inkColor, style.linkColor, "text colour");
       expect(style.decoration, "underline", "underline");
+      expect(style.decorationColor, style.primary, "the underline takes the primary colour");
       expect(style.padding, "0px 0px", "padding");
       expect(style.border, "0px", "border");
       expect(style.shadow, "none", "shadow");
       expect(style.background, "rgba(0, 0, 0, 0)", "background");
       expect(style.hostMargin, "0px", "host margin");
       truthy(/\bnb-link\b/.test(style.classes), `the link tier class (${style.classes})`);
+    });
+
+    await check("ash: link text meets WCAG AA contrast (4.5:1) on a host whose primary is a fill", async () => {
+      const result = await page.evaluate((id) => {
+        // clinic-demo's and ash_enterprise's light primary: about 3:1 on
+        // white, so link text drawn in primary would fail here.
+        document.documentElement.style.setProperty("--a2ui-color-primary", "hsl(217, 100%, 66%)");
+        const ink = window.__linkInk(window.__linkHost(id));
+        if (!ink) return null;
+        const rgb = (value) => (value.match(/[\d.]+/g) || []).map(Number);
+        // The first opaque background up the composed tree (white if none).
+        let node = ink;
+        let background = "rgb(255, 255, 255)";
+        while (node) {
+          const bg = getComputedStyle(node).backgroundColor;
+          const parts = rgb(bg);
+          if (parts.length === 3 || (parts.length === 4 && parts[3] === 1)) {
+            background = bg;
+            break;
+          }
+          node = node.parentElement ?? node.getRootNode()?.host ?? null;
+        }
+        const luminance = ([r, g, b]) =>
+          [r, g, b]
+            .map((c) => c / 255)
+            .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+            .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+        const color = getComputedStyle(ink).color;
+        const [a, b] = [luminance(rgb(color)), luminance(rgb(background))];
+        document.documentElement.style.removeProperty("--a2ui-color-primary");
+        return {ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), color, background};
+      }, PERSON_LINK);
+      truthy(result, "the person link renders");
+      truthy(
+        result.ratio >= 4.5,
+        `contrast ${result.ratio.toFixed(2)}:1 (${result.color} on ${result.background})`,
+      );
+    });
+
+    await check("ash: --a2ui-link-hover-decoration: none removes the hover underline", async () => {
+      await page.evaluate(() => {
+        document.documentElement.style.setProperty("--a2ui-link-decoration", "none");
+        document.documentElement.style.setProperty("--a2ui-link-hover-decoration", "none");
+      });
+      const box = await page.evaluate((id) => {
+        const r = window.__linkButton(window.__linkHost(id)).getBoundingClientRect();
+        return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+      }, PERSON_LINK);
+      await page.mouse.move(box.x, box.y);
+      await page.waitForTimeout(200);
+      const decoration = await page.evaluate((id) => {
+        const button = window.__linkButton(window.__linkHost(id));
+        return {hovered: button.matches(":hover"), line: getComputedStyle(button).textDecorationLine};
+      }, PERSON_LINK);
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => {
+        document.documentElement.style.removeProperty("--a2ui-link-decoration");
+        document.documentElement.style.removeProperty("--a2ui-link-hover-decoration");
+      });
+      expect(decoration, {hovered: true, line: "none"}, "hovered link decoration");
     });
 
     await check("ash: other borderless Buttons keep the button tier", async () => {

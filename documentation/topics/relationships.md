@@ -431,9 +431,9 @@ pass `link_buttons: true` only once they navigate on an accepted
 `"open_surface"`.
 
 The merged catalog (`createAshA2uiCatalog`, see [Theming](theming.md))
-draws these Buttons as links: the surrounding font, the link colour
-(`--a2ui-link-color`, default `--a2ui-color-primary`), an underline and a
-focus ring, with no button box. A stock basic-catalog renderer shows its
+draws these Buttons as links: the surrounding font, the ink colour
+(`--a2ui-link-color`, default `--a2ui-color-on-surface`), a
+primary-coloured underline and a focus ring, with no button box. A stock basic-catalog renderer shows its
 own borderless Button: the browser's button font and the
 `--a2ui-color-on-secondary` text colour.
 

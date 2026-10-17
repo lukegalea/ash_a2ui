@@ -768,12 +768,27 @@ function defineAnatomyElements({lit, basicCatalog}) {
           box-shadow: none;
         }
 
+        /* Borderless stays the quiet link tier. */
+        .a2ui-button.borderless {
+          border: none;
+          box-shadow: none;
+          color: var(--a2ui-color-primary, inherit);
+          text-underline-offset: 2px;
+        }
+        .a2ui-button.borderless:hover:not(:disabled) {
+          transform: none;
+          text-decoration: underline;
+        }
+
         /* Reference links ("<value id>_link" borderless Buttons wrapping a
-         * value Text, emitted with link_buttons: true) read as links, not
-         * buttons: the surrounding text's font, the link colour and
-         * underline, no button box. The Text child takes its colour from
-         * --_a2ui-text-color (upstream's button-to-text channel), so it is
-         * set here too. */
+         * value Text, emitted with link_buttons: true; these rules follow
+         * the borderless ones so they win at equal specificity) read as links, not
+         * buttons: the surrounding text's font, an underline, no button
+         * box. The text keeps the ink colour and the primary colour marks
+         * the underline: hosts commonly use primary as a fill, and as text
+         * it can fall below 4.5:1 on a light surface. The Text child takes
+         * its colour from --_a2ui-text-color (upstream's button-to-text
+         * channel), so it is set here too. */
         :host([data-a2ui-link]) {
           margin: 0;
           max-width: 100%;
@@ -794,10 +809,11 @@ function defineAnatomyElements({lit, basicCatalog}) {
           text-align: inherit;
           white-space: normal;
           cursor: pointer;
-          color: var(--a2ui-link-color, var(--a2ui-color-primary, #3b82f6));
-          --_a2ui-text-color: var(--a2ui-link-color, var(--a2ui-color-primary, #3b82f6));
+          color: var(--a2ui-link-color, var(--a2ui-color-on-surface, #141414));
+          --_a2ui-text-color: var(--a2ui-link-color, var(--a2ui-color-on-surface, #141414));
           --_a2ui-text-margin: 0;
           text-decoration-line: var(--a2ui-link-decoration, underline);
+          text-decoration-color: var(--a2ui-link-decoration-color, var(--a2ui-color-primary, currentColor));
           text-decoration-thickness: var(--a2ui-link-decoration-thickness, 1px);
           text-underline-offset: var(--a2ui-link-underline-offset, 2px);
           transition: color 120ms ease, text-decoration-thickness 120ms ease;
@@ -807,12 +823,12 @@ function defineAnatomyElements({lit, basicCatalog}) {
           transform: none;
           box-shadow: none;
           background: none;
-          color: var(--a2ui-link-hover-color, var(--a2ui-link-color, var(--a2ui-color-primary, #3b82f6)));
+          color: var(--a2ui-link-hover-color, var(--a2ui-link-color, var(--a2ui-color-on-surface, #141414)));
           --_a2ui-text-color: var(
             --a2ui-link-hover-color,
-            var(--a2ui-link-color, var(--a2ui-color-primary, #3b82f6))
+            var(--a2ui-link-color, var(--a2ui-color-on-surface, #141414))
           );
-          text-decoration-line: underline;
+          text-decoration-line: var(--a2ui-link-hover-decoration, underline);
           text-decoration-thickness: var(--a2ui-link-hover-decoration-thickness, 2px);
         }
         .a2ui-button.nb-link:focus-visible {
@@ -821,17 +837,6 @@ function defineAnatomyElements({lit, basicCatalog}) {
           outline-offset: 2px;
         }
 
-        /* Borderless stays the quiet link tier. */
-        .a2ui-button.borderless {
-          border: none;
-          box-shadow: none;
-          color: var(--a2ui-color-primary, inherit);
-          text-underline-offset: 2px;
-        }
-        .a2ui-button.borderless:hover:not(:disabled) {
-          transform: none;
-          text-decoration: underline;
-        }
 
         /* The quiet utility tier: row actions and pagination — sm, white,
          * shadowless. Utility chrome beside the one loud primary; hover is

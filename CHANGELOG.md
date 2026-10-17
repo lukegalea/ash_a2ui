@@ -90,10 +90,13 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   the same way.
 - **Basic-catalog reference links look like links.** The merged catalog
   draws a `<value id>_link` borderless Button (`link_buttons: true`) in the
-  surrounding text's font (it used the browser's button font), in the link
-  colour on its Text, underlined, with no padding, border or shadow, and
-  with a focus ring on keyboard focus. New tokens: `--a2ui-link-color`,
+  surrounding text's font (it used the browser's button font), in the ink
+  colour with a primary-coloured underline, with no padding, border or
+  shadow, and with a focus ring on keyboard focus. The text stays ink
+  because hosts often use primary as a fill colour, which can fall below
+  4.5:1 contrast as text. New tokens: `--a2ui-link-color`,
   `--a2ui-link-hover-color`, `--a2ui-link-decoration`,
+  `--a2ui-link-hover-decoration`, `--a2ui-link-decoration-color`,
   `--a2ui-link-decoration-thickness`,
   `--a2ui-link-hover-decoration-thickness`, `--a2ui-link-underline-offset`,
   `--a2ui-focus-ring-color`, `--a2ui-focus-ring-width`. The payload is
