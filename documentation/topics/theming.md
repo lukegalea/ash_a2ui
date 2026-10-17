@@ -99,6 +99,14 @@ function except:
   down to `--a2ui-board-lane-min-width` (default 18rem), then scroll
   inside the board rather than widening the page
   (`--a2ui-board-lane-max-width` caps a lane; default none).
+- **Button** (the reference-link tier) → a `<value id>_link` borderless
+  Button wrapping its value Text (what `link_buttons: true` emits, see
+  [Relationships](relationships.md)) renders as a link: the surrounding
+  text's font instead of the browser's button font, no padding, border or
+  shadow, the link colour on the Text inside, an underline (thicker on
+  hover) and a focus ring on keyboard focus. Every other Button keeps the
+  button styles. The payload is unchanged; stock renderers show the
+  upstream borderless Button.
 
 Like the hook, the file has no bundled dependencies — the host bundle
 passes the renderer classes in:
@@ -134,6 +142,13 @@ Combobox/chip styling rides the same token system, with a few extra knobs:
 `--a2ui-chip-selected-background`/`--a2ui-chip-selected-color`, and
 `--a2ui-chip-border-radius` (see the JSDoc in the file). Board lanes:
 `--a2ui-board-lane-min-width` and `--a2ui-board-lane-max-width`.
+Reference links: `--a2ui-link-color` (default `--a2ui-color-primary`),
+`--a2ui-link-hover-color` (default the link colour),
+`--a2ui-link-decoration` (default `underline`),
+`--a2ui-link-decoration-thickness` / `--a2ui-link-hover-decoration-thickness`
+(`1px` / `2px`), `--a2ui-link-underline-offset` (`2px`), and
+`--a2ui-focus-ring-color` / `--a2ui-focus-ring-width` (default
+`--a2ui-color-border`, `2px`).
 
 ### Markdown rendering (fixes literal `##` headings)
 
