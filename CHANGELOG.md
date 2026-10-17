@@ -10,6 +10,28 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- **Per-row prompt options (`prompt_options`).** A relationship prompt
+  listed every option the actor could read. For example, clinic-demo's
+  delegate prompt listed every principal, not only the task's candidates.
+  A `prompt_options :field` entity on an `action` now scopes the field to
+  the row. Its `read_action` (a read action of the relationship's
+  destination) runs as the actor, with the row's primary key as its
+  `record_argument`. The scope is server-authoritative:
+  - the client sends only the row's id, never a filter;
+  - the server re-reads the row through the surface's read action, with
+    `visible_when` enforced;
+  - the options reach the client only through the `prompt` pre-fill, at
+    `/prompt/options/<action>/<field>` (with the row at
+    `/prompt/record/<action>`). They are never inlined in the component
+    tree or loaded at `/options/<field>`;
+  - `option_select`, `option_search` (scoped to the row) and `invoke`
+    re-read every picked value through the scope. A value outside it fails
+    on `/errors/<field>`.
+
+  The field renders as the option-list composite, with search controls
+  when the field declares `option_search`, in both compositions. The
+  field, the read action and its argument are checked at compile time.
+
 - **Boards in composed surfaces.** The dynamic spec carries
   `"display": "board"` with a `row_layout` and source-less `"sections"`
   (`scope_by`, `values`, `labels`, `swimlanes_by`, `swimlane_values`,
@@ -186,6 +208,25 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   `links`.
 
 ### Bug Fixes:
+
+- **View then Cancel no longer leaves the View button spinning (admin
+  catalog).** Row-action and action-bar buttons settled only when
+  `/ui/feedback/message` changed value. `view_record` and
+  `cancel_record_task` write the already-clear feedback, so a View button
+  stayed disabled with a spinner until another action reported. The
+  renderer now subscribes to the `/ui/feedback` and `/ui/response` objects,
+  so every outcome write settles the button, including one that leaves the
+  value unchanged.
+
+- **Prompt dialogs on boards close after a successful confirm.** Board
+  cards (and every basic-composed prompt) render their prompt as the basic
+  `Modal`, which closed only through its × button. After a successful
+  Complete or Delegate the dialog stayed open with its fields cleared. The
+  merged basic catalog and the admin catalog now register
+  `<ash-a2ui-modal>`, a subclass of the stock element. It closes when an
+  `invoke` dispatched from inside it reports `kind == "success"`, and stays
+  open over the errors otherwise, as the admin table dialog already did. A
+  stock basic renderer is unchanged.
 
 - **A swimlaned board's cell-limit check cannot crash.** `VerifySections`
   matched `{:ok, cells}` from `AshA2ui.Board.cell_count/2`. It now handles

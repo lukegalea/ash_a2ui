@@ -47,6 +47,12 @@
  *   - **Text** → `<ash-a2ui-text>` and **Button** → `<ash-a2ui-button>`:
  *     the CLIN-10 neobrutalist anatomy overrides — see the
  *     "Neobrutalist anatomy overrides" section below the imports.
+ *   - **Modal** → `<ash-a2ui-modal>`: the stock Modal closes only through
+ *     its × button, so a row-action prompt stayed open (its fields
+ *     cleared) after a successful Confirm. The override closes the dialog
+ *     when the outcome of an `invoke` dispatched from inside it is a
+ *     success — see "Prompt Modal" below. The admin catalog applies the
+ *     same override, so board and basic-table prompts behave alike there.
  *
  * ## Contract with the host bundle
  *
@@ -102,6 +108,7 @@ const CHOICEPICKER_TAG = "ash-a2ui-choicepicker";
 const COLUMN_TAG = "ash-a2ui-column";
 const TEXT_TAG = "ash-a2ui-text";
 const BUTTON_TAG = "ash-a2ui-button";
+const MODAL_TAG = "ash-a2ui-modal";
 
 /**
  * Builds the merged catalog. See the module docs for the `deps` contract.
@@ -144,6 +151,8 @@ export function createAshA2uiCatalog(deps) {
     const api = basicCatalog.components.get(type);
     if (api && customElements.get(tag)) overrides.set(type, {...api, tagName: tag});
   }
+  const modal = promptModalComponent(basicCatalog);
+  if (modal) overrides.set("Modal", modal);
 
   const components = [...basicCatalog.components.values()].map(
     (component) => overrides.get(component.name) || component,
@@ -962,6 +971,121 @@ function defineAnatomyElements({lit, basicCatalog}) {
 
   if (!customElements.get(TEXT_TAG)) customElements.define(TEXT_TAG, AshA2uiTextElement);
   if (!customElements.get(BUTTON_TAG)) customElements.define(BUTTON_TAG, AshA2uiButtonElement);
+}
+
+// --- Prompt Modal -------------------------------------------------------------
+//
+// A row action declaring `prompt_fields` renders, in the basic composition
+// (tables and every board, under both catalogs), as a Modal whose content
+// ends in a Confirm Button dispatching `invoke`. The stock Modal opens on
+// its trigger and closes only through its own × button: after a successful
+// Confirm the server resets /prompt/values/<action>, so the dialog stayed
+// open over cleared fields (clinic-demo's board Complete / Delegate).
+//
+// <ash-a2ui-modal> subclasses the upstream Modal (resolved from the
+// custom-element registry, like the anatomy overrides) and changes one
+// thing: a click on a Button inside the open dialog whose action is an
+// `invoke` event marks the dialog as awaiting that outcome. The next write
+// to /ui/feedback (subscribed as an object path, so a write fires even when
+// it leaves the value unchanged — see the admin catalog's SETTLE_PATHS)
+// settles it: `kind == "success"` closes the dialog, anything else leaves
+// it open with the field errors and the feedback message showing. The
+// server contract (`prompt`, `invoke` with `values`) is unchanged, and the
+// emitted tree stays basic catalog — a stock renderer still shows the
+// stock Modal.
+
+const PROMPT_SETTLE_PATH = "/ui/feedback";
+
+function definePromptModalElement(basicCatalog) {
+  if (customElements.get(MODAL_TAG)) return true;
+  const A2uiBasicModalElement = upstreamElementClass(basicCatalog, "Modal");
+  if (!A2uiBasicModalElement) return false;
+
+  class AshA2uiModalElement extends A2uiBasicModalElement {
+    constructor() {
+      super();
+      this._ashPromptSubscription = null;
+      this._ashOnDialogClick = (event) => this.onDialogClick(event);
+      this._ashDialog = null;
+    }
+
+    updated(changed) {
+      super.updated?.(changed);
+      const dialog = this.dialog;
+      if (dialog === this._ashDialog) return;
+      this._ashDialog?.removeEventListener("click", this._ashOnDialogClick);
+      this._ashDialog = dialog || null;
+      this._ashDialog?.addEventListener("click", this._ashOnDialogClick);
+    }
+
+    disconnectedCallback() {
+      super.disconnectedCallback();
+      this.dropPromptSubscription();
+    }
+
+    // The Button component a click inside the dialog landed on, read from
+    // the composed path (the button's element carries its component model;
+    // a click on its label first crosses the label Text's element).
+    clickedButtonModel(event) {
+      for (const node of event.composedPath()) {
+        if (node === this._ashDialog) return null;
+        const model = node?.context?.componentModel;
+        if (model?.type === "Button") return model;
+      }
+      return null;
+    }
+
+    onDialogClick(event) {
+      if (!this._ashDialog?.open) return;
+      const model = this.clickedButtonModel(event);
+      if (model?.properties?.action?.event?.name !== "invoke") return;
+      this.awaitPromptOutcome();
+    }
+
+    awaitPromptOutcome() {
+      const dataModel = this.context?.dataContext?.surface?.dataModel;
+      if (!dataModel || typeof dataModel.subscribe !== "function") return;
+      this.dropPromptSubscription();
+      this._ashPromptSubscription = dataModel.subscribe(PROMPT_SETTLE_PATH, () => {
+        this.dropPromptSubscription();
+        // Read once the whole outcome batch has landed (a v1.0 reply
+        // writes /ui/response before its /ui/feedback mirror).
+        Promise.resolve().then(() => {
+          if (dataModel.get(`${PROMPT_SETTLE_PATH}/kind`) === "success" && this._ashDialog?.open) {
+            this._ashDialog.close();
+          }
+        });
+      });
+    }
+
+    dropPromptSubscription() {
+      if (!this._ashPromptSubscription) return;
+      try {
+        this._ashPromptSubscription.unsubscribe();
+      } catch {
+        // The data model may already be gone (surface torn down).
+      }
+      this._ashPromptSubscription = null;
+    }
+  }
+
+  customElements.define(MODAL_TAG, AshA2uiModalElement);
+  return true;
+}
+
+/**
+ * The catalog entry of the prompt-closing Modal (`<ash-a2ui-modal>`, see
+ * "Prompt Modal"): the basic catalog's Modal API with the tag swapped, or
+ * `null` when the upstream Modal element is not registered (the stock
+ * Modal then renders). Returns the entry unchanged when `basicCatalog`
+ * already carries the override (the admin catalog over the merged one).
+ * Shared with `createAshAdminCatalog`.
+ */
+export function promptModalComponent(basicCatalog) {
+  const api = basicCatalog?.components?.get("Modal");
+  if (!api) return null;
+  if (api.tagName === MODAL_TAG) return api;
+  return definePromptModalElement(basicCatalog) ? {...api, tagName: MODAL_TAG} : null;
 }
 
 // classMap fallback: the deps contract passes `lit: {html, css, nothing}`

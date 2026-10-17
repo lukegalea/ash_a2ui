@@ -6,7 +6,7 @@
 # every record and reply is made in this one process).
 
 alias AshA2ui.ActionHandler
-alias AshA2ui.Test.Adoption.{Clerk, Job, JobBoardUI, JobsUI}
+alias AshA2ui.Test.Adoption.{Clerk, Job, JobBoardUI, JobsUI, PromptBoardUI}
 
 actor = %{id: "u-red", team: "red"}
 
@@ -58,6 +58,11 @@ write.(
 )
 
 write.(
+  "adoption_admin_cancel_payload.json",
+  reply.(JobsUI, "adoption_jobs", "cancel_record_task", %{"component" => "table"})
+)
+
+write.(
   "adoption_admin_annotate_ok_payload.json",
   reply.(JobsUI, "adoption_jobs", "invoke", %{
     "action" => "annotate",
@@ -77,10 +82,40 @@ write.(
   })
 )
 
+
+# A board's prompt row actions (clinic-demo's Complete / Delegate): the
+# dialog closes on a successful confirm and stays open on an error.
+board_annotate = fn values ->
+  reply.(PromptBoardUI, "adoption_prompt_board", "invoke", %{
+    "action" => "annotate",
+    "recordId" => open.id,
+    "component" => "board_open",
+    "values" => values
+  })
+end
+
+write.("adoption_prompt_board_admin_payload.json", AshA2ui.Info.build_surface(PromptBoardUI, actor: actor))
+write.("adoption_prompt_board_admin_ok_payload.json", board_annotate.(%{"note" => "Called the owner"}))
+write.("adoption_prompt_board_admin_error_payload.json", board_annotate.(%{"note" => ""}))
+
 # --- basic catalog: the board, prompt widgets --------------------------------
 Application.put_env(:ash_a2ui, :catalog, :basic)
 
 write.("adoption_board_payload.json", AshA2ui.Info.build_surface(JobBoardUI, actor: actor))
 write.("adoption_basic_payload.json", AshA2ui.Info.build_surface(JobsUI, actor: actor))
+
+write.("adoption_prompt_board_payload.json", AshA2ui.Info.build_surface(PromptBoardUI, actor: actor))
+write.("adoption_prompt_board_ok_payload.json", board_annotate.(%{"note" => "Called the owner"}))
+write.("adoption_prompt_board_error_payload.json", board_annotate.(%{"note" => ""}))
+
+write.(
+  "adoption_basic_annotate_ok_payload.json",
+  reply.(JobsUI, "adoption_jobs", "invoke", %{
+    "action" => "annotate",
+    "recordId" => open.id,
+    "component" => "table",
+    "values" => %{"note" => "Called the owner"}
+  })
+)
 
 IO.puts("recorded")

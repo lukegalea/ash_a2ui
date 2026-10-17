@@ -11,7 +11,14 @@
  *     - row actions with `visible_when` show only on the rows they apply to;
  *     - a row action's busy state settles once on its outcome and then
  *       releases its data-model subscriptions;
- *     - the read-only View panel has a control that closes it.
+ *     - the read-only View panel has a control that closes it;
+ *     - View then Cancel leaves the View button enabled (the settle fires
+ *       on every outcome write, also one leaving /ui/feedback unchanged).
+ *   prompt Modals (the basic composition's prompts: boards under both
+ *   catalogs, basic tables)
+ *     - a failed confirm keeps the dialog open, a successful one closes it
+ *       (the merged catalog, and the admin catalog over the merged or the
+ *       stock basic catalog).
  *   boards (JobBoardUI, basic composition)
  *     - lanes share the board's width instead of sizing to their cards, on
  *       the stock basic catalog and on the AshA2ui merged catalog (where
@@ -382,6 +389,33 @@ async function main() {
       expect(after.size, state.baseline, "the outcome subscriptions are released");
     });
 
+    /* --- admin: View then Cancel settles the View button ----------------- */
+    // On a fresh page: /ui/feedback is already clear, so neither reply
+    // changes its message — the settle must not wait for a changed value.
+    const viewPage = await openCase(browser, base, "payload=adoption_admin");
+    await check("admin: View then Cancel leaves the View button enabled", async () => {
+      const page = viewPage;
+      const viewButton = () =>
+        page.evaluate(() => {
+          const button = window.__rowButtons("Open job")?.find((b) => /View/.test(b.textContent));
+          return button
+            ? {disabled: button.disabled, busy: button.getAttribute("aria-busy"), spinner: !!button.querySelector(".am-spinner")}
+            : null;
+        });
+      await page.evaluate(() => {
+        window.__dispatched.length = 0;
+        window.__rowButtons("Open job").find((b) => /View/.test(b.textContent)).click();
+      });
+      await page.waitForTimeout(100);
+      expect(await page.evaluate(() => window.__dispatched.map((d) => d.name)), ["view_record"], "View dispatched");
+      expect((await viewButton())?.disabled, true, "busy while the view is in flight");
+      await feed(page, "adoption_admin_view");
+      await feed(page, "adoption_admin_cancel");
+      expect(await viewButton(), {disabled: false, busy: "false", spinner: false}, "settled after View + Cancel");
+      expect(page.__errors, [], "console errors");
+    });
+    await viewPage.close();
+
     /* --- admin: the View panel closes ------------------------------------ */
     await check("admin: the read-only View panel has a control that closes it", async () => {
       await feed(page, "adoption_admin_view");
@@ -427,6 +461,108 @@ async function main() {
     });
     await page.screenshot({path: join(probeDir, "screenshots", "adoption_admin.png"), fullPage: true});
     await page.close();
+
+
+    /* --- prompt dialogs close on success (basic Modal) ------------------- */
+    // The boards' prompt row actions (clinic-demo's Complete / Delegate)
+    // render the basic composition's Modal under both catalogs, as do the
+    // basic tables'; the AshA2ui catalogs close it on a success outcome.
+    const modalCases = [
+      {name: "board (ash)", query: "payload=adoption_prompt_board&catalog=ash", prefix: "adoption_prompt_board", trigger: "row_action_board_open_annotate_button"},
+      {name: "board (admin)", query: "payload=adoption_prompt_board_admin", prefix: "adoption_prompt_board_admin", trigger: "row_action_board_open_annotate_button"},
+      // The admin catalog over the stock basic catalog (no merged catalog).
+      {name: "board (admin over stock)", query: "payload=adoption_prompt_board_admin&catalog=stock", prefix: "adoption_prompt_board_admin", trigger: "row_action_board_open_annotate_button"},
+      {name: "table (ash)", query: "payload=adoption_basic&catalog=ash", prefix: "adoption_basic_annotate", trigger: "row_action_annotate_button", noError: true},
+    ];
+    for (const kase of modalCases) {
+      page = await openCase(browser, base, kase.query);
+      await page.evaluate(() => {
+        window.__openModal = () => window.__deepAll("dialog").find((d) => d.open) ?? null;
+        window.__modalButton = (text) =>
+          window.__deepAll("button").find((b) => b.textContent.trim() === text && window.__openModal()?.contains(b)) ??
+          (() => {
+            const dialog = window.__openModal();
+            if (!dialog) return null;
+            const found = [];
+            const walk = (root) => {
+              for (const el of root.querySelectorAll("*")) {
+                if (el.tagName === "BUTTON") found.push(el);
+                if (el.shadowRoot) walk(el.shadowRoot);
+              }
+            };
+            walk(dialog);
+            return found.find((b) => window.__deepText(b) === text) ?? null;
+          })();
+      });
+      const openPrompt = async () => {
+        await page.evaluate((id) => {
+          const trigger = window.__deepAll("*").find((el) => el.context?.componentModel?.id === id);
+          const button = trigger?.shadowRoot?.querySelector("button") ?? trigger?.querySelector("button");
+          (button ?? trigger).click();
+        }, kase.trigger);
+        await page.waitForTimeout(200);
+      };
+      const typeNote = async (text) => {
+        const input = await page.evaluateHandle(() => {
+          const find = (root) => {
+            for (const el of root.querySelectorAll("*")) {
+              if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el;
+              if (el.shadowRoot) {
+                const found = find(el.shadowRoot);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+          return find(window.__openModal());
+        });
+        await input.fill(text);
+      };
+      // A real pointer click on the Confirm label (it crosses the label
+      // Text's element before the Button's).
+      const confirm = async () => {
+        await page.evaluate(() => {
+          window.__dispatched.length = 0;
+        });
+        const box = await page.evaluate(() => {
+          const rect = window.__modalButton("Confirm").getBoundingClientRect();
+          return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+        });
+        await page.mouse.click(box.x, box.y);
+        await page.waitForTimeout(100);
+        return page.evaluate(() => window.__dispatched.map((d) => d.name));
+      };
+
+      if (!kase.noError) {
+        await check(`${kase.name}: a failed prompt confirm keeps the dialog open`, async () => {
+          await openPrompt();
+          truthy(await page.evaluate(() => !!window.__openModal()), "the prompt opened");
+          await typeNote("x");
+          expect(await confirm(), ["invoke"], "Confirm dispatched invoke");
+          await feed(page, `${kase.prefix}_error`);
+          expect(await page.evaluate(() => !!window.__openModal()), true, "still open on the error");
+        });
+      }
+
+      await check(`${kase.name}: a successful prompt confirm closes the dialog`, async () => {
+        if (!(await page.evaluate(() => !!window.__openModal()))) await openPrompt();
+        truthy(await page.evaluate(() => !!window.__openModal()), "the prompt is open");
+        await typeNote("Called the owner");
+        expect(await confirm(), ["invoke"], "Confirm dispatched invoke");
+        await feed(page, `${kase.prefix}_ok`);
+        expect(await page.evaluate(() => !!window.__openModal()), false, "closed on success");
+      });
+
+      await check(`${kase.name}: the closed prompt reopens`, async () => {
+        await openPrompt();
+        expect(await page.evaluate(() => !!window.__openModal()), true, "open again");
+      });
+
+      await check(`no console errors (${kase.name} prompts)`, async () => {
+        expect(page.__errors, [], "errors");
+      });
+      await page.close();
+    }
 
     /* --- boards: lane widths --------------------------------------------- */
     for (const catalog of ["stock", "ash"]) {
