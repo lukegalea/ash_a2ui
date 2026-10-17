@@ -21,7 +21,15 @@ defmodule AshA2ui.Verifiers.VerifySections do
       every `values` entry is one of them, and every `labels` key is one of
       them; no two lanes share a runtime name (a value listed twice, or two
       values that sanitize alike), and `limit` is not below the number of
-      lanes (it caps lanes, not cards per lane).
+      lanes (it caps lanes, not cards per lane),
+    * swimlanes (`swimlanes_by`, a board's second axis): only on a
+      `display :board` without a `source`, on a public attribute or
+      calculation other than `scope_by` with enumerable values; every
+      `swimlane_values` entry and every `swimlane_labels` / `swimlane_tones`
+      key is one of them, every tone is in the `badge_tones` vocabulary
+      (`AshA2ui.RowLayout.tones/0`), no two swimlanes (and no two cells)
+      share a runtime name, and the `swimlane_*` options require
+      `swimlanes_by`.
 
   Raises `Spark.Error.DslError` (surfaced by Spark as a compile-time
   diagnostic) on failure. Skipped checks degrade gracefully when the target
@@ -59,12 +67,239 @@ defmodule AshA2ui.Verifiers.VerifySections do
 
     with :ok <- verify_table(component, key, module),
          :ok <- verify_no_select_context(component, key, module),
-         :ok <- verify_scope_by(component, key, dsl_state, module) do
-      case component.sections.source do
-        nil -> verify_enumerated(component, key, dsl_state, module)
-        _source -> verify_source(component, key, module)
-      end
+         :ok <- verify_scope_by(component, key, dsl_state, module),
+         :ok <- verify_mode(component, key, dsl_state, module) do
+      verify_swimlanes(component, key, dsl_state, module)
     end
+  end
+
+  defp verify_mode(component, key, dsl_state, module) do
+    case component.sections.source do
+      nil -> verify_enumerated(component, key, dsl_state, module)
+      _source -> verify_source(component, key, module)
+    end
+  end
+
+  # --- swimlanes (a board's second axis) ---
+
+  @swimlane_options [:swimlane_values, :swimlane_labels, :swimlane_tones]
+
+  defp verify_swimlanes(%{sections: %{swimlanes_by: nil} = sections}, key, _dsl_state, module) do
+    case Enum.find(@swimlane_options, &(Map.fetch!(sections, &1) not in [nil, []])) do
+      nil ->
+        :ok
+
+      option ->
+        sections_error(module, key, option, "sections option #{option} requires swimlanes_by")
+    end
+  end
+
+  defp verify_swimlanes(component, key, dsl_state, module) do
+    sections = component.sections
+
+    cond do
+      not is_nil(sections.source) ->
+        sections_error(
+          module,
+          key,
+          :swimlanes_by,
+          "swimlanes_by requires sections without a source (a board's enumerated lanes)"
+        )
+
+      component.display != :board ->
+        sections_error(
+          module,
+          key,
+          :swimlanes_by,
+          "swimlanes_by splits a board into rows: table #{inspect(key)} needs display :board"
+        )
+
+      sections.swimlanes_by == sections.scope_by ->
+        sections_error(
+          module,
+          key,
+          :swimlanes_by,
+          "swimlanes_by #{inspect(sections.swimlanes_by)} is the lane attribute (scope_by): " <>
+            "swimlanes need a second attribute"
+        )
+
+      true ->
+        case target_resource(dsl_state) do
+          nil -> verify_swimlane_tones(sections, key, module)
+          resource -> verify_swimlane_attribute(sections, key, resource, module)
+        end
+    end
+  end
+
+  defp verify_swimlane_attribute(sections, key, resource, module) do
+    attribute = sections.swimlanes_by
+
+    if public_attribute?(resource, attribute) or public_calculation?(resource, attribute) do
+      verify_swimlane_values(sections, key, resource, module)
+    else
+      sections_error(
+        module,
+        key,
+        :swimlanes_by,
+        "swimlanes_by #{inspect(attribute)} is not a public attribute or calculation of " <>
+          "#{inspect(resource_name(resource))}"
+      )
+    end
+  end
+
+  defp verify_swimlane_values(sections, key, resource, module) do
+    case AshA2ui.Board.enumerated_values(resource, sections.swimlanes_by) do
+      {:ok, all} ->
+        swimlanes =
+          Enum.map(sections.swimlane_values || all, &AshA2ui.Board.match_value(&1, all))
+
+        with :ok <-
+               verify_known_swimlane_values(
+                 sections.swimlane_values || [],
+                 all,
+                 :swimlane_values,
+                 key,
+                 module
+               ),
+             :ok <-
+               verify_known_swimlane_values(
+                 Keyword.keys(sections.swimlane_labels),
+                 all,
+                 :swimlane_labels,
+                 key,
+                 module
+               ),
+             :ok <-
+               verify_known_swimlane_values(
+                 Keyword.keys(sections.swimlane_tones),
+                 all,
+                 :swimlane_tones,
+                 key,
+                 module
+               ),
+             :ok <- verify_swimlane_tones(sections, key, module),
+             :ok <- verify_distinct_swimlanes(sections, swimlanes, key, module) do
+          verify_distinct_cells(sections, swimlanes, key, resource, module)
+        end
+
+      :error ->
+        sections_error(
+          module,
+          key,
+          :swimlanes_by,
+          "swimlanes need enumerable values: swimlanes_by " <>
+            "#{inspect(sections.swimlanes_by)} is neither an Ash.Type.Enum nor " <>
+            "constrained by one_of"
+        )
+    end
+  end
+
+  defp verify_known_swimlane_values(values, all, option, key, module) do
+    case Enum.find(values, &is_nil(AshA2ui.Board.match_value(&1, all))) do
+      nil ->
+        :ok
+
+      unknown ->
+        sections_error(
+          module,
+          key,
+          option,
+          "#{option} entry #{inspect(unknown)} is not an enumerated value of " <>
+            "swimlanes_by (#{Enum.map_join(all, ", ", &inspect/1)})"
+        )
+    end
+  end
+
+  defp verify_swimlane_tones(sections, key, module) do
+    tones = AshA2ui.RowLayout.tones()
+
+    case Enum.find(sections.swimlane_tones, fn {_value, tone} -> tone not in tones end) do
+      nil ->
+        :ok
+
+      {value, tone} ->
+        sections_error(
+          module,
+          key,
+          :swimlane_tones,
+          "swimlane_tones for #{inspect(value)} must be one of " <>
+            "#{Enum.map_join(tones, ", ", &inspect/1)}, got: #{inspect(tone)}"
+        )
+    end
+  end
+
+  # Every swimlane is a row with its own component ids and data-model paths
+  # (`AshA2ui.Board.swimlane_name/2`): no value listed twice, no two values
+  # that sanitize alike.
+  defp verify_distinct_swimlanes(sections, swimlanes, key, module) do
+    clash =
+      swimlanes
+      |> Enum.group_by(&AshA2ui.Board.swimlane_name(key, &1))
+      |> Enum.find(fn {_name, values} -> length(values) > 1 end)
+
+    case clash do
+      nil ->
+        :ok
+
+      {name, values} ->
+        option = if sections.swimlane_values, do: :swimlane_values, else: :swimlanes_by
+
+        message =
+          case Enum.uniq(values) do
+            [value] ->
+              "swimlane_values lists #{inspect(value)} more than once: each swimlane " <>
+                "is rendered once, as #{name}"
+
+            distinct ->
+              "swimlane values #{Enum.map_join(distinct, " and ", &inspect/1)} collide " <>
+                "on the runtime name #{name}: list only one of them in swimlane_values"
+          end
+
+        sections_error(module, key, option, message)
+    end
+  end
+
+  # Cell names join a lane and a swimlane name with `__`; a value with a
+  # leading or trailing non-alphanumeric run can make two cells meet.
+  defp verify_distinct_cells(sections, swimlanes, key, resource, module) do
+    case AshA2ui.Board.enumerated_values(resource, sections.scope_by) do
+      {:ok, all} ->
+        lanes = Enum.map(sections.values || all, &AshA2ui.Board.match_value(&1, all))
+        verify_cell_names(lanes, swimlanes, key, module)
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp verify_cell_names(lanes, swimlanes, key, module) do
+    clash =
+      for(swimlane <- swimlanes, lane <- lanes, do: {lane, swimlane})
+      |> Enum.group_by(fn {lane, swimlane} -> AshA2ui.Board.cell_name(key, lane, swimlane) end)
+      |> Enum.find(fn {_name, cells} -> length(cells) > 1 end)
+
+    case clash do
+      nil ->
+        :ok
+
+      {name, cells} ->
+        sections_error(
+          module,
+          key,
+          :swimlanes_by,
+          "cells #{Enum.map_join(cells, " and ", &inspect/1)} collide on the runtime " <>
+            "name #{name}: rename a lane or swimlane value"
+        )
+    end
+  end
+
+  defp sections_error(module, key, option, message) do
+    {:error,
+     DslError.exception(
+       module: module,
+       path: [:a2ui, :component, key, :sections, option],
+       message: message
+     )}
   end
 
   defp verify_table(%{name: :table}, _key, _module), do: :ok

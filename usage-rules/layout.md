@@ -169,6 +169,37 @@ contracts.
   List-mode sectioned tables still reject `select_context`.
 - `display :list` (the default) keeps the stacked rendering, so source-less
   sections work without a board too.
+- Split a board into **swimlanes** with `swimlanes_by` in the same
+  `sections` block: a second enumerated attribute (not `scope_by`) whose
+  values become rows across every lane, each on a tone-coloured band:
+
+  ```elixir
+  sections do
+    scope_by :stage                         # the stage columns
+    swimlanes_by :severity                  # the rows (Ash.Type.Enum or one_of)
+    swimlane_values [:emergency, :urgent, :routine]   # optional subset + order
+    swimlane_labels emergency: "Emergency"  # optional heading overrides
+    swimlane_tones emergency: :danger, urgent: :warning, routine: :success
+  end
+  ```
+
+  Every (swimlane, lane) cell is its own expanded table,
+  `<key>_<lane>__<swimlane>` (`board_open__urgent`), with both filters
+  ANDed onto every read; a client filter on either attribute cannot widen
+  a cell. `refreshes [:board]` still covers every cell. Tones are the
+  `badge_tones` vocabulary (`:neutral` when unlisted), served as data at
+  `/_swimlane_tone_<key>__<swimlane>` and painted by the merged catalog
+  from the `--a2ui-swimlane-<tone>-background` / `-color` tokens — theme
+  those, don't style swimlanes per host. Totals: per cell
+  `/_lane_total_<cell>`, per swimlane `/_swimlane_total_<key>__<swimlane>`,
+  per stage `/_lane_total_<key>_<lane>`.
+- Records whose swimlane value is nil (or not in `swimlane_values`) show in
+  no swimlane. When a nil means something (not yet triaged), give the board
+  a calculation that maps it to a value and swimlane by that.
+- `swimlanes_by` needs `display :board` and no `source`; its values, labels
+  and tones keys must be enumerated values, tones must be from the
+  vocabulary, and no two swimlanes (or cells) may share a runtime name
+  (compile-verified).
 
 ## Calendars
 
@@ -219,6 +250,8 @@ contracts.
 - ❌ Duplicating a field across `title`/`badge`/`meta` or across groups.
 - ❌ Hardcoding one `:table` per status value — use a source-less `sections`
   block, so the lanes follow the attribute's declared values.
+- ❌ One board per severity (or per team) stacked on a page — use
+  `swimlanes_by`, so the stages line up and one refresh covers every cell.
 - ❌ Treating steps as a security boundary. They decide what is shown and
   when it is checked; the final submit validates every field, and
   authorization runs on that write.

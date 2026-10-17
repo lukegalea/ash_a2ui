@@ -298,14 +298,114 @@ from another lane. Only declared lanes are addressable components.
 - `display :board` needs a `:table` with a `sections` block and a
   `row_layout`.
 
-**Not included:** ordering within a lane by a stored rank, WIP limits,
-swimlanes on a second axis, and a generated move action. Transitions are the
-resource's own actions, so state-machine rules stay on the resource.
+**Not included:** ordering within a lane by a stored rank, WIP limits, and a
+generated move action. Transitions are the resource's own actions, so
+state-machine rules stay on the resource.
 
 Prior art: the board vocabulary comes from PyroManiac
 (<https://github.com/frankdugan3/pyro_maniac>), an Ash UI DSL with kanban
 views. We borrowed the idea, not the code; the design record is
 `notes/2026-10-15-pyro-maniac-borrowings.md`.
+
+### Swimlanes: a second axis
+
+`swimlanes_by` splits a board into rows by a second enumerated attribute.
+The stage columns stay side by side; every swimlane is a row across all of
+them, headed by its label and painted in its tone. A triage board, for
+example, keeps its process stages as columns and splits by urgency:
+
+```elixir
+component :table, :board do
+  display :board
+  row_actions [:check_in, :complete]
+
+  row_layout do
+    title :patient_label
+  end
+
+  sections do
+    scope_by :stage                         # the stage columns
+    values [:waiting, :in_visit, :done]
+    swimlanes_by :urgency                   # the rows: Ash.Type.Enum or one_of
+    swimlane_values [:emergency, :urgent, :soon, :routine]  # optional: subset + order
+    swimlane_labels soon: "Soon"            # optional: heading overrides
+    swimlane_tones emergency: :danger, urgent: :warning, soon: :info, routine: :success
+  end
+end
+```
+
+**Cells.** Each (swimlane, lane) pair is one expanded table, swimlane-major
+(row by row, in `swimlane_values` then `values` order). Its runtime name
+extends the lane name with `__<swimlane>`: `board_waiting__emergency`, with
+records at `/records/board_waiting__emergency` and query state at
+`/query/board_waiting__emergency`. Its reads AND both filters,
+`stage == :waiting` and `urgency == :emergency`. A client filter on either
+attribute cannot widen a cell, and only declared cells are addressable
+components. `refreshes [:board]` still names the template key and covers
+every cell, so a transition moves a card from one cell to the next in the
+same swimlane. Empty cells are kept and show their empty state. Each cell
+pages on its own query.
+
+Records whose swimlane value is nil, or not in `swimlane_values`, are in no
+swimlane. When a nil means something (not yet triaged), swimlane by a
+calculation that maps it to a value of its own.
+
+**Rendering.** `board_<key>_lanes` becomes a `Column`:
+
+- `board_<key>_stages`: a `Row` of stage `Column`s (`stage_<lane>`,
+  weight 1), each with a header `Row` of the stage heading
+  (`stage_<lane>_heading`, h3) and the stage total (`stage_<lane>_total`,
+  bound to `/_lane_total_<lane>`);
+- one `swimlane_<key>__<swimlane>` `Column` per swimlane: a header `Row`
+  (`swimlane_<key>__<swimlane>_heading`, h3, and
+  `swimlane_<key>__<swimlane>_total`, bound to
+  `/_swimlane_total_<key>__<swimlane>`) over
+  `swimlane_<key>__<swimlane>_cells`, a `Row` of the swimlane's cell
+  `Column`s (`lane_<cell>`, weight 1) in stage order, so every cell sits
+  under its stage.
+
+A cell `Column` holds what a lane holds, except that its header `Row` has
+only the cell total (`lane_<cell>_total`, `/_lane_total_<cell>`): the stage
+and swimlane headings name it.
+
+**Tones.** The basic catalog has no colour props, so a swimlane's tone is
+data: `/_swimlane_tone_<key>__<swimlane>` holds a tone from the
+`badge_tones` vocabulary (`neutral`, `info`, `success`, `warning`,
+`danger`, `accent`; `neutral` when unlisted). The AshA2ui merged catalog
+paints each swimlane row from it: the band takes
+`--a2ui-swimlane-<tone>-background`, and the headings and totals on the band
+take `--a2ui-swimlane-<tone>-color`. `ash_a2ui_theme.css` defines all twelve
+tokens with `light-dark()`: 200-weight tints with 900-weight ink in light,
+900 bands with 100 ink in dark, every pair at least 6.9:1 (WCAG AA asks
+4.5:1). Cards on the band keep their own surface colours.
+`--a2ui-swimlane-padding` and `--a2ui-swimlane-border-radius` shape the
+band, and the stage header row is inset to match so the cells stay aligned.
+The stages and swimlanes scroll together inside the board below
+`--a2ui-board-lane-min-width`. The admin catalog renders the board with the
+same basic composition, so a host that builds it over the merged catalog
+gets the same swimlanes. A stock basic renderer shows the rows without
+colour.
+
+**Totals.** Each cell's `/_lane_total_<cell>` is a lane total. A swimlane's
+`/_swimlane_total_<key>__<swimlane>` and a stage's `/_lane_total_<lane>` are
+the sums of their cells' totals (`"5+"` when any cell's is open-ended). The
+initial render and every refresh that rewrites all of a row's or column's
+cells (a template-key refresh does) rewrite them. A `query` action on one
+cell rewrites that cell's total only.
+
+**Rules** (compile-time verified):
+
+- `swimlanes_by` needs `display :board` and sections without a `source`.
+- It is a public attribute or calculation with enumerable values, and not
+  `scope_by`.
+- Every `swimlane_values` entry and every `swimlane_labels` and
+  `swimlane_tones` key is one of its values; every tone is in the
+  `badge_tones` vocabulary.
+- No two swimlanes, and no two cells, share a runtime name.
+- `swimlane_values`, `swimlane_labels` and `swimlane_tones` need
+  `swimlanes_by`.
+
+A board without `swimlanes_by` encodes exactly as before.
 
 ## Inline cell editing: `editable`
 
