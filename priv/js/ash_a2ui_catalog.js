@@ -371,8 +371,9 @@ function defineChoicePickerElement({A2uiLitElement, A2uiController, ChoicePicker
 //   `table_heading*`    section/lane headings → h2 with the section chip
 //   `stage_*_heading`   a swimlaned board's stage headings → the same chip
 //   `surface_title`     the surface's h1 → the display tier
-//   `swimlane_*_heading`, `swimlane_*_total`, and the cell totals and
-//   empty-state texts of a swimlaned board → the swimlane band's ink
+//   Texts inside a `swimlane_*` row and outside any Card or Button (the
+//   swimlane heading and total, the cell totals, empty-state and
+//   pagination texts) → the swimlane band's ink
 //   `row_action_*_button`, `*_prev_button`, `*_next_button`, and a
 //   calendar's `calendar*_today_button` / `_all_button` / `_day_button`
 //                      → the quiet utility tier (sm, shadowless)
@@ -692,9 +693,14 @@ function defineAnatomyElements({lit, basicCatalog}) {
       // by the swimlane Column from its tone) through the two properties
       // upstream's Text colour reads — on the host, so it holds whether the
       // renderer colours the host (0.10.x) or an inner span (0.11.x).
-      if (swimlaneInkText(id)) {
+      if (onSwimlaneBand(this)) {
         this.style.setProperty("--_a2ui-text-color", "var(--a2ui-swimlane-ink)");
         this.style.setProperty("--a2ui-text-caption-color", "var(--a2ui-swimlane-ink)");
+        this.dataset.swimlaneInk = "";
+      } else if (this.dataset.swimlaneInk !== undefined) {
+        this.style.removeProperty("--_a2ui-text-color");
+        this.style.removeProperty("--a2ui-text-caption-color");
+        delete this.dataset.swimlaneInk;
       }
       const span = this.renderRoot.querySelector(".a2ui-text");
       if (!span) return;
@@ -1087,11 +1093,22 @@ function swimlaneTone(tone) {
   return Object.hasOwn(SWIMLANE_TONE_FALLBACKS, tone) ? tone : "neutral";
 }
 
-// Texts that sit on a swimlane's band rather than on a card: the swimlane
-// heading and total, and each cell's total and empty-state text (cell
-// runtime names join lane and swimlane with `__`). They take the band's ink.
-function swimlaneInkText(id) {
-  return /^swimlane_.+_(heading|total)$/.test(id) || /^(lane|empty_state)_.+__.+_(total|text)$/.test(id);
+// Whether a Text sits directly on a swimlane's band: some ancestor (across
+// shadow roots) is part of a `swimlane_<swimlane>` row, and no Card or
+// Button lies in between (those paint their own surface). That covers the
+// swimlane heading and total, each cell's total, empty-state text and
+// pagination text, and nothing outside a swimlaned board. Matched by the
+// encoder's frozen ids, so it holds before the band has painted.
+function onSwimlaneBand(element) {
+  let node = element;
+  while (node) {
+    node = node.parentElement ?? node.getRootNode?.()?.host ?? null;
+    const model = node?.context?.componentModel;
+    if (!model) continue;
+    if (model.type === "Card" || model.type === "Button") return false;
+    if (typeof model.id === "string" && model.id.startsWith("swimlane_")) return true;
+  }
+  return false;
 }
 
 // Defines <ash-a2ui-column> once (idempotent across LiveView remounts and

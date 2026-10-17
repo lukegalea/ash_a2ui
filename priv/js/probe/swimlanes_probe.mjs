@@ -6,8 +6,10 @@
  *     - every swimlane row is painted from its tone: the row carries
  *       `data-swimlane-tone` from `/_swimlane_tone_<swimlane>` and the
  *       tone's band background, and two tones give two backgrounds;
- *     - the swimlane heading and total and the cell totals read at WCAG AA
- *       (4.5:1) on their band, in the light and the dark scheme;
+ *     - every text in a swimlane row reads at WCAG AA (4.5:1) on the
+ *       surface it sits on — the band for the headings, totals and pager
+ *       text, a Card or Button within it otherwise — in the light and the
+ *       dark scheme;
  *     - the board stays horizontal: the stage columns sit side by side and
  *       every cell sits under its stage (same left edge and width), inside
  *       its band;
@@ -157,19 +159,6 @@ async function openCase(browser, base, query, viewport = {width: 1280, height: 9
       const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
       return (hi + 0.05) / (lo + 0.05);
     };
-    // The computed colour of a Text component's rendered text.
-    // (Renderers differ in which element carries the component context and
-    // where the Text renders: take the first that holds the rendered text.)
-    window.__textColor = (id) => {
-      for (const el of window.__deepAll("*")) {
-        if (el.context?.componentModel?.id !== id) continue;
-        // 0.11.x colours an inner .a2ui-text span, 0.10.x the host itself.
-        const span = (el.renderRoot ?? el.shadowRoot ?? el).querySelector?.(".a2ui-text");
-        if (span) return getComputedStyle(span).color;
-        if (el.renderRoot) return getComputedStyle(el).color;
-      }
-      return null;
-    };
   });
   return page;
 }
@@ -200,23 +189,68 @@ async function main() {
           `two tones, two backgrounds (${rows.map((row) => row.background)})`);
       });
 
-      await check(`swimlanes (ash, ${scheme}): band text meets WCAG AA`, async () => {
-        const ratios = await page.evaluate(({names, stages}) => {
-          const out = [];
-          for (const name of names) {
-            const band = getComputedStyle(window.__byId(`swimlane_${name}`)).backgroundColor;
-            const ids = [`swimlane_${name}_heading`, `swimlane_${name}_total`].concat(
-              stages.map((stage) => `lane_${stage}__${name.split("__")[1]}_total`),
-            );
-            for (const id of ids) {
-              const color = window.__textColor(id);
-              out.push({id, ratio: color ? window.__contrast(color, band) : 0});
+      await check(`swimlanes (ash, ${scheme}): every text on a band meets WCAG AA`, async () => {
+        // Every rendered Text inside a swimlane row — on the band itself
+        // (headings, totals, empty-state and pagination texts) or on a
+        // Card or Button within it — against the surface it sits on: the
+        // nearest ancestor with an opaque background.
+        const {checked, low} = await page.evaluate(() => {
+          const parentOf = (node) => node.parentElement ?? node.getRootNode?.()?.host ?? null;
+          const inBand = (el) => {
+            for (let node = parentOf(el); node; node = parentOf(node)) {
+              if (node.context?.componentModel?.id?.startsWith("swimlane_")) return true;
             }
+            return false;
+          };
+          const surface = (el) => {
+            for (let node = el; node; node = parentOf(node)) {
+              const background = getComputedStyle(node).backgroundColor;
+              const alpha = background.startsWith("rgba") ? Number(background.match(/[\d.]+/g)[3]) : 1;
+              if (alpha > 0) return background;
+            }
+            return getComputedStyle(document.body).backgroundColor;
+          };
+          const seen = new Set();
+          const checked = [];
+          const low = [];
+          for (const el of window.__deepAll("*")) {
+            const model = el.context?.componentModel;
+            if (model?.type !== "Text" || seen.has(model.id) || !inBand(el)) continue;
+            // 0.11.x colours an inner .a2ui-text span, 0.10.x the host.
+            const root = el.renderRoot ?? el.shadowRoot ?? el;
+            const span = root.querySelector?.(".a2ui-text") ?? el;
+            const rect = span.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0 || root.textContent.trim() === "") continue;
+            seen.add(model.id);
+            const ratio = window.__contrast(getComputedStyle(span).color, surface(span));
+            checked.push(model.id);
+            if (ratio < 4.5) low.push(`${model.id}=${ratio.toFixed(2)}`);
           }
-          return out;
-        }, {names: SWIMLANES, stages: STAGES});
-        const low = ratios.filter((entry) => entry.ratio < 4.5);
-        expect(low.map((entry) => `${entry.id}=${entry.ratio.toFixed(2)}`), [], "below 4.5:1");
+          return {checked, low};
+        });
+        expect(low, [], "below 4.5:1");
+        // The fixture puts every kind of band text on screen: swimlane
+        // headings and totals, cell totals, a page text and a pager button.
+        for (const pattern of [/^swimlane_.+_heading$/, /^swimlane_.+_total$/, /^lane_.+__.+_total$/,
+          /_page_text$/, /_next_text$/]) {
+          truthy(checked.some((id) => pattern.test(id)), `a ${pattern} text was checked (${checked.length} checked)`);
+        }
+      });
+
+      await check(`swimlanes (ash, ${scheme}): only texts on a band take its ink`, async () => {
+        const stray = await page.evaluate(() => {
+          const parentOf = (node) => node.parentElement ?? node.getRootNode?.()?.host ?? null;
+          const inBand = (el) => {
+            for (let node = parentOf(el); node; node = parentOf(node)) {
+              if (node.context?.componentModel?.id?.startsWith("swimlane_")) return true;
+            }
+            return false;
+          };
+          return window.__deepAll("[data-swimlane-ink]")
+            .filter((el) => !inBand(el))
+            .map((el) => el.context?.componentModel?.id ?? el.tagName);
+        });
+        expect(stray, [], "inked outside a band");
       });
 
       if (scheme === "light") {

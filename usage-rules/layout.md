@@ -194,12 +194,19 @@ contracts.
   `/_lane_total_<cell>`, per swimlane `/_swimlane_total_<key>__<swimlane>`,
   per stage `/_lane_total_<key>_<lane>`.
 - Records whose swimlane value is nil (or not in `swimlane_values`) show in
-  no swimlane. When a nil means something (not yet triaged), give the board
-  a calculation that maps it to a value and swimlane by that.
+  no swimlane, and are missing from the stage totals too. When a nil means
+  something (not yet triaged), give the board a calculation that maps it to
+  a value and swimlane by that.
+- Each cell is two reads (page + count) on every render and every refresh
+  of the board: 3 stages x 5 swimlanes is 30 reads per transition. `limit`
+  caps the cells (default 50); narrow `values` / `swimlane_values` before
+  raising it.
 - `swimlanes_by` needs `display :board` and no `source`; its values, labels
   and tones keys must be enumerated values, tones must be from the
-  vocabulary, and no two swimlanes (or cells) may share a runtime name
-  (compile-verified).
+  vocabulary, `swimlane_values` may not be empty, no two swimlanes (or
+  cells) may share a runtime name, no runtime name may extend another at
+  an underscore (`:high` with `:high_total`), and no cell may take another
+  table's key (compile-verified).
 
 ## Calendars
 

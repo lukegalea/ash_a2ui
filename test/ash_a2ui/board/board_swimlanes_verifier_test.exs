@@ -123,4 +123,62 @@ defmodule AshA2ui.Board.BoardSwimlanesVerifierTest do
                ~r/sections option #{name} requires swimlanes_by/
     end
   end
+
+  @tag ac: "A2UI-105B/AC-5"
+  test "rejects swimlaned boards whose ids or data paths would collide, or that show nothing" do
+    # Swimlane values that extend one another at an underscore build the
+    # same component ids (swimlane_board__high's total vs the
+    # :high_total swimlane's Column).
+    assert compile_ui(swimlanes("swimlanes_by :tier\nswimlane_values [:high, :high_total]")) =~
+             ~r/runtime names board__high and board__high_total can produce the same component id/
+
+    assert compile_ui(swimlanes("swimlanes_by :tier\nswimlane_values [:high, :high_cells]")) =~
+             ~r/runtime names board__high and board__high_cells/
+
+    assert compile_ui(swimlanes("swimlanes_by :tier\nswimlane_values [:high, :low]")) == ""
+
+    # Lanes too (a lane-only board, and a swimlaned board's stages).
+    assert compile_ui(board("scope_by :tier\nvalues [:high, :high_total]")) =~
+             ~r/runtime names board_high and board_high_total can produce the same component id/
+
+    assert compile_ui(
+             board("scope_by :tier\nvalues [:high, :high_total]\nswimlanes_by :severity")
+           ) =~ ~r/runtime names board_high and board_high_total/
+
+    # A cell may not take another table's key (they would share
+    # /records/<name>).
+    assert compile_ui(
+             swimlanes("swimlanes_by :severity\nswimlane_values [:low]") <>
+               """
+                   component :table, :board_open__low do
+                     fields [:name]
+                   end
+               """
+           ) =~ ~r/board :board expands into a table named board_open__low, which is also the key/
+
+    assert compile_ui(
+             board("scope_by :status\nvalues [:open]") <>
+               """
+                   component :table, :board_open do
+                     fields [:name]
+                   end
+               """
+           ) =~ ~r/expands into a table named board_open/
+
+    # Empty value lists would render no board at all.
+    assert compile_ui(swimlanes("swimlanes_by :severity\nswimlane_values []")) =~
+             ~r/swimlane_values \[\] leaves the board with nothing to show/
+
+    assert compile_ui(board("scope_by :status\nvalues []")) =~
+             ~r/values \[\] leaves the board with nothing to show/
+
+    # limit caps the cells: 2 lanes x 2 swimlanes is 4 cells.
+    assert compile_ui(
+             swimlanes("swimlanes_by :severity\nswimlane_values [:very_high, :low]\nlimit 3")
+           ) =~ ~r/limit 3 is below the 4 cells \(2 lanes x 2 swimlanes\)/
+
+    assert compile_ui(
+             swimlanes("swimlanes_by :severity\nswimlane_values [:very_high, :low]\nlimit 4")
+           ) == ""
+  end
 end

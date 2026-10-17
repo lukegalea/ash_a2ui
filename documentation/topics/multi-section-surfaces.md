@@ -346,6 +346,14 @@ every cell, so a transition moves a card from one cell to the next in the
 same swimlane. Empty cells are kept and show their empty state. Each cell
 pages on its own query.
 
+**Read cost.** Every cell is two reads, its page and its count, on the
+initial render and on every refresh of the template key, issued one after
+another. A board of 3 stages and 5 swimlanes is 30 reads per claim or
+complete. `limit` caps the cells on a swimlaned board (it caps the lanes on
+a lane-only board; default 50), and the verifier rejects a `limit` below
+the number of cells, so raising it is a deliberate choice. Narrow
+`values` or `swimlane_values` before raising it.
+
 Records whose swimlane value is nil, or not in `swimlane_values`, are in no
 swimlane. When a nil means something (not yet triaged), swimlane by a
 calculation that maps it to a value of its own.
@@ -373,8 +381,9 @@ data: `/_swimlane_tone_<key>__<swimlane>` holds a tone from the
 `badge_tones` vocabulary (`neutral`, `info`, `success`, `warning`,
 `danger`, `accent`; `neutral` when unlisted). The AshA2ui merged catalog
 paints each swimlane row from it: the band takes
-`--a2ui-swimlane-<tone>-background`, and the headings and totals on the band
-take `--a2ui-swimlane-<tone>-color`. `ash_a2ui_theme.css` defines all twelve
+`--a2ui-swimlane-<tone>-background`, and every text sitting on the band
+itself (headings, totals, empty-state and pager texts, but not those on a
+card or button within it) takes `--a2ui-swimlane-<tone>-color`. `ash_a2ui_theme.css` defines all twelve
 tokens with `light-dark()`: 200-weight tints with 900-weight ink in light,
 900 bands with 100 ink in dark, every pair at least 6.9:1 (WCAG AA asks
 4.5:1). Cards on the band keep their own surface colours.
@@ -391,7 +400,12 @@ colour.
 the sums of their cells' totals (`"5+"` when any cell's is open-ended). The
 initial render and every refresh that rewrites all of a row's or column's
 cells (a template-key refresh does) rewrite them. A `query` action on one
-cell rewrites that cell's total only.
+cell rewrites that cell's total only. Stage and swimlane totals count only
+records that land in a listed cell: a record whose swimlane value is nil or
+not in `swimlane_values` is missing from its stage's total too, so a stage
+can show a lower total than the same stage on a board without swimlanes.
+Swimlane by a calculation that maps nil to a value of its own (see Cells)
+when those records belong on the board.
 
 **Rules** (compile-time verified):
 
@@ -404,6 +418,13 @@ cell rewrites that cell's total only.
 - No two swimlanes, and no two cells, share a runtime name.
 - `swimlane_values`, `swimlane_labels` and `swimlane_tones` need
   `swimlanes_by`.
+- `swimlane_values` (like `values`) is not empty.
+- `limit` is not below the number of cells.
+- Across the surface, no cell, swimlane or stage runtime name extends
+  another at an underscore (swimlanes `:high` and `:high_total` would both
+  build a `swimlane_board__high_total` id, because component ids append
+  `_<suffix>` to a runtime name), and no cell takes another table's key.
+  The same two rules hold for a lane-only board's lanes.
 
 A board without `swimlanes_by` encodes exactly as before.
 

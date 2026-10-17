@@ -18,7 +18,10 @@ for {name, status, severity} <- [
       {"Allergic reaction after the second dose of the new prescription", :claimed, :very_high},
       {"Sprained ankle", :open, :low},
       {"Repeat prescription", :completed, :low},
-      {"Routine check-up", :open, :low}
+      {"Routine check-up", :open, :low},
+      # A third open low-severity task: that cell (page_size 2) pages, so
+      # its pager text sits on the band.
+      {"Twisted wrist", :open, :low}
     ] do
   Ash.create!(BoardTask, %{name: name, status: status, severity: severity, priority: :high},
     authorize?: false

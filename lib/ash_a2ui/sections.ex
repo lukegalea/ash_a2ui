@@ -161,8 +161,15 @@ defmodule AshA2ui.Sections do
   # name, scoped data-model paths, a copied component (its `as` carries the runtime name so encoder
   # component ids stay unique), and the `section` scope the reads AND on
   # (see AshA2ui.ContextRunner.table_scope/3).
+  # `limit` caps the cells (each one a page read and a count): whole
+  # swimlane rows past it are dropped, as trailing lanes are on a lane-only
+  # board. The verifier rejects such a limit where it can resolve the
+  # resource, so this only guards boards it could not check.
   defp expand_table(table, %{swimlanes: %{}} = config, lanes) do
-    swimlanes = AshA2ui.Board.swimlanes(config.resource, config.swimlanes)
+    swimlanes =
+      config.resource
+      |> AshA2ui.Board.swimlanes(config.swimlanes)
+      |> Enum.take(div(config.limit, max(length(lanes), 1)))
 
     for swimlane <- swimlanes, lane <- lanes do
       name = AshA2ui.Board.cell_name(table.name, lane.value, swimlane.value)

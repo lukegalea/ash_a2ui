@@ -72,7 +72,10 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   (AA contrast in light and dark, defaults in `ash_a2ui_theme.css`), and
   the admin catalog's basic board fallback gets the same rows. A board
   without `swimlanes_by` is byte-identical to before. Verified at compile
-  time; `priv/js/probe/swimlanes_probe.mjs` is the browser check.
+  time; `priv/js/probe/swimlanes_probe.mjs` is the browser check. On a
+  swimlaned board `limit` caps the cells (each one a page read and a
+  count on every render and refresh), and the verifier rejects a `limit`
+  below the cell count.
 
 - **`label` on the action entity.** `action :confirm_merge do label
   "Confirm match" end` names the action's row button and bulk toolbar
@@ -142,6 +145,14 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   `links`.
 
 ### Bug Fixes:
+
+- **Boards reject runtime names that would collide.** A board's lane (or
+  cell, swimlane or stage) runtime name that extends another at an
+  underscore (`:high` and `:high_total` both built `lane_board_high_total`),
+  or that equals another table's key (sharing its `/records/<name>`), is
+  now a compile error, as is an empty `values` or `swimlane_values` list,
+  which rendered no board at all. A board whose values did this compiled
+  before and now fails to compile.
 
 - **Following a basic-catalog link no longer throws "unsubscribe is not a
   function".** The merged catalog's status banner (`status_text`) called

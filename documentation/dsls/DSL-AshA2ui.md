@@ -712,7 +712,7 @@ end
 | [`value`](#a2ui-component-sections-value){: #a2ui-component-sections-value } | `atom` |  | The source attribute providing each section's scope value (matched against `scope_by`) and its runtime name (requires `source`). Defaults to the source's primary key (required explicitly when composite). |
 | [`read_action`](#a2ui-component-sections-read_action){: #a2ui-component-sections-read_action } | `atom` |  | The source read action enumerating the sections (requires `source`). Defaults to the primary read. |
 | [`sort`](#a2ui-component-sections-sort){: #a2ui-component-sections-sort } | `atom` |  | The source attribute sections are ordered by (ascending; requires `source`). Defaults to the resolved `label`. |
-| [`limit`](#a2ui-component-sections-limit){: #a2ui-component-sections-limit } | `pos_integer` | `50` | Maximum number of sections rendered (the source read's limit). Without a source it caps the lanes, not the cards per lane, and may not be below the lane count. |
+| [`limit`](#a2ui-component-sections-limit){: #a2ui-component-sections-limit } | `pos_integer` | `50` | Maximum number of sections rendered (the source read's limit). Without a source it caps the lanes, not the cards per lane, and may not be below the lane count; on a swimlaned board it caps the cells (each one a page read and a count on every render and refresh) and may not be below the cell count. |
 
 
 
