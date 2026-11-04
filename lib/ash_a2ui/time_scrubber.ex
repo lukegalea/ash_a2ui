@@ -51,6 +51,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       * `:format` — `(DateTime.t() -> String.t())` for every instant the
         scrubber prints. Defaults to `format/1` (UTC).
       * `:label` — the group's accessible name, default "Time travel".
+      * `:locale`, `:gettext_backend`, `:gettext_fn` — translate the
+        scrubber's own text ("Return to now", "As of …"), as
+        `AshA2ui.Info.build_surface/2` does. Pass the values the surface uses.
+        The `:format` output and the marks' labels are yours and are not
+        translated.
 
     It renders in the shared neobrutalist vocabulary (2px borders, hard
     shadows, `--a2ui-*` tokens with fallbacks) and needs no host CSS.
@@ -154,10 +159,23 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     attr(:event, :string, default: "as_of_scrub")
     attr(:format, :any, default: &__MODULE__.format/1)
     attr(:label, :string, default: nil, doc: ~s(The group's accessible name; "Time travel".))
+    attr(:locale, :string, default: nil, doc: "The locale for the scrubber's own text.")
+    attr(:gettext_backend, :any, default: nil, doc: "`{backend, domain}`; see `AshA2ui.L10n`.")
+    attr(:gettext_fn, :any, default: nil, doc: "`{module, function}`; see `AshA2ui.L10n`.")
 
     @doc "The scrubber. See the moduledoc."
     def scrubber(assigns) do
-      l10n = nil
+      l10n =
+        AshA2ui.L10n.new(
+          Enum.reject(
+            [
+              locale: assigns.locale,
+              gettext_backend: assigns.gettext_backend,
+              gettext_fn: assigns.gettext_fn
+            ],
+            &is_nil(elem(&1, 1))
+          )
+        )
 
       assigns =
         assign(assigns,

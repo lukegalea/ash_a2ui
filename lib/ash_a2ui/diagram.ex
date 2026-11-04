@@ -215,12 +215,18 @@ defmodule AshA2ui.Diagram do
   The `/diagram/<name>` writes of every diagram (in declaration order),
   re-read as the actor in
   `opts` — for transports that push marker moves without a full data-model
-  refresh. `opts` takes `build_surface/2`'s `:actor`, `:tenant` and
-  `:context_state`.
+  refresh. `opts` takes `build_surface/2`'s `:actor`, `:tenant`,
+  `:context_state` and localization options (`:locale`, `:gettext_backend`,
+  `:gettext_fn`).
   """
   @spec refresh_messages(module | Spark.Dsl.t(), keyword) :: [map]
   def refresh_messages(resource_or_ui_module, opts \\ []) do
-    view = ResolvedView.resolve(resource_or_ui_module, Keyword.take(opts, [:actor, :tenant]))
+    view =
+      ResolvedView.resolve(
+        resource_or_ui_module,
+        Keyword.take(opts, [:actor, :tenant | AshA2ui.L10n.option_keys()])
+      )
+
     selected = AshA2ui.ContextRunner.selected(view, opts[:context_state])
 
     loaded_by_name = load_all(view, selected, opts)

@@ -309,7 +309,10 @@ defmodule AshA2ui.ResolvedView do
     :spec_version,
     :link_buttons,
     :as_of,
-    :header
+    :header,
+    :locale,
+    :gettext_fn,
+    :gettext_backend
   ]
 
   @doc """
@@ -328,13 +331,16 @@ defmodule AshA2ui.ResolvedView do
       declared `spec_version` for this resolve. Transports whose renderer
       only speaks one protocol version (see the External Transports topic)
       use this to pin the wire version without touching the DSL.
+    * `:locale` / `:gettext_fn` / `:gettext_backend` — the translator
+      (see `AshA2ui.L10n`). Display labels are translated here, once, and
+      the translator is kept on the struct (`l10n`) for the encoder's chrome.
   """
   @spec resolve(module | Spark.Dsl.t(), keyword) :: t()
   def resolve(resource_or_ui_module, opts \\ []) do
     Keyword.validate!(opts, @resolve_opts)
 
     # The translator every display label below is resolved with, once.
-    l10n = nil
+    l10n = AshA2ui.L10n.new(opts)
 
     resource = AshA2ui.Info.resource!(resource_or_ui_module)
     components = AshA2ui.Info.components(resource_or_ui_module)
