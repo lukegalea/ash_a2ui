@@ -240,6 +240,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   @behaviour AshA2ui.Encoder
 
   alias Ash.Resource.Info, as: ResourceInfo
+  alias AshA2ui.Label
   alias AshA2ui.ResolvedView
 
   @version "v0.9.1"
@@ -1453,7 +1454,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => humanize(detail.name),
+        "text" => Label.humanize(detail.name),
         "variant" => "h3"
       }
       | fields
@@ -1628,8 +1629,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
         _not_a_section ->
           if ResolvedView.multi_table?(view),
-            do: humanize(table.name),
-            else: humanize_resource(view.resource)
+            do: Label.humanize(table.name),
+            else: Label.resource_name(view.resource)
       end
 
     [
@@ -1779,7 +1780,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "#{board}_heading",
             "component" => "Text",
-            "text" => humanize(template),
+            "text" => Label.humanize(template),
             "variant" => "h2"
           },
           %{
@@ -1825,7 +1826,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{board}_heading",
         "component" => "Text",
-        "text" => humanize(template),
+        "text" => Label.humanize(template),
         "variant" => "h2"
       },
       %{
@@ -2372,7 +2373,10 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   defp preset_picker(query, table, sfx) do
     preset_options =
-      Enum.map(query.presets, &%{"label" => humanize(&1.name), "value" => to_string(&1.name)})
+      Enum.map(
+        query.presets,
+        &%{"label" => Label.humanize(&1.name), "value" => to_string(&1.name)}
+      )
 
     options =
       if query.default_preset do
@@ -2454,7 +2458,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     Keyword.get(query.filter_labels, name) ||
       case view.fields[name] do
         %{label: label} when is_binary(label) -> label
-        _none -> humanize(name)
+        _none -> Label.humanize(name)
       end
   end
 
@@ -2532,7 +2536,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     query.group_labels
     |> Keyword.get(field, [])
     |> Keyword.get(group) ||
-      Map.get(choice_labels(resource, field), to_string(group)) || humanize(group)
+      Map.get(choice_labels(resource, field), to_string(group)) || Label.humanize(group)
   end
 
   # Each range_filters field emits a from/to TextField pair bound to the
@@ -2543,7 +2547,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "query#{sfx}_range_#{field}_#{side}",
         "component" => "TextField",
-        "label" => "#{humanize(field)} #{side}",
+        "label" => "#{Label.humanize(field)} #{side}",
         "value" => %{"path" => "#{table.query_path}/ranges/#{field}/#{side}"}
       }
     end)
@@ -2946,7 +2950,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # the row's record the context's selection (filling the detail panels and
   # related tables bound to it) — "Select <context>", not "View", which is
   # the task panel's own row control.
-  defp context_select_label(name), do: "Select #{String.downcase(humanize(name))}"
+  defp context_select_label(name), do: "Select #{String.downcase(Label.humanize(name))}"
 
   # A cell is a labeled pair: a caption Text with the humanized field name
   # and a body Text bound to the field value — so generated rows read
@@ -2977,7 +2981,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         %{
           "id" => "#{base}_label",
           "component" => "Text",
-          "text" => humanize(field_name),
+          "text" => Label.humanize(field_name),
           "variant" => "caption"
         }
         | value_components
@@ -4001,7 +4005,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => humanize(detail.name),
+        "text" => Label.humanize(detail.name),
         "variant" => "h3"
       }
       | field_rows
@@ -4011,7 +4015,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp detail_field_label(view, field) do
     case view.fields[field] do
       %{label: label} when is_binary(label) -> label
-      _undeclared -> humanize(field)
+      _undeclared -> Label.humanize(field)
     end
   end
 
@@ -4084,7 +4088,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => humanize(report.name),
+        "text" => Label.humanize(report.name),
         "variant" => "h3"
       },
       %{
@@ -4123,7 +4127,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp report_field_label(view, field) do
     case view.fields[field] do
       %{label: label} when is_binary(label) -> label
-      _undeclared -> humanize(field)
+      _undeclared -> Label.humanize(field)
     end
   end
 
@@ -4371,7 +4375,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # types (the parent surface's field entities don't apply inside rows).
   defp nested_input(nested, base, field) do
     binding = %{"path" => to_string(field)}
-    label = humanize(field)
+    label = Label.humanize(field)
     id = "#{base}_input_#{field}"
     base_props = %{"id" => id, "label" => label, "value" => binding}
 
@@ -4858,19 +4862,4 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     do: "unsupported type: #{value.__struct__ |> Module.split() |> List.last()}"
 
   defp unsupported_type(_value), do: "unsupported type: tuple"
-
-  defp humanize_resource(resource) do
-    resource
-    |> Module.split()
-    |> List.last()
-    |> Macro.underscore()
-    |> humanize()
-  end
-
-  defp humanize(name) do
-    name
-    |> to_string()
-    |> String.replace("_", " ")
-    |> String.capitalize()
-  end
 end

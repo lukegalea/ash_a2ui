@@ -63,6 +63,7 @@ defmodule AshA2ui.ResolvedView do
   """
 
   alias Ash.Resource.Info, as: ResourceInfo
+  alias AshA2ui.Label
 
   defstruct [
     :resource,
@@ -395,7 +396,7 @@ defmodule AshA2ui.ResolvedView do
   def action_label(%__MODULE__{actions: actions}, action) do
     case Map.get(actions, action) do
       %{label: label} when is_binary(label) -> label
-      _no_label -> humanize(action)
+      _no_label -> Label.humanize(action)
     end
   end
 
@@ -626,7 +627,7 @@ defmodule AshA2ui.ResolvedView do
           destination: destination,
           mode: mode,
           fields: nested_fields(nested, mode, manage),
-          label: nested.label || humanize(nested.name),
+          label: nested.label || Label.humanize(nested.name),
           option_label: option_label,
           option_value: option_value,
           option_sort: nested.option_sort || option_label,
@@ -879,7 +880,7 @@ defmodule AshA2ui.ResolvedView do
     %{
       name: context.name,
       resource: context.resource,
-      label: context.label || humanize(context.name),
+      label: context.label || Label.humanize(context.name),
       option_label: option_label,
       option_value: option_value,
       option_sort: context.option_sort || option_label,
@@ -1084,7 +1085,7 @@ defmodule AshA2ui.ResolvedView do
 
     %{
       name: name,
-      label: (declared && declared.label) || humanize(name),
+      label: (declared && declared.label) || Label.humanize(name),
       widget: widget,
       choices: choices,
       select: select,
@@ -1256,7 +1257,7 @@ defmodule AshA2ui.ResolvedView do
       {name,
        %{
          field
-         | label: field.label || humanize(name),
+         | label: field.label || Label.humanize(name),
            widget: field.widget || default_widget
        }}
     end)
@@ -1285,7 +1286,7 @@ defmodule AshA2ui.ResolvedView do
   defp normalize_group(group, effective) do
     %{
       group
-      | label: group.label || humanize(group.name),
+      | label: group.label || Label.humanize(group.name),
         fields: Enum.filter(group.fields, &(&1 in effective))
     }
   end
@@ -1293,7 +1294,7 @@ defmodule AshA2ui.ResolvedView do
   defp normalize_step(step, effective) do
     %{
       step
-      | label: step.label || humanize(step.name),
+      | label: step.label || Label.humanize(step.name),
         fields: Enum.filter(step.fields, &(&1 in effective))
     }
   end
@@ -1327,13 +1328,6 @@ defmodule AshA2ui.ResolvedView do
       %{name: name} -> name
       nil -> nil
     end
-  end
-
-  defp humanize(name) do
-    name
-    |> to_string()
-    |> String.replace("_", " ")
-    |> String.capitalize()
   end
 
   defp default_surface_id(resource) do

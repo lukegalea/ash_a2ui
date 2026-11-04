@@ -72,6 +72,7 @@ defmodule AshA2ui.Experience do
     * `"cancel_record_task"` — back to browse, form reset, feedback cleared.
   """
 
+  alias AshA2ui.Label
   alias AshA2ui.ResolvedView
 
   @typedoc "The record task panel modes (`:hidden` for the closed state)."
@@ -207,13 +208,7 @@ defmodule AshA2ui.Experience do
   @spec resource_label(ResolvedView.t()) :: String.t()
   def resource_label(%{record_label: label}) when is_binary(label) and label != "", do: label
 
-  def resource_label(view) do
-    view.resource
-    |> Module.split()
-    |> List.last()
-    |> Macro.underscore()
-    |> humanize()
-  end
+  def resource_label(view), do: Label.resource_name(view.resource)
 
   @doc """
   The per-table empty-state text (e.g. `"No Appointment records yet."`).
@@ -234,7 +229,7 @@ defmodule AshA2ui.Experience do
   @spec collection_label(ResolvedView.t(), ResolvedView.table()) :: String.t()
   def collection_label(view, table) do
     if ResolvedView.multi_table?(view) do
-      table.name |> to_string() |> humanize()
+      table.name |> to_string() |> Label.humanize()
     else
       resource_label(view)
     end
@@ -435,11 +430,4 @@ defmodule AshA2ui.Experience do
   end
 
   defp integer_value(_value, default), do: default
-
-  defp humanize(name) do
-    name
-    |> to_string()
-    |> String.replace("_", " ")
-    |> String.capitalize()
-  end
 end

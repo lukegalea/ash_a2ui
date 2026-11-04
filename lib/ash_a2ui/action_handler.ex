@@ -252,6 +252,8 @@ defmodule AshA2ui.ActionHandler do
   alias AshA2ui.Encoder.V0_9_1
   alias AshA2ui.Encoder.V1_0
   alias AshA2ui.Experience
+  alias AshA2ui.L10n
+  alias AshA2ui.Label
   alias AshA2ui.QueryRunner
   alias AshA2ui.ResolvedView
 
@@ -917,7 +919,7 @@ defmodule AshA2ui.ActionHandler do
          ]}
 
       :not_found ->
-        {:error, [status(view, "Option #{inspect(value)} was not found.")]}
+        {:error, [status(view, "The selected option was not found.")]}
 
       {:error, error} ->
         {:error, error_messages(view, error)}
@@ -1199,7 +1201,7 @@ defmodule AshA2ui.ActionHandler do
             {:ok, [update_data_model(view, "/form/#{argument}", rows ++ [row])]}
 
           :not_found ->
-            {:error, [status(view, "Option #{inspect(value)} was not found.")]}
+            {:error, [status(view, "The selected option was not found.")]}
 
           {:error, error} ->
             {:error, error_messages(view, error)}
@@ -1284,7 +1286,7 @@ defmodule AshA2ui.ActionHandler do
   defp select_context(ctx, value, %{view: view} = env) do
     case ContextRunner.select(view, ctx, value, env.selected, env.ash_opts) do
       {:ok, change} -> context_change_messages(change, env)
-      :not_found -> {:error, [status(view, "Option #{inspect(value)} was not found.")]}
+      :not_found -> {:error, [status(view, "The selected option was not found.")]}
       {:error, error} -> {:error, error_messages(view, error)}
     end
   end
@@ -1638,12 +1640,23 @@ defmodule AshA2ui.ActionHandler do
 
   # The success status of a single-row invoke: "<label>: done." when the
   # action entity declares a `label` (the name its button shows, as the bulk
-  # status line uses), else the action's name as before.
+  # status line uses), else "<humanized name> completed.".
   defp completed_text(view, action_name) do
     case Map.get(view.actions, action_name) do
-      %{label: label} when is_binary(label) -> label <> ": done."
-      _no_label -> "Action #{inspect(to_string(action_name))} completed."
+      %{label: label} when is_binary(label) ->
+        L10n.interpolate("%{action}: done.", action: label)
+
+      _no_label ->
+        L10n.interpolate("%{action} completed.",
+          action: ResolvedView.action_label(view, action_name)
+        )
     end
+  end
+
+  defp unavailable_text(view, action_name) do
+    L10n.interpolate("%{action} is not available for this record.",
+      action: ResolvedView.action_label(view, action_name)
+    )
   end
 
   # Handler-side visible_when enforcement (mandatory — rendering hides
@@ -1672,8 +1685,7 @@ defmodule AshA2ui.ActionHandler do
         if Conditions.visible?(view.resource, conditions, record) do
           :ok
         else
-          {:error,
-           [status(view, "Action #{inspect(to_string(name))} is not available for this record.")]}
+          {:error, [status(view, unavailable_text(view, name))]}
         end
 
       {:error, error} ->
@@ -1804,10 +1816,7 @@ defmodule AshA2ui.ActionHandler do
         else
           {:error,
            [
-             status(
-               view,
-               "Action #{inspect(to_string(setting.name))} is not available for this record."
-             )
+             status(view, unavailable_text(view, setting.name))
            ]}
         end
 
@@ -2408,7 +2417,9 @@ defmodule AshA2ui.ActionHandler do
   end
 
   defp report_status_text(1), do: "Report complete: 1 row."
-  defp report_status_text(count), do: "Report complete: #{count} rows."
+
+  defp report_status_text(count),
+    do: L10n.interpolate("Report complete: %{count} rows.", count: count)
 
   # --- export (CSV file export, v1.0-only — see AshA2ui.Export) ----------------
 
@@ -2537,7 +2548,11 @@ defmodule AshA2ui.ActionHandler do
     response =
       update_data_model(view, "/ui/response", %{
         "status" => "ok",
-        "message" => "Exported #{filename} (#{length(cells)} rows).",
+        "message" =>
+          L10n.interpolate("Exported %{filename} (%{count} rows).",
+            filename: filename,
+            count: length(cells)
+          ),
         "result" => %{"filename" => filename, "rows" => length(cells)},
         "resultText" => ""
       })
@@ -2548,7 +2563,7 @@ defmodule AshA2ui.ActionHandler do
   defp export_header(view, column) do
     case view.fields[column] do
       %{label: label} when is_binary(label) -> label
-      _undeclared -> humanize(to_string(column))
+      _undeclared -> Label.humanize(column)
     end
   end
 
@@ -2635,7 +2650,7 @@ defmodule AshA2ui.ActionHandler do
 
     case result do
       {:ok, _record} ->
-        success(env, "Updated #{humanize(to_string(field))}.")
+        success(env, L10n.interpolate("Updated %{field}.", field: Label.humanize(field)))
 
       {:error, error} ->
         {:error,
@@ -3115,18 +3130,12 @@ defmodule AshA2ui.ActionHandler do
     |> Enum.map(fn {key, value} -> {to_string(key), json_value(value)} end)
     |> Enum.sort_by(fn {key, _value} -> key end)
     |> Enum.map_join("\n", fn {key, value} ->
-      "#{humanize(key)}: #{display_value(value)}"
+      "#{Label.humanize(key)}: #{display_value(value)}"
     end)
   end
 
   defp display_value(value) when is_binary(value), do: value
   defp display_value(value), do: Jason.encode!(value)
-
-  defp humanize(key) do
-    key
-    |> String.replace("_", " ")
-    |> String.capitalize()
-  end
 
   # --- Ash invocation helpers ------------------------------------------------
 
@@ -3258,7 +3267,11 @@ defmodule AshA2ui.ActionHandler do
       unshown =
         for {[field | _rest] = segments, text} <- field_errors,
             not shown_field?(shown, field),
-            do: "#{error_field_label(view, segments)}: #{text}"
+            do:
+              L10n.interpolate("%{field}: %{message}",
+                field: error_field_label(view, segments),
+                message: text
+              )
 
       code = if field_messages == [], do: "ACTION_FAILED", else: "VALIDATION_FAILED"
 
@@ -3279,7 +3292,7 @@ defmodule AshA2ui.ActionHandler do
   defp error_field_label(view, [field | _rest]) do
     case Enum.find(view.fields, fn {name, _field} -> to_string(name) == to_string(field) end) do
       {_name, %{label: label}} when is_binary(label) -> label
-      _undeclared -> field |> to_string() |> String.replace("_", " ") |> String.capitalize()
+      _undeclared -> Label.humanize(field)
     end
   end
 

@@ -698,7 +698,7 @@
       "surfaceId": "experience_task",
       "value": {
         "kind": "success",
-        "message": "Action \"destroy\" completed."
+        "message": "Destroy completed."
       }
     },
     "version": "v0.9.1"

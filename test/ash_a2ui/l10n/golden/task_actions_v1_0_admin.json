@@ -701,7 +701,7 @@
       "path": "/ui/response",
       "surfaceId": "experience_task",
       "value": {
-        "message": "Action \"destroy\" completed.",
+        "message": "Destroy completed.",
         "result": {},
         "resultText": "",
         "status": "ok"
@@ -715,7 +715,7 @@
       "surfaceId": "experience_task",
       "value": {
         "kind": "success",
-        "message": "Action \"destroy\" completed."
+        "message": "Destroy completed."
       }
     },
     "version": "v1.0"

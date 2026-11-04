@@ -45,6 +45,8 @@ defmodule AshA2ui.Bulk do
 
   alias Ash.Resource.Info, as: ResourceInfo
   alias AshA2ui.ContextRunner
+  alias AshA2ui.L10n
+  alias AshA2ui.Label
   alias AshA2ui.QueryRunner
 
   @selected_key "_selected"
@@ -180,8 +182,12 @@ defmodule AshA2ui.Bulk do
 
           length(ids) > cap ->
             {:error,
-             "Too many records selected (#{length(ids)}): a bulk action runs on at most " <>
-               "#{cap} records, one page."}
+             L10n.interpolate(
+               "Too many records selected (%{count}): a bulk action runs on at most " <>
+                 "%{cap} records, one page.",
+               count: length(ids),
+               cap: cap
+             )}
 
           true ->
             {:ok, ids}
@@ -242,8 +248,12 @@ defmodule AshA2ui.Bulk do
     cap = cap(table)
 
     if count > cap do
-      "Selected the first #{cap} of #{count} records: a bulk action runs on at most " <>
-        "#{cap} records."
+      L10n.interpolate(
+        "Selected the first %{cap} of %{count} records: a bulk action runs on at most " <>
+          "%{cap} records.",
+        cap: cap,
+        count: count
+      )
     end
   end
 
@@ -326,9 +336,20 @@ defmodule AshA2ui.Bulk do
   @spec status_text(atom, non_neg_integer, map, String.t() | nil) :: String.t()
   def status_text(action, selected, result, label \\ nil) do
     others =
-      for key <- ["refused", "skipped", "failed"], result[key] > 0, do: "#{result[key]} #{key}"
+      for {key, template} <- [
+            {"refused", "%{count} refused"},
+            {"skipped", "%{count} skipped"},
+            {"failed", "%{count} failed"}
+          ],
+          result[key] > 0,
+          do: L10n.interpolate(template, count: result[key])
 
-    base = "#{label || humanize(action)}: #{result["ok"]} of #{selected} selected records done"
+    base =
+      L10n.interpolate("%{action}: %{ok} of %{selected} selected records done",
+        action: label || Label.humanize(action),
+        ok: result["ok"],
+        selected: selected
+      )
 
     case others do
       [] -> base <> "."
@@ -358,7 +379,7 @@ defmodule AshA2ui.Bulk do
   `label` names each action's button (the action's `label`).
   """
   @spec toolbar_components(map, String.t(), (map -> map), (atom -> String.t())) :: [map]
-  def toolbar_components(table, sfx, bind, label \\ &humanize/1) do
+  def toolbar_components(table, sfx, bind, label \\ &Label.humanize/1) do
     base = "bulk#{sfx}"
     records = %{"path" => table.records_path}
     component = to_string(table.name)
@@ -442,12 +463,5 @@ defmodule AshA2ui.Bulk do
     else
       components
     end
-  end
-
-  defp humanize(name) do
-    name
-    |> to_string()
-    |> String.replace("_", " ")
-    |> String.capitalize()
   end
 end

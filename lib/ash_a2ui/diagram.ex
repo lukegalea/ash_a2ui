@@ -71,6 +71,7 @@ defmodule AshA2ui.Diagram do
   """
 
   alias Ash.Resource.Info, as: ResourceInfo
+  alias AshA2ui.Label
   alias AshA2ui.ResolvedView
 
   # `rendered_source` and `link_buttons?` are render annotations the
@@ -131,9 +132,7 @@ defmodule AshA2ui.Diagram do
   @spec label(t()) :: String.t()
   def label(%__MODULE__{label: label}) when is_binary(label) and label != "", do: label
 
-  def label(%__MODULE__{name: name}) do
-    name |> to_string() |> String.replace("_", " ") |> String.capitalize()
-  end
+  def label(%__MODULE__{name: name}), do: Label.humanize(name)
 
   @doc "The empty state of a diagram (no markers, no error)."
   @spec empty_state() :: map
