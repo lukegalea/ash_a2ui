@@ -92,7 +92,8 @@ defmodule AshA2ui.ResolvedView do
     reports: [],
     prompts: %{},
     prompt_selects: %{},
-    diagrams: []
+    diagrams: [],
+    l10n: nil
   ]
 
   @typedoc """
@@ -291,7 +292,8 @@ defmodule AshA2ui.ResolvedView do
           reports: [report],
           prompts: %{atom => [prompt_field]},
           prompt_selects: %{atom => select},
-          diagrams: [AshA2ui.Diagram.t()]
+          diagrams: [AshA2ui.Diagram.t()],
+          l10n: AshA2ui.L10n.t()
         }
 
   @option_label_fallbacks [:name, :title, :label, :username, :email]
@@ -331,6 +333,9 @@ defmodule AshA2ui.ResolvedView do
   def resolve(resource_or_ui_module, opts \\ []) do
     Keyword.validate!(opts, @resolve_opts)
 
+    # The translator every display label below is resolved with, once.
+    l10n = nil
+
     resource = AshA2ui.Info.resource!(resource_or_ui_module)
     components = AshA2ui.Info.components(resource_or_ui_module)
     declared_fields = AshA2ui.Info.fields(resource_or_ui_module)
@@ -338,8 +343,8 @@ defmodule AshA2ui.ResolvedView do
     form = Enum.find(components, &(&1.name == :form))
     selects = resolve_selects(resource, form, Map.new(declared_fields, &{&1.name, &1}))
 
-    fields = normalize_fields(resource, components, declared_fields, Map.keys(selects))
-    components = Enum.map(components, &normalize_component(&1, fields))
+    fields = normalize_fields(resource, components, declared_fields, Map.keys(selects), l10n)
+    components = Enum.map(components, &normalize_component(&1, fields, l10n))
 
     form = Enum.find(components, &(&1.name == :form))
 
@@ -352,7 +357,7 @@ defmodule AshA2ui.ResolvedView do
 
     create_action = component_action(form, :create_action, resource, :create)
     update_action = component_action(form, :update_action, resource, :update)
-    contexts = resolve_contexts(resource_or_ui_module)
+    contexts = resolve_contexts(resource_or_ui_module, l10n)
     declared = Map.new(declared_fields, &{&1.name, &1})
     prompt_selects = resolve_prompt_selects(resource, actions, declared)
 
@@ -376,14 +381,15 @@ defmodule AshA2ui.ResolvedView do
       tables: tables,
       actions: actions,
       refreshes: Map.new(actions, fn {name, action} -> {name, action.refreshes} end),
-      nested_forms: resolve_nested_forms(resource, form, create_action || update_action),
+      nested_forms: resolve_nested_forms(resource, form, create_action || update_action, l10n),
       contexts: Map.new(contexts, &{&1.name, &1}),
       context_order: Enum.map(contexts, & &1.name),
       details: resolve_details(components, contexts, fields),
       reports: resolve_reports(resource, components),
-      prompts: resolve_prompts(resource, actions, declared, prompt_selects),
+      prompts: resolve_prompts(resource, actions, declared, prompt_selects, l10n),
       prompt_selects: prompt_selects,
-      diagrams: AshA2ui.Info.diagrams(resource_or_ui_module)
+      diagrams: AshA2ui.Info.diagrams(resource_or_ui_module),
+      l10n: l10n
     }
   end
 
@@ -393,10 +399,10 @@ defmodule AshA2ui.ResolvedView do
   and prompt buttons in both compositions.
   """
   @spec action_label(t(), atom) :: String.t()
-  def action_label(%__MODULE__{actions: actions}, action) do
+  def action_label(%__MODULE__{actions: actions, l10n: l10n}, action) do
     case Map.get(actions, action) do
-      %{label: label} when is_binary(label) -> label
-      _no_label -> Label.humanize(action)
+      %{label: label} when is_binary(label) -> Label.translate(l10n, label)
+      _no_label -> Label.resolve(l10n, nil, action)
     end
   end
 
@@ -599,18 +605,18 @@ defmodule AshA2ui.ResolvedView do
   # Nested forms resolve against one form action (create when declared, else
   # update — the verifier guarantees every form action agrees on the change
   # and mode, so either works). Skipped without a form or resolvable action.
-  defp resolve_nested_forms(resource, form, action_name)
+  defp resolve_nested_forms(resource, form, action_name, l10n)
 
-  defp resolve_nested_forms(_resource, nil, _action_name), do: %{}
-  defp resolve_nested_forms(_resource, _form, nil), do: %{}
+  defp resolve_nested_forms(_resource, nil, _action_name, _l10n), do: %{}
+  defp resolve_nested_forms(_resource, _form, nil, _l10n), do: %{}
 
-  defp resolve_nested_forms(resource, form, action_name) do
+  defp resolve_nested_forms(resource, form, action_name, l10n) do
     Map.new(form.nested_forms, fn nested ->
-      {nested.name, resolve_nested_form(resource, nested, action_name)}
+      {nested.name, resolve_nested_form(resource, nested, action_name, l10n)}
     end)
   end
 
-  defp resolve_nested_form(resource, nested, action_name) do
+  defp resolve_nested_form(resource, nested, action_name, l10n) do
     case AshA2ui.ManagedForms.manage(resource, action_name, nested.name) do
       {:ok, %{relationship: relationship} = manage} ->
         {:ok, mode} = AshA2ui.ManagedForms.mode(manage.opts)
@@ -627,7 +633,7 @@ defmodule AshA2ui.ResolvedView do
           destination: destination,
           mode: mode,
           fields: nested_fields(nested, mode, manage),
-          label: nested.label || Label.humanize(nested.name),
+          label: Label.resolve(l10n, nested.label, nested.name),
           option_label: option_label,
           option_value: option_value,
           option_sort: nested.option_sort || option_label,
@@ -867,20 +873,20 @@ defmodule AshA2ui.ResolvedView do
 
   # --- contexts and details -----------------------------------------------------
 
-  defp resolve_contexts(resource_or_ui_module) do
+  defp resolve_contexts(resource_or_ui_module, l10n) do
     resource_or_ui_module
     |> AshA2ui.Info.contexts()
-    |> Enum.map(&resolve_context/1)
+    |> Enum.map(&resolve_context(&1, l10n))
   end
 
-  defp resolve_context(context) do
+  defp resolve_context(context, l10n) do
     option_value = context.option_value || context_single_primary_key!(context)
     option_label = context.option_label || default_option_label(context.resource, option_value)
 
     %{
       name: context.name,
       resource: context.resource,
-      label: context.label || Label.humanize(context.name),
+      label: Label.resolve(l10n, context.label, context.name),
       option_label: option_label,
       option_value: option_value,
       option_sort: context.option_sort || option_label,
@@ -1028,7 +1034,7 @@ defmodule AshA2ui.ResolvedView do
         do: {name, resolve_select(field, relationship)}
   end
 
-  defp resolve_prompts(resource, actions, declared, prompt_selects) do
+  defp resolve_prompts(resource, actions, declared, prompt_selects, l10n) do
     for {name, %{prompt_fields: [_ | _] = fields} = setting} <- actions, into: %{} do
       ash_action = ResourceInfo.action(resource, name)
 
@@ -1040,7 +1046,8 @@ defmodule AshA2ui.ResolvedView do
            ash_action,
            declared[&1],
            &1,
-           prompt_select(resource, setting, declared, &1, prompt_selects)
+           prompt_select(resource, setting, declared, &1, prompt_selects),
+           l10n
          )
        )}
     end
@@ -1072,7 +1079,7 @@ defmodule AshA2ui.ResolvedView do
     Enum.find(Map.get(setting, :prompt_options) || [], &(&1.field == name))
   end
 
-  defp prompt_field(resource, ash_action, declared, name, select) do
+  defp prompt_field(resource, ash_action, declared, name, select, l10n) do
     {type, constraints} = prompt_input_type(resource, ash_action, name)
     choices = AshA2ui.TypeMapper.type_choices(type, constraints)
 
@@ -1085,7 +1092,7 @@ defmodule AshA2ui.ResolvedView do
 
     %{
       name: name,
-      label: (declared && declared.label) || Label.humanize(name),
+      label: Label.resolve(l10n, declared && declared.label, name),
       widget: widget,
       choices: choices,
       select: select,
@@ -1237,7 +1244,7 @@ defmodule AshA2ui.ResolvedView do
   # Effective field metadata for every field referenced by a component or
   # declared as a `field` entity, with label/widget defaults applied
   # (relationship-select fields default to `:choice_picker`).
-  defp normalize_fields(resource, components, declared_fields, select_names) do
+  defp normalize_fields(resource, components, declared_fields, select_names, l10n) do
     declared = Map.new(declared_fields, &{&1.name, &1})
 
     components
@@ -1257,7 +1264,7 @@ defmodule AshA2ui.ResolvedView do
       {name,
        %{
          field
-         | label: field.label || Label.humanize(name),
+         | label: Label.resolve(l10n, field.label, name),
            widget: field.widget || default_widget
        }}
     end)
@@ -1268,7 +1275,7 @@ defmodule AshA2ui.ResolvedView do
   # and row_layout field references are normalized against the effective
   # list (hidden fields drop out of groups and meta grids too) with their
   # label/meta defaults applied.
-  defp normalize_component(component, fields) do
+  defp normalize_component(component, fields, l10n) do
     effective =
       (component.fields || [])
       |> Enum.reject(&fields[&1].hidden)
@@ -1277,24 +1284,24 @@ defmodule AshA2ui.ResolvedView do
     %{
       component
       | fields: effective,
-        groups: Enum.map(component.groups, &normalize_group(&1, effective)),
-        steps: Enum.map(component.steps, &normalize_step(&1, effective)),
+        groups: Enum.map(component.groups, &normalize_group(&1, effective, l10n)),
+        steps: Enum.map(component.steps, &normalize_step(&1, effective, l10n)),
         row_layout: normalize_row_layout(component.row_layout, effective)
     }
   end
 
-  defp normalize_group(group, effective) do
+  defp normalize_group(group, effective, l10n) do
     %{
       group
-      | label: group.label || Label.humanize(group.name),
+      | label: Label.resolve(l10n, group.label, group.name),
         fields: Enum.filter(group.fields, &(&1 in effective))
     }
   end
 
-  defp normalize_step(step, effective) do
+  defp normalize_step(step, effective, l10n) do
     %{
       step
-      | label: step.label || Label.humanize(step.name),
+      | label: Label.resolve(l10n, step.label, step.name),
         fields: Enum.filter(step.fields, &(&1 in effective))
     }
   end

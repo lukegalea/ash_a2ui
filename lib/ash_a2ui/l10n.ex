@@ -12,6 +12,17 @@ defmodule AshA2ui.L10n do
 
   @placeholder ~r/%\{(\w+)\}/
 
+  @typedoc "A translator built from the localization options, or `nil` for none."
+  @type t :: nil
+
+  @doc """
+  Translates `msgid` with `l10n` and fills its placeholders from `bindings`.
+  Without a translator (`nil`) the msgid is only interpolated.
+  """
+  @spec t(t, String.t(), keyword) :: String.t()
+  def t(l10n, msgid, bindings \\ [])
+  def t(nil, msgid, bindings) when is_binary(msgid), do: interpolate(msgid, bindings)
+
   @doc """
   Fills `template`'s `%{key}` placeholders from `bindings`.
 

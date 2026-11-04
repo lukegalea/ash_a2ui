@@ -6,7 +6,28 @@ defmodule AshA2ui.Label do
   label that the DSL does not declare is the humanized name: underscores
   become spaces and the first letter is capitalized (`:due_date` →
   `"Due date"`). Declared labels are used as written.
+
+  It is also the one place a label is translated: `resolve/3` and
+  `translate/2` pass the chosen label through the surface's translator
+  (`AshA2ui.L10n`), once, where the label is chosen. Without a translator the
+  label is returned unchanged.
   """
+
+  alias AshA2ui.L10n
+
+  @doc """
+  The display label for `name`: the declared `label` when it is not `nil`,
+  else the humanized name, translated with `l10n`.
+  """
+  @spec resolve(L10n.t(), String.t() | nil, atom | String.t()) :: String.t()
+  def resolve(l10n, label, name), do: translate(l10n, label || humanize(name))
+
+  @doc """
+  Translates an already chosen display label with `l10n`. Labels carry no
+  placeholders, so nothing is interpolated.
+  """
+  @spec translate(L10n.t(), String.t()) :: String.t()
+  def translate(l10n, label) when is_binary(label), do: L10n.t(l10n, label, [])
 
   @doc """
   The humanized form of an atom or string name: underscores to spaces, the

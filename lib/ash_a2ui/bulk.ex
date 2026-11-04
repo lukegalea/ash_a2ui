@@ -40,6 +40,7 @@ defmodule AshA2ui.Bulk do
   """
 
   import Ash.Expr
+  import AshA2ui.Gettext, only: [msg: 1]
 
   require Ash.Query
 
@@ -169,8 +170,8 @@ defmodule AshA2ui.Bulk do
   row order. Validated against the table's cap: an empty selection and an
   oversized one are errors.
   """
-  @spec selection(map, map) :: {:ok, [String.t() | integer]} | {:error, String.t()}
-  def selection(table, context) do
+  @spec selection(map, map, L10n.t()) :: {:ok, [String.t() | integer]} | {:error, String.t()}
+  def selection(table, context, l10n \\ nil) do
     case Map.get(context, "records") do
       rows when is_list(rows) ->
         ids = selected_ids(rows)
@@ -178,13 +179,15 @@ defmodule AshA2ui.Bulk do
 
         cond do
           ids == [] ->
-            {:error, "Select at least one record first."}
+            {:error, L10n.t(l10n, msg("Select at least one record first."))}
 
           length(ids) > cap ->
             {:error,
-             L10n.interpolate(
-               "Too many records selected (%{count}): a bulk action runs on at most " <>
-                 "%{cap} records, one page.",
+             L10n.t(
+               l10n,
+               msg(
+                 "Too many records selected (%{count}): a bulk action runs on at most %{cap} records, one page."
+               ),
                count: length(ids),
                cap: cap
              )}
@@ -243,21 +246,25 @@ defmodule AshA2ui.Bulk do
   The status line of a "Select page" that marked only the first `cap/1` of
   `count` rows, or `nil` when every row was marked.
   """
-  @spec capped_selection_text(map, non_neg_integer, boolean) :: String.t() | nil
-  def capped_selection_text(table, count, true = _selected) do
+  @spec capped_selection_text(map, non_neg_integer, boolean, L10n.t()) :: String.t() | nil
+  def capped_selection_text(table, count, selected, l10n \\ nil)
+
+  def capped_selection_text(table, count, true = _selected, l10n) do
     cap = cap(table)
 
     if count > cap do
-      L10n.interpolate(
-        "Selected the first %{cap} of %{count} records: a bulk action runs on at most " <>
-          "%{cap} records.",
+      L10n.t(
+        l10n,
+        msg(
+          "Selected the first %{cap} of %{count} records: a bulk action runs on at most %{cap} records."
+        ),
         cap: cap,
         count: count
       )
     end
   end
 
-  def capped_selection_text(_table, _count, _selected), do: nil
+  def capped_selection_text(_table, _count, _selected, _l10n), do: nil
 
   @doc """
   The authorized, scoped re-read of the selected ids, as the actor
@@ -333,20 +340,20 @@ defmodule AshA2ui.Bulk do
   1 refused."` — named by `label` (the action's `label`) when given, else
   the humanized action name.
   """
-  @spec status_text(atom, non_neg_integer, map, String.t() | nil) :: String.t()
-  def status_text(action, selected, result, label \\ nil) do
+  @spec status_text(atom, non_neg_integer, map, String.t() | nil, L10n.t()) :: String.t()
+  def status_text(action, selected, result, label \\ nil, l10n \\ nil) do
     others =
       for {key, template} <- [
-            {"refused", "%{count} refused"},
-            {"skipped", "%{count} skipped"},
-            {"failed", "%{count} failed"}
+            {"refused", msg("%{count} refused")},
+            {"skipped", msg("%{count} skipped")},
+            {"failed", msg("%{count} failed")}
           ],
           result[key] > 0,
-          do: L10n.interpolate(template, count: result[key])
+          do: L10n.t(l10n, template, count: result[key])
 
     base =
-      L10n.interpolate("%{action}: %{ok} of %{selected} selected records done",
-        action: label || Label.humanize(action),
+      L10n.t(l10n, msg("%{action}: %{ok} of %{selected} selected records done"),
+        action: label || Label.resolve(l10n, nil, action),
         ok: result["ok"],
         selected: selected
       )
@@ -378,8 +385,9 @@ defmodule AshA2ui.Bulk do
   surface's usual carried bindings (`"query"`, `"contexts"`) to a context;
   `label` names each action's button (the action's `label`).
   """
-  @spec toolbar_components(map, String.t(), (map -> map), (atom -> String.t())) :: [map]
-  def toolbar_components(table, sfx, bind, label \\ &Label.humanize/1) do
+  @spec toolbar_components(map, String.t(), (map -> map), (atom -> String.t()), L10n.t()) ::
+          [map]
+  def toolbar_components(table, sfx, bind, label \\ &Label.humanize/1, l10n \\ nil) do
     base = "bulk#{sfx}"
     records = %{"path" => table.records_path}
     component = to_string(table.name)
@@ -396,8 +404,8 @@ defmodule AshA2ui.Bulk do
 
     selects =
       for {id, label, selected} <- [
-            {"select_page", "Select page", true},
-            {"clear", "Clear", false}
+            {"select_page", L10n.t(l10n, msg("Select page")), true},
+            {"clear", L10n.t(l10n, msg("Clear")), false}
           ] do
         context =
           bind.(%{"component" => component, "selected" => selected, "records" => records})
@@ -436,8 +444,8 @@ defmodule AshA2ui.Bulk do
   cards, first in the row's cell Row otherwise. Other tables' components
   are returned unchanged.
   """
-  @spec with_row_checkbox([map], map, String.t()) :: [map]
-  def with_row_checkbox(components, table, sfx) do
+  @spec with_row_checkbox([map], map, String.t(), L10n.t()) :: [map]
+  def with_row_checkbox(components, table, sfx, l10n \\ nil) do
     if enabled?(table) do
       checkbox_id = "record_row#{sfx}_selected"
 
@@ -449,7 +457,7 @@ defmodule AshA2ui.Bulk do
       checkbox = %{
         "id" => checkbox_id,
         "component" => "CheckBox",
-        "label" => "Select",
+        "label" => L10n.t(l10n, msg("Select")),
         "value" => %{"path" => @selected_key}
       }
 
