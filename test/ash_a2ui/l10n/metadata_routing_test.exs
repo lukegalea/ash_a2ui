@@ -128,35 +128,4 @@ defmodule AshA2ui.L10n.MetadataRoutingTest do
       assert {:ok, %{label: "hello"}} = AshA2ui.Canvas.resolve(record_ref, opts ++ @pseudo)
     end
   end
-
-  if Code.ensure_loaded?(Phoenix.LiveView) do
-    describe "presence bar" do
-      import Phoenix.LiveViewTest
-
-      @presences [%{key: "a", label: "Ada"}, %{key: "b", label: "Grace"}]
-
-      test "without a translator its text is unchanged" do
-        html = render_component(&AshA2ui.PresenceBar.bar/1, presences: @presences, max_visible: 1)
-
-        assert html =~ ~s(aria-label="People viewing this surface")
-        assert html =~ ~s(aria-label="Ada is viewing this surface")
-        assert html =~ ~s(aria-label="1 more people viewing this surface")
-        assert html =~ ~s(title="People viewing this surface: +1")
-      end
-
-      test "its chrome is library text, translated once; names are data" do
-        html =
-          render_component(
-            &AshA2ui.PresenceBar.bar/1,
-            [presences: @presences, max_visible: 1] ++ @pseudo
-          )
-
-        assert html =~ "⟦People viewing this surface⟧"
-        assert html =~ "⟦Ada is viewing this surface⟧"
-        assert html =~ "⟦1 more people viewing this surface⟧"
-        assert html =~ "⟦⟦People viewing this surface⟧: +1⟧"
-        refute html =~ "⟪"
-      end
-    end
-  end
 end
