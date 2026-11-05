@@ -13,7 +13,7 @@ defmodule AshA2ui.Test.DomainPseudoLocale do
     case meta[:domain] do
       "ash_a2ui" -> "⟦" <> text <> "⟧"
       "a2ui_metadata" -> "⟪" <> text <> "⟫"
-      "errors" -> "⟨" <> text <> "⟩"
+      "ash" -> "⟨" <> text <> "⟩"
     end
   end
 

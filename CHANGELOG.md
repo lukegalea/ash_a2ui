@@ -10,11 +10,20 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 ### Features:
 
+- **Display text has an owner.** Library strings are looked up in the
+  `ash_a2ui` domain; the host's display metadata in `:metadata_domain`
+  (default `"a2ui_metadata"`), written by `mix ash_a2ui.gettext.extract_metadata`.
+  A `:gettext_fn` of arity 4 receives `meta` with `:domain` and, for a
+  `msgctxt`, `:context`. Text an agent wrote into a `AshA2ui.Dynamic` spec is
+  shown as written, `Dynamic.spec_schema/2` takes `locale:` and
+  `Dynamic.locale_instruction/1` tells the agent the locale. A spec resolved
+  with `imported?: true` shows nothing as written.
+
 - **Assembled messages are catalog templates.** The bulk status line's
   `; ` and `, ` joins, a context's "Select <context>" row label (now a host
   display message, not a lower-cased label) and the per-record bulk failure
   line are templates. Ash error messages are translated in the errors domain
-  (`:errors_domain`, default `"errors"`) by their own msgid with the error's
+  (`:errors_domain`, default `"ash"`) by their own msgid with the error's
   vars. A section's CSV filename uses the untranslated lane heading. `.pot`
   references carry line numbers. English output is unchanged.
 
@@ -34,6 +43,13 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   labels go through the translator, once, and
   `mix ash_a2ui.gettext.extract_metadata` collects them. The presence bar's
   text is library text. Without a translator the output is unchanged.
+- **Fix:** review findings. The errors domain defaults to `"ash"`, where
+  `mix ash.gen.gettext` puts Ash's catalog. A required field's error is Ash's
+  `"is required"`. A row badge no longer translates a record's own value, and
+  an enumerated value's badge, picker option and lane heading share one label
+  under a `msgctxt` (`one_of:<field>` for a `one_of` value). Admin filter
+  hints are translated and extracted; so is the field name of the inline-edit
+  confirmation. Agent-written `badge_text` is shown as written.
 - **Fix:** the empty state of a sectioned table names its records ("No Task
   records yet."), no longer the runtime table name ("No By status archived
   records yet.").

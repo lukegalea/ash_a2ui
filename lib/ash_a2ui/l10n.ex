@@ -24,7 +24,9 @@ defmodule AshA2ui.L10n do
 
   A metadata message may carry a context (`msgctxt`), so a homograph
   translates separately: an enum value's label is looked up under
-  `"enum:" <> Atom.to_string(EnumModule)`, e.g. `"enum:Elixir.MyApp.Status"`.
+  `"enum:" <> Atom.to_string(EnumModule)`, e.g. `"enum:Elixir.MyApp.Status"`,
+  a `one_of` value's under `"one_of:" <> field`, e.g. `"one_of:status"`, and
+  a context's "Select <context>" row label under `"select_context"`.
 
   ## Translators
 
@@ -45,9 +47,10 @@ defmodule AshA2ui.L10n do
           `module.function(msgid, bindings, locale, meta)` for every
           message. `locale` is the `:locale` option, or `nil`. `meta` is a
           keyword list: `:domain` (`"ash_a2ui"` for library strings, the
-          `:metadata_domain` for host metadata), and `:context` when the
-          message has a `msgctxt`. One function tells the owners apart by
-          `meta[:domain]`.
+          `:metadata_domain` for host metadata, the `:errors_domain` for an
+          Ash error's message), and `:context` when the message has a
+          `msgctxt`. One function tells the owners apart by `meta[:domain]`;
+          match all three.
         * otherwise as `module.function(msgid, bindings)`, or
           `module.function(msgid, bindings, locale)` when `:locale` is
           given. This shape receives both owners' messages without their
@@ -63,8 +66,10 @@ defmodule AshA2ui.L10n do
     * `:errors_domain` — the domain an Ash error's message is looked up in,
       by its own msgid (the error's message template, e.g. `"must be more
       than or equal to %{min}"`) with the error's `vars` as bindings.
-      Defaults to `"errors"`, where `mix ash.gen.gettext` puts Ash's
-      catalog. Only the field errors shown to the reader are translated.
+      Defaults to `"ash"`, where `mix ash.gen.gettext` puts Ash's catalog
+      (pass `"errors"` when you ran it with `--domain errors`). Only the
+      field errors shown to the reader are translated. An `:gettext_fn` of
+      arity 4 receives them with `meta[:domain]` set to this domain.
     * `:verbatim` — a `MapSet` of display strings the metadata translator
       returns as written: text authored by a person or agent for this one
       surface (see `AshA2ui.Dynamic`), which no catalog holds.
@@ -83,7 +88,7 @@ defmodule AshA2ui.L10n do
 
   @library_domain "ash_a2ui"
   @default_metadata_domain "a2ui_metadata"
-  @default_errors_domain "errors"
+  @default_errors_domain "ash"
 
   defstruct [:translate, :locale, :domain, :metadata_domain, :errors_domain, verbatim: nil]
 
