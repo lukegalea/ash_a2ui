@@ -66,8 +66,9 @@ defmodule AshA2ui.L10n do
     * `:errors_domain` — the domain an Ash error's message is looked up in,
       by its own msgid (the error's message template, e.g. `"must be more
       than or equal to %{min}"`) with the error's `vars` as bindings.
-      Defaults to `"ash"`, where `mix ash.gen.gettext` puts Ash's catalog
-      (pass `"errors"` when you ran it with `--domain errors`). Only the
+      Defaults to `"errors"`, where `mix ash.gen.gettext --domain errors`
+      merges Ash's catalog alongside Phoenix's and Ecto's (pass `"ash"` if
+      you ran it without `--domain`). Only the
       field errors shown to the reader are translated. An `:gettext_fn` of
       arity 4 receives them with `meta[:domain]` set to this domain.
     * `:verbatim` — a `MapSet` of display strings the metadata translator
@@ -88,7 +89,7 @@ defmodule AshA2ui.L10n do
 
   @library_domain "ash_a2ui"
   @default_metadata_domain "a2ui_metadata"
-  @default_errors_domain "ash"
+  @default_errors_domain "errors"
 
   defstruct [:translate, :locale, :domain, :metadata_domain, :errors_domain, verbatim: nil]
 

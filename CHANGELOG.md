@@ -23,7 +23,7 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   `; ` and `, ` joins, a context's "Select <context>" row label (now a host
   display message, not a lower-cased label) and the per-record bulk failure
   line are templates. Ash error messages are translated in the errors domain
-  (`:errors_domain`, default `"ash"`) by their own msgid with the error's
+  (`:errors_domain`, default `"errors"`) by their own msgid with the error's
   vars. A section's CSV filename uses the untranslated lane heading. `.pot`
   references carry line numbers. English output is unchanged.
 
@@ -43,8 +43,8 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
   labels go through the translator, once, and
   `mix ash_a2ui.gettext.extract_metadata` collects them. The presence bar's
   text is library text. Without a translator the output is unchanged.
-- **Fix:** review findings. The errors domain defaults to `"ash"`, where
-  `mix ash.gen.gettext` puts Ash's catalog. A required field's error is Ash's
+- **Fix:** review findings. The errors domain stays `"errors"`, where
+  `mix ash.gen.gettext --domain errors` merges Ash's catalog. A required field's error is Ash's
   `"is required"`. A row badge no longer translates a record's own value, and
   an enumerated value's badge, picker option and lane heading share one label
   under a `msgctxt` (`one_of:<field>` for a `one_of` value). Admin filter

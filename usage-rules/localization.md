@@ -100,8 +100,8 @@ Both are translated only when the host passes a translator and a locale.
 - A missing translation falls back to the English msgid, string by string.
 - Not translated: section headings read from records. Ash's field error
   messages are translated by their own msgid in the errors domain
-  (`errors_domain:`, default `"ash"`, where `mix ash.gen.gettext` puts Ash's
-  catalog; with `--domain errors` pass `errors_domain: "errors"`). A
+  (`errors_domain:`, default `"errors"`, where `mix ash.gen.gettext --domain
+  errors` merges Ash's catalog; without `--domain` pass `errors_domain: "ash"`). A
   required field's error is Ash's `"is required"`.
 - Canvas: `AshA2ui.Canvas.build_graph/2` and `AshA2ui.Canvas.resolve/2`
   take the same `gettext_backend`, `gettext_fn`, `locale` and

@@ -596,8 +596,8 @@ missing translation falls back to the English text. ash_a2ui does not depend
 on `:gettext`; your app does. The
 [localization usage rules](usage-rules/localization.md) have the details.
 Ash's own field error messages are looked up by their own msgid in the
-`ash` domain (`errors_domain:` to change it), where `mix ash.gen.gettext`
-puts Ash's catalog.
+`errors` domain (`errors_domain:` to change it), where
+`mix ash.gen.gettext --domain errors` merges Ash's catalog.
 
 ## Positioning: is this the right tool?
 

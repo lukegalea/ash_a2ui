@@ -49,7 +49,7 @@ defmodule AshA2ui.L10n.ReviewFindingsTest do
     end)
   end
 
-  test "Ash's catalog is looked up in the \"ash\" domain by default" do
+  test "Ash's catalog is looked up in the \"errors\" domain by default" do
     {_outcome, messages} =
       ActionHandler.handle(
         Task,

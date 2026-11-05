@@ -243,7 +243,6 @@ defmodule AshA2ui.Gettext.Metadata do
     ##
     ## Run `mix ash_a2ui.gettext.extract_metadata` to refresh this file.
     ## Run `mix gettext.merge priv/gettext --locale LOCALE` to merge into a .po file.
-
     msgid ""
     msgstr ""
     "Content-Type: text/plain; charset=UTF-8\\n"
