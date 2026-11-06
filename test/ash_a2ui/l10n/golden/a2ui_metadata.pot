@@ -92,6 +92,10 @@ msgctxt "one_of:status"
 msgid "Archived"
 msgstr ""
 
+#: test/support/table_displays.ex:132
+msgid "Arm"
+msgstr ""
+
 #: test/support/article.ex:1
 msgid "Article"
 msgstr ""
@@ -389,6 +393,7 @@ msgid "Declined"
 msgstr ""
 
 #: test/support/table_displays.ex:101
+#: test/support/table_displays.ex:132
 msgctxt "one_of:outcome"
 msgid "Degraded"
 msgstr ""
@@ -549,6 +554,7 @@ msgid "Explode"
 msgstr ""
 
 #: test/support/table_displays.ex:101
+#: test/support/table_displays.ex:132
 msgctxt "one_of:outcome"
 msgid "Failed"
 msgstr ""
@@ -610,6 +616,7 @@ msgid "Hub contract"
 msgstr ""
 
 #: test/support/table_displays.ex:101
+#: test/support/table_displays.ex:132
 msgctxt "one_of:outcome"
 msgid "Improved"
 msgstr ""
@@ -868,6 +875,7 @@ msgid "Open"
 msgstr ""
 
 #: test/support/table_displays.ex:101
+#: test/support/table_displays.ex:132
 msgid "Outcome"
 msgstr ""
 
@@ -1177,6 +1185,7 @@ msgid "Shout title"
 msgstr ""
 
 #: test/support/table_displays.ex:101
+#: test/support/table_displays.ex:132
 msgctxt "one_of:outcome"
 msgid "Skipped"
 msgstr ""
@@ -1412,6 +1421,7 @@ msgid "Try other words or filters."
 msgstr ""
 
 #: test/support/table_displays.ex:101
+#: test/support/table_displays.ex:132
 msgctxt "one_of:outcome"
 msgid "Unmeasured"
 msgstr ""

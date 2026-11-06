@@ -148,6 +148,7 @@ defmodule AshA2ui.Test.TableDisplays.ArmMatrixUI do
     end
 
     component :table, :results do
+      fields [:case_name, :arm, :outcome]
       display :matrix
       row_field :case_name
       column_field :arm
