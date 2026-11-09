@@ -4439,6 +4439,14 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         return null;
       }
 
+      // A2uiLitElement renders only once it has a controller, and this
+      // dialog never gets one (no controller binding, no context: the
+      // DataGrid mounts it by hand), so it rendered nothing at all. Render
+      // through LitElement directly.
+      update(changedProperties) {
+        Object.getPrototypeOf(A2uiLitElement.prototype).update.call(this, changedProperties);
+      }
+
       updated(changedProperties) {
         super.updated(changedProperties);
         if (!changedProperties.has("open")) return;
@@ -4490,10 +4498,13 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
           if (focusables.length === 0) return;
           const first = focusables[0];
           const last = focusables[focusables.length - 1];
-          if (event.shiftKey && document.activeElement === first) {
+          // The dialog's own shadow root: from outside it, document.activeElement
+          // is the dialog host, never one of its buttons.
+          const active = this.renderRoot.activeElement;
+          if (event.shiftKey && active === first) {
             event.preventDefault();
             last.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
+          } else if (!event.shiftKey && active === last) {
             event.preventDefault();
             first.focus();
           }

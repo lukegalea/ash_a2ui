@@ -10,6 +10,16 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 Requires Elixir 1.20 or later.
 
+### Bug Fixes:
+
+- **The destructive-action confirm dialog renders, and its focus trap holds.**
+  `<ash-admin-confirm-dialog>` has no controller (the DataGrid mounts it by
+  hand), and `A2uiLitElement` renders nothing without one, so confirming a
+  destructive row action showed nothing. It now renders through `LitElement`.
+  Its Tab trap compared `document.activeElement` (the dialog host, from outside
+  its shadow root) with the buttons, so Tab left the dialog; it now uses the
+  dialog's own root.
+
 ### Features:
 
 - **A host can draw the catalog's action buttons.** Every button the admin
