@@ -14,6 +14,7 @@ defmodule AshA2ui.ReportTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.BucketWord
+  alias AshA2ui.Test.LabelledReportUI
   alias AshA2ui.Test.WordReportUI
   alias AshA2ui.Test.WordReportV1UI
 
@@ -39,6 +40,29 @@ defmodule AshA2ui.ReportTest do
 
   defp create_word!(word) do
     Ash.create!(BucketWord, %{word: word}, authorize?: false)
+  end
+
+  defp labelled_envelope(name, context) do
+    %{
+      "version" => "v1.0",
+      "action" => %{
+        "name" => name,
+        "surfaceId" => "labelled_report",
+        "sourceComponentId" => "test_component",
+        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
+        "context" => context
+      }
+    }
+  end
+
+  defp csv_of(messages) do
+    ["data:text/csv;base64," <> base64] =
+      Enum.flat_map(messages, fn
+        %{"callFunction" => %{"call" => "downloadFile", "args" => args}} -> [args["dataUrl"]]
+        _ -> []
+      end)
+
+    Base.decode64!(base64)
   end
 
   describe "resolution" do
@@ -279,6 +303,45 @@ defmodule AshA2ui.ReportTest do
                "kind" => "success",
                "message" => "Report complete: 1 row."
              }
+    end
+  end
+
+  describe "declared labels" do
+    setup do
+      create_word!("ab")
+      create_word!("abcdef")
+
+      [message] = AshA2ui.Info.build_surface(LabelledReportUI, authorize?: false)
+      assert_valid_server_message(message, :v1_0)
+
+      %{components: Map.new(message["createSurface"]["components"], &{&1["id"], &1})}
+    end
+
+    @tag ac: "A2UI-NEW/AC-6"
+    test "the param input carries the declared label", %{components: components} do
+      assert components["report_lengths_param_min_length"]["label"] == "Minimum length"
+    end
+
+    @tag ac: "A2UI-NEW/AC-6"
+    test "the row cell caption and the export column carry the declared label", %{
+      components: components
+    } do
+      assert components["report_lengths_cell_length_label"]["text"] == "Letters"
+      assert components["report_lengths_export_column_length"]["label"] == "Letters"
+      # an undeclared name keeps its humanized label
+      assert components["report_lengths_cell_state_label"]["text"] == "State"
+    end
+
+    @tag ac: "A2UI-NEW/AC-6"
+    test "the CSV header carries the declared label" do
+      message =
+        labelled_envelope("export", %{
+          "params" => %{"min_length" => "3"},
+          "columns" => %{"word" => true, "length" => true}
+        })
+
+      assert {:ok, messages} = ActionHandler.handle(LabelledReportUI, message, authorize?: false)
+      assert csv_of(messages) == "Word,Letters\r\nabcdef,6\r\n"
     end
   end
 end
