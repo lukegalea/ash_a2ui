@@ -27,6 +27,11 @@ actions) and `export` blocks (server-generated CSV via the v1.0
   the Run button dispatches the `"report"` client action. Blank params are
   unset; non-blank values are cast against the action's arguments;
   non-allowlisted keys are dropped before the cast.
+- A `field` override may name a report param or row key
+  (`field :from do label "From date" end`): its `label` reaches the param
+  input, the cell caption, the export column and the CSV header. Only
+  `label` applies to a report name, and the override is shared with the
+  surface's tables and form, so one name carries one label.
 - The action runs actor-scoped with the surface's `authorize?` — scope
   inside the action's `run` via `context.actor` where needed.
 - Results land wholesale at `/report/<name>/rows`. On v1.0 the
