@@ -340,12 +340,12 @@ defmodule AshA2ui.Manifest do
       label: Experience.collection_label(view, table),
       resource: table.resource,
       read_action: table.read_action,
-      display: table.component.display || :list,
+      display: table.component.display,
       sectioned: not is_nil(table.sections),
       component_id: component_id(view, table),
       records_path: table.records_path,
       columns: columns(view, table),
-      query: query(view, table.query),
+      query: query_controls(view, table.query),
       presets: presets(view, table),
       context_filter:
         Enum.map(table.context_filter, fn {field, context} ->
@@ -361,7 +361,7 @@ defmodule AshA2ui.Manifest do
   # runtime suffix per section).
   defp component_id(view, table) do
     cond do
-      table.sections || (table.component.display || :list) != :list -> nil
+      table.sections || table.component.display != :list -> nil
       Experience.admin?(view) -> "data_grid#{table_suffix(view, table)}"
       true -> "record_row#{table_suffix(view, table)}_content"
     end
@@ -380,9 +380,9 @@ defmodule AshA2ui.Manifest do
     Enum.map(fields, &%{name: &1, label: view.fields[&1].label})
   end
 
-  defp query(_view, nil), do: nil
+  defp query_controls(_view, nil), do: nil
 
-  defp query(view, query) do
+  defp query_controls(view, query) do
     %{
       name: query.name,
       default_preset: query.default_preset,
@@ -392,7 +392,7 @@ defmodule AshA2ui.Manifest do
         ),
       page_size: query.page_size,
       default_sort:
-        Enum.map(query.default_sort || [], fn {field, direction} ->
+        Enum.map(query.default_sort, fn {field, direction} ->
           %{field: field, direction: direction}
         end)
     }
