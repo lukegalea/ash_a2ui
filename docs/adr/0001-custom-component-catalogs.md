@@ -48,7 +48,7 @@ Ids are stable URIs. They need not resolve. They are not under a2ui.org, which i
 spec's namespace.
 
 - `https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1`
-- `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1`
+- `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2`
 
 A host names its catalog under its own domain or repository.
 
@@ -189,13 +189,19 @@ which a host may target. `<key>` is a component's `as` name, else its kind.
 - `section_<key>` and `section_<key>_heading`: a section's wrapper and heading, keyed by the
   first component in the section.
 - `action_result_panel`: the panel showing a generic action's result.
+- `context_<name>_body`: the body of a context picker, `<name>` being the context's name.
+- `form_select_<field>`: a form's relationship or option picker for one field.
+
+The last two are the ids the shipped Column already reads to recognise a picker composite,
+so they were a contract in practice before this list named them.
 
 The set is collision-free within a surface, and a test pins it. Both are follow-ups: today
 two component keys can still make two of these ids equal.
 
 ### 8. Versioning
 
-- The id names the major version (`.../v1`). The catalog's contract version sits in
+- The id names the major version: the ash_a2ui catalog is `.../ash_a2ui/v1` and the admin
+  catalog, at 2.0.0, is `.../admin/v2`. The catalog's contract version sits in
   `metadata.extensions.ash_a2ui`, with its changelog. The renderer module exports the same
   version (`ADMIN_CATALOG_VERSION`). The admin catalog moves from 1.13.0 to 2.0.0 for the
   A2UI 1.0 break, and its id moves as section 3 says.
