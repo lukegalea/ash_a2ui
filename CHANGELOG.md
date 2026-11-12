@@ -45,6 +45,15 @@ Requires Elixir 1.20 or later.
   "no rows" while its rows are on the way. The hook sets the flag from a `query`
   or `report` click until the server answers; a host that runs a report's rows
   on arrival brackets the fetch with the same messages.
+
+- **Admin catalog 1.13: plain links.** A `field`'s `link_url :field` links
+  its value to a page or address held by another field of the same
+  resource (a path or an absolute URL), not to a surface's record. Rows carry
+  `_links/<field>` as `{href, label}` with no `surface`; `linkEntries` keeps
+  such entries and the stock catalog draws them as ordinary links. Verified:
+  a public field of the resource, and never alongside `link`, `links` or
+  `source`. The `Field` struct gains `link_url`.
+
 - **Admin catalog 1.12: record pages.** A page about one record (a
   pickerless context, its detail cards and related tables) can now be laid
   out and worded like one:
