@@ -33,7 +33,7 @@ october = %{"window" => %{"anchor" => "2026-10-01", "selected" => ""}, "page" =>
 
 envelope = fn name, context ->
   %{
-    "version" => "v0.9.1",
+    "version" => "1.0",
     "action" => %{
       "name" => name,
       "surfaceId" => "calendar_month",
@@ -65,7 +65,7 @@ Application.put_env(:ash_a2ui, :catalog, :admin_v1)
 
 switch_envelope = fn context ->
   %{
-    "version" => "v0.9.1",
+    "version" => "1.0",
     "action" => %{
       "name" => "query",
       "surfaceId" => "calendar_switch",

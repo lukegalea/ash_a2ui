@@ -31,7 +31,7 @@ write = fn name, messages -> File.write!(Path.join(out, name), Jason.encode!(%{m
 
 envelope = fn surface, name, context ->
   %{
-    "version" => "v0.9.1",
+    "version" => "1.0",
     "action" => %{
       "name" => name,
       "surfaceId" => surface,

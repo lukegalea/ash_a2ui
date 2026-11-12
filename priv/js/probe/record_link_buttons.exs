@@ -39,7 +39,7 @@ write.("link_buttons_payload.json", AshA2ui.Info.build_surface(NotesUI, link_but
   AshA2ui.ActionHandler.handle(
     NotesUI,
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "context_select",
         "surfaceId" => "notes",
