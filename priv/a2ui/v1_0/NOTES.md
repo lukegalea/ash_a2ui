@@ -91,7 +91,24 @@ The library's own tests cover these.
 - The published `@a2ui/web_core` and `@a2ui/lit` (0.15.0 at the pin) are
   behind these schemas. The `@` envelope keys, the required `TextField.value`
   and agent-function fallback routing are listed as unreleased in
-  `renderers/web_core/CHANGELOG.md`.
+  `typescript/core/web_core/CHANGELOG.md`. Feeding the fixtures in
+  `test/fixtures/v1_0_contract/` through a 0.15.0 `MessageProcessor` gives:
+  - a component carrying `@checks`, `@accessibility` or `@catalogId` fails
+    with `VALIDATION_FAILED` ("Unrecognized key(s)"), and the whole
+    `createSurface` is dropped (no components reach the model). The bare
+    `checks` and `accessibility` keys work;
+  - a `TextField` without `value` is accepted;
+  - an action whose `functionCall` names a function no catalog declares does
+    nothing: no `callAgentFunction` goes out and no error is reported;
+  - `MessageProcessor.callAgentFunction(surfaceId, call, {timeoutMs})` works.
+    It sends `callAgentFunction` with a fresh `functionCallId`, and the
+    matching `agentFunctionResponse` resolves the promise (`value`) or
+    rejects it (`error`, or `TIMEOUT`).
+
+  A build of upstream `main` at the pin accepts every fixture unchanged,
+  reads the bare keys as their `@` forms, rejects a `TextField` without
+  `value`, and routes the undeclared action function to the agent as
+  `callAgentFunction`.
 
 ## Re-vendoring
 

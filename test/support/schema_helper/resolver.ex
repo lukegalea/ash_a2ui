@@ -84,6 +84,13 @@ defmodule AshA2ui.Test.SchemaHelper.Resolver do
 
   def resolve(uri, _opts), do: {:error, {:not_an_a2ui_uri, uri}}
 
+  @doc "The catalog files `opts` (`catalogs:`) selects, the basic catalog by default."
+  def catalog_files(opts), do: catalogs(opts)
+
+  @doc "The URI, relative to `base/0`, the `index`th of `files` is served under."
+  def catalog_uri([_single], 0), do: "catalog.json"
+  def catalog_uri(_files, index), do: "catalog_member_#{index}.json"
+
   defp catalogs(opts) do
     case Keyword.get(opts, :catalogs) do
       nil -> [@basic_catalog]

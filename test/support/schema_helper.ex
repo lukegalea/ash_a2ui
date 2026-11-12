@@ -58,12 +58,18 @@ defmodule AshA2ui.Test.SchemaHelper do
 
   @doc "Asserts `message` is a valid agent-to-renderer message. Returns it."
   def assert_valid_agent_message(message, opts \\ []),
-    do: assert_valid(validate_agent_message(message, opts), message, "agent-to-renderer message")
+    do:
+      assert_valid(
+        validate_agent_message(message, opts),
+        message,
+        "agent-to-renderer message",
+        opts
+      )
 
   @doc "Asserts `messages` is a valid agent-to-renderer message list. Returns it."
   def assert_valid_agent_messages(messages, opts \\ []) when is_list(messages) do
     result = validate(spec_schema("agent_to_renderer_list.json", opts), messages)
-    assert_valid(result, messages, "agent-to-renderer message list")
+    assert_valid(result, messages, "agent-to-renderer message list", opts)
   end
 
   @doc "Asserts `message` is a valid renderer-to-agent message. Returns it."
@@ -170,9 +176,17 @@ defmodule AshA2ui.Test.SchemaHelper do
 
   ## Internals
 
-  defp assert_valid(:ok, value, _what), do: value
+  defp assert_valid(result, value, what, opts \\ [])
 
-  defp assert_valid({:error, errors}, value, what) do
+  defp assert_valid(:ok, value, _what, _opts), do: value
+
+  defp assert_valid({:error, errors}, value, what, opts) do
+    errors =
+      case component_diagnostics(value, opts) do
+        [] -> errors
+        diagnostics -> diagnostics
+      end
+
     flunk("""
     Expected a valid A2UI 1.0 #{what}, got:
 
@@ -182,18 +196,71 @@ defmodule AshA2ui.Test.SchemaHelper do
     """)
   end
 
+  # JSV nests the errors of combinators (`oneOf`, `allOf`, `$ref`) in
+  # sub-units; the leaves are the actionable ones.
   defp format_errors(error) do
     error
     |> JSV.normalize_error()
     |> Map.get(:details, [])
-    |> Enum.reject(&(&1[:valid] == true))
-    |> Enum.flat_map(fn unit ->
-      unit
-      |> Map.get(:errors, [])
-      |> Enum.map(&"#{unit[:instanceLocation]}: #{&1[:message]}")
-    end)
+    |> Enum.flat_map(&leaf_errors/1)
     |> Enum.uniq()
   end
+
+  defp leaf_errors(%{valid: true}), do: []
+
+  defp leaf_errors(unit) do
+    Enum.flat_map(Map.get(unit, :errors, []), fn
+      %{details: [_ | _] = details} -> Enum.flat_map(details, &leaf_errors/1)
+      error -> ["#{unit[:instanceLocation]}: #{error[:message]}"]
+    end)
+  end
+
+  # A component that fails `anyComponent` is reported against every kind it
+  # is not. Validating each component against its own kind alone (the
+  # envelope keys plus the catalog's definition) names the real problem.
+  defp component_diagnostics(message, opts) do
+    files = Resolver.catalog_files(opts)
+
+    for components <- message_components(message),
+        {component, index} <- Enum.with_index(components),
+        {:error, errors} <- [validate_component(component, files, opts)],
+        error <- errors do
+      "component #{index} (#{inspect(component["id"])}, #{inspect(component["component"])}) #{error}"
+    end
+  end
+
+  defp message_components(messages) when is_list(messages),
+    do: Enum.flat_map(messages, &message_components/1)
+
+  defp message_components(%{"createSurface" => %{"components" => [_ | _] = components}}),
+    do: [components]
+
+  defp message_components(%{"updateComponents" => %{"components" => [_ | _] = components}}),
+    do: [components]
+
+  defp message_components(_message), do: []
+
+  defp validate_component(%{"component" => kind} = component, files, opts) when is_binary(kind) do
+    case Enum.find_index(files, &(&1 |> Resolver.read!() |> get_in(["components", kind]))) do
+      nil ->
+        {:error, ["#: no catalog in use declares #{inspect(kind)}"]}
+
+      index ->
+        uri = Resolver.base() <> Resolver.catalog_uri(files, index)
+
+        %{
+          "allOf" => [
+            %{"$ref" => Resolver.base() <> "common_types.json#/$defs/ComponentCommon"},
+            %{"$ref" => uri <> "#/components/" <> kind}
+          ],
+          "unevaluatedProperties" => false
+        }
+        |> build_schema(opts)
+        |> validate(component)
+    end
+  end
+
+  defp validate_component(_component, _files, _opts), do: {:error, ["#: no component kind"]}
 
   defp identifier_errors(catalog) do
     named = fn section, what, trim ->
