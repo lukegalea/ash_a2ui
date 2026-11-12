@@ -104,7 +104,7 @@ defmodule AshA2ui.Board.BoardDynamicTest do
     # The transition row action moves the card; the template-key refresh
     # re-reads every cell.
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "invoke",
         "surfaceId" => surface.surface_id,

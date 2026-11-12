@@ -96,7 +96,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "swimlane_tasks",

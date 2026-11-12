@@ -93,7 +93,7 @@ defmodule AshA2ui.Adoption.ActorReadsTest do
 
   test "an action's refresh read carries the actor and tenant", %{job: job} do
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "invoke",
         "surfaceId" => "adoption_jobs",

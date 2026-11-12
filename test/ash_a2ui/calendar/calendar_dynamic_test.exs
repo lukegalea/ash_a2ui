@@ -95,7 +95,7 @@ defmodule AshA2ui.Calendar.CalendarDynamicTest do
 
     # The window action is the standard query, served on the held surface.
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "query",
         "surfaceId" => surface.surface_id,

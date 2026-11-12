@@ -13,6 +13,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.Dynamic
   alias AshA2ui.Dynamic.Importer
+  alias AshA2ui.Experience
   alias AshA2ui.Test.Adoption.{Job, LabelledBulkJobsUI, LabelledJobsUI}
 
   @red %{id: "u-red", team: "red"}
@@ -64,7 +65,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
 
   test "the bulk run's status line uses the label", %{job: job} do
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "bulk_invoke",
         "surfaceId" => "adoption_labelled_bulk_jobs",
@@ -94,7 +95,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
       ActionHandler.handle(
         ui,
         %{
-          "version" => "v0.9.1",
+          "version" => "1.0",
           "action" => %{
             "name" => "invoke",
             "surfaceId" => surface_id,
@@ -115,7 +116,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
     end
 
     assert {:ok, messages} = invoke.(LabelledJobsUI, "adoption_labelled_jobs", "claim")
-    assert feedback.(messages) == %{"kind" => "success", "message" => "Take it: done."}
+    assert feedback.(messages) == Experience.feedback("success", "Take it: done.")
   end
 
   test "the dynamic spec carries the label: resolve, import and promote" do

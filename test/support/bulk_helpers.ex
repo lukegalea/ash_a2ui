@@ -48,10 +48,10 @@ defmodule AshA2ui.Test.BulkHelpers do
     %{"project" => %{"search" => "", "value" => project.id, "label" => project.name}}
   end
 
-  @doc "A v0.9.1 client action envelope."
+  @doc "An A2UI 1.0 action event."
   def envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "bulk_tasks",

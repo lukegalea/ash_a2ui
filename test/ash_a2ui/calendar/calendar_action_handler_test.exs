@@ -19,7 +19,7 @@ defmodule AshA2ui.Calendar.CalendarActionHandlerTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "calendar_month",

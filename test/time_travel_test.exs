@@ -4,7 +4,7 @@ defmodule AshA2ui.TimeTravelTest do
 
   alias Ash.DataLayer.Ets
   alias AshA2ui.{ActionHandler, AsOf, Info}
-  alias AshA2ui.Test.SchemaHelper
+  alias AshA2ui.Test.{Messages, SchemaHelper}
   alias AshA2ui.Test.TimeTravel.{Plan, PlanUI}
 
   doctest AshA2ui.AsOf
@@ -106,12 +106,11 @@ defmodule AshA2ui.TimeTravelTest do
       %{t0: t0} = plan_with_history()
       [plan] = Ash.read!(Plan)
 
-      envelope = %{
-        "action" => %{
-          "name" => "invoke",
-          "context" => %{"action" => "change_tier", "recordId" => plan.id}
-        }
-      }
+      envelope =
+        Messages.action("invoke", "plans", %{
+          "action" => "change_tier",
+          "recordId" => plan.id
+        })
 
       assert {:error, messages} =
                ActionHandler.handle(PlanUI, envelope, as_of: DateTime.add(t0, 1, :day))
@@ -122,7 +121,7 @@ defmodule AshA2ui.TimeTravelTest do
 
     test "reads (query refreshes) run at the instant" do
       %{t0: t0} = plan_with_history()
-      envelope = %{"action" => %{"name" => "query", "context" => %{}}}
+      envelope = Messages.action("query", "plans", %{})
 
       assert {_ok_or_error, messages} =
                ActionHandler.handle(PlanUI, envelope, as_of: DateTime.add(t0, 1, :day))

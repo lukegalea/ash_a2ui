@@ -48,7 +48,7 @@ defmodule AshA2ui.RelatedTablesTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "people",
@@ -319,8 +319,14 @@ defmodule AshA2ui.RelatedTablesTest do
 
       {:ok, messages} =
         ActionHandler.handle(Paginated, %{
-          "version" => "v0.9.1",
-          "action" => %{"name" => "query", "context" => %{"query" => %{}}}
+          "version" => "1.0",
+          "action" => %{
+            "surfaceId" => "test_surface",
+            "sourceComponentId" => "test_component",
+            "timestamp" => "2026-11-12T12:00:00Z",
+            "name" => "query",
+            "context" => %{"query" => %{}}
+          }
         })
 
       refreshed = value_at(messages, "/records")

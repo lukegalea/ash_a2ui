@@ -75,7 +75,7 @@ defmodule AshA2ui.TableDisplays.TimelineTest do
 
   defp envelope(context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "query",
         "surfaceId" => "visit_timeline",

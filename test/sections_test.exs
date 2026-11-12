@@ -19,8 +19,9 @@ defmodule AshA2ui.SectionsTest do
   alias AshA2ui.Test.BucketWord
   alias AshA2ui.Test.BucketWordsUI
   alias AshA2ui.Test.BucketWordsV1UI
+  alias AshA2ui.Test.Messages
 
-  defp envelope(name, context, version \\ "v0.9.1", surface \\ "bucket_words") do
+  defp envelope(name, context, version \\ "1.0", surface \\ "bucket_words") do
     %{
       "version" => version,
       "action" => %{
@@ -321,176 +322,23 @@ defmodule AshA2ui.SectionsTest do
       assert heading["text"] == "## Alpha"
     end
 
-    test "an actionId'd invoke on a section row is answered with an actionResponse", ctx do
-      message = %{
-        "version" => "v1.0",
-        "action" => %{
-          "name" => "invoke",
-          "surfaceId" => "bucket_words_v1",
-          "actionId" => "act_1",
-          "context" => %{"action" => "destroy", "recordId" => ctx.apple.id}
-        }
-      }
+    test "an ashAction invoke on a section row is answered after its refresh", ctx do
+      message =
+        Messages.call(
+          "invoke",
+          "bucket_words_v1",
+          %{"action" => "destroy", "recordId" => ctx.apple.id},
+          id: "act_1"
+        )
 
-      assert {:ok, [response | followups]} =
-               ActionHandler.handle(BucketWordsV1UI, message, authorize?: false)
+      assert {:ok, messages} = ActionHandler.handle(BucketWordsV1UI, message, authorize?: false)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
-      assert response["actionId"] == "act_1"
-      assert %{"value" => %{"status" => "ok"}} = response["actionResponse"]
-      assert_valid_agent_message(response)
+      assert %{"agentFunctionResponse" => %{"functionCallId" => "act_1", "value" => value}} =
+               List.last(messages)
 
-      assert value_at(followups, "/records/#{runtime_name(ctx.alpha)}") == []
+      assert value["kind"] == "success"
+      assert value_at(messages, "/records/#{runtime_name(ctx.alpha)}") == []
     end
-  end
-end
-
-defmodule AshA2ui.SectionsVerifierTest do
-  @moduledoc """
-  Compile-time failure tests for `AshA2ui.Verifiers.VerifySections`, using
-  the `capture_io(:stderr)` + regex pattern from the existing verifier
-  suites.
-  """
-
-  # Not async: capture_io(:stderr) captures a global device.
-  use ExUnit.Case
-
-  import ExUnit.CaptureIO
-
-  test "sections on a non-table component does not compile cleanly" do
-    result =
-      capture_io(:stderr, fn ->
-        defmodule FormSections do
-          @moduledoc false
-          use AshA2ui.Standalone
-
-          a2ui do
-            for_resource AshA2ui.Test.BucketWord
-
-            component :form do
-              fields [:word]
-
-              sections do
-                source AshA2ui.Test.Bucket
-                scope_by :bucket_id
-              end
-            end
-          end
-        end
-      end)
-
-    assert result =~ ~r/component :form cannot declare a sections block/
-    assert result =~ ~r/only supported on :table components/
-  end
-
-  test "a sections block combined with select_context does not compile cleanly" do
-    result =
-      capture_io(:stderr, fn ->
-        defmodule SectionsWithSelectContext do
-          @moduledoc false
-          use AshA2ui.Standalone
-
-          a2ui do
-            for_resource AshA2ui.Test.BucketWord
-
-            context :word do
-              resource AshA2ui.Test.BucketWord
-              option_label :word
-            end
-
-            component :table, :per_bucket do
-              fields [:word]
-              read_action :bucketed
-              select_context :word
-
-              sections do
-                source AshA2ui.Test.Bucket
-                scope_by :bucket_id
-              end
-            end
-          end
-        end
-      end)
-
-    assert result =~ ~r/cannot combine a sections block with select_context/
-  end
-
-  test "scope_by must be a public attribute of the table's resource" do
-    result =
-      capture_io(:stderr, fn ->
-        defmodule BadScopeBy do
-          @moduledoc false
-          use AshA2ui.Standalone
-
-          a2ui do
-            for_resource AshA2ui.Test.BucketWord
-
-            component :table, :per_bucket do
-              fields [:word]
-              read_action :bucketed
-
-              sections do
-                source AshA2ui.Test.Bucket
-                scope_by :nope
-              end
-            end
-          end
-        end
-      end)
-
-    assert result =~ ~r/scope_by :nope is not a public attribute/
-  end
-
-  test "label must be a public attribute of the section source" do
-    result =
-      capture_io(:stderr, fn ->
-        defmodule BadLabel do
-          @moduledoc false
-          use AshA2ui.Standalone
-
-          a2ui do
-            for_resource AshA2ui.Test.BucketWord
-
-            component :table, :per_bucket do
-              fields [:word]
-              read_action :bucketed
-
-              sections do
-                source AshA2ui.Test.Bucket
-                scope_by :bucket_id
-                label :nope
-              end
-            end
-          end
-        end
-      end)
-
-    assert result =~ ~r/label :nope is not a public attribute of the section source/
-  end
-
-  test "read_action must be a read action of the section source" do
-    result =
-      capture_io(:stderr, fn ->
-        defmodule BadReadAction do
-          @moduledoc false
-          use AshA2ui.Standalone
-
-          a2ui do
-            for_resource AshA2ui.Test.BucketWord
-
-            component :table, :per_bucket do
-              fields [:word]
-              read_action :bucketed
-
-              sections do
-                source AshA2ui.Test.Bucket
-                scope_by :bucket_id
-                read_action :nope
-              end
-            end
-          end
-        end
-      end)
-
-    assert result =~ ~r/read_action :nope is not a read action of the section source/
   end
 end

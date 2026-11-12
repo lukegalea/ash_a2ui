@@ -90,7 +90,7 @@ defmodule AshA2ui.Adoption.BoardSelectContextTest do
 
   test "selecting a card fills the detail", %{job: job} do
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "context_select",
         "surfaceId" => "adoption_select_board",

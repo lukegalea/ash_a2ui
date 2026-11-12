@@ -63,8 +63,11 @@ defmodule AshA2ui.EnumTypeTest do
 
   test "submitted enum strings cast through the form action" do
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
+        "surfaceId" => "test_surface",
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
         "name" => "submit_form",
         "context" => %{
           "values" => %{"name" => "cast me", "severity" => "very_high", "stage" => ["todo"]}
@@ -103,8 +106,11 @@ defmodule AshA2ui.EnumTypeTest do
     Ash.create!(EnumRecord, %{name: "high one", severity: :very_high}, authorize?: false)
 
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
+        "surfaceId" => "test_surface",
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
         "name" => "query",
         "context" => %{
           "query" => %{"filters" => %{"severity" => "very_high"}, "page" => 1}

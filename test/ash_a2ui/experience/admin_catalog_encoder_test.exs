@@ -28,7 +28,7 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
 
   defp envelope(name, context \\ %{}) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "experience_task",
@@ -206,8 +206,14 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
       context = Map.put(context, "query", query)
 
       envelope = %{
-        "version" => "v0.9.1",
-        "action" => %{"name" => "query", "surfaceId" => "paged_notes", "context" => context}
+        "version" => "1.0",
+        "action" => %{
+          "sourceComponentId" => "test_component",
+          "timestamp" => "2026-11-12T12:00:00Z",
+          "name" => "query",
+          "surfaceId" => "paged_notes",
+          "context" => context
+        }
       }
 
       assert {:ok, messages} = ActionHandler.handle(PagedNotesUI, envelope, actor: nil)

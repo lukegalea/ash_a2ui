@@ -13,15 +13,16 @@ defmodule AshA2ui.ExportTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Csv
+  alias AshA2ui.Experience
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.BucketWord
   alias AshA2ui.Test.ExportWordsV1UI
-  alias AshA2ui.Test.SchemaHelper
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.WordReportV1UI
 
   defp envelope(name, context, surface) do
     %{
-      "version" => "v1.0",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface,
@@ -38,28 +39,18 @@ defmodule AshA2ui.ExportTest do
 
   defp download(messages) do
     Enum.find_value(messages, fn
-      %{"callFunction" => %{"call" => "downloadFile", "args" => args}} -> args
-      _ -> nil
+      %{"callRendererFunction" => %{"callFunction" => %{"@call" => "downloadFile"} = call}} ->
+        call["args"]
+
+      _ ->
+        nil
     end)
   end
 
-  # downloadFile is declared by the shipped AshA2ui extension catalog (not
-  # the basic catalog), so callFunction messages validate against it; every
-  # other message validates against the plain v1.0 schemas.
-  defp assert_valid_export_messages(messages) do
-    extension_schema =
-      SchemaHelper.spec_schema("agent_to_renderer.json",
-        catalogs: ["catalogs/basic/v1/catalog.json", "catalogs/ash_a2ui/catalog.json"]
-      )
-
-    Enum.each(messages, fn
-      %{"callFunction" => _call} = message ->
-        assert :ok = SchemaHelper.validate(extension_schema, message)
-
-      message ->
-        assert_valid_agent_message(message)
-    end)
-  end
+  # downloadFile is declared by the shipped ash_a2ui catalog, not the basic
+  # catalog, so the follow-ups validate against both.
+  defp assert_valid_export_messages(messages),
+    do: assert_valid_agent_messages(messages, catalogs: Messages.catalogs())
 
   defp csv_of(args) do
     ["data:text/csv;base64," <> base64] = [args["dataUrl"]]
@@ -198,24 +189,19 @@ defmodule AshA2ui.ExportTest do
       assert csv_of(download(messages)) == "Word,Replacement\r\nteh,the\r\n"
     end
 
-    test "a successful export answers the actionId with the structured result" do
-      message = %{
-        "version" => "v1.0",
-        "action" => %{
-          "name" => "export",
-          "surfaceId" => "export_words_v1",
-          "actionId" => "ex_1",
-          "context" => %{}
-        }
-      }
+    test "an export called as ashAction pushes the download, then answers the call" do
+      message = Messages.call("export", "export_words_v1", %{}, id: "ex_1")
 
-      assert {:ok, [response | _followups]} =
-               ActionHandler.handle(ExportWordsV1UI, message, authorize?: false)
+      assert {:ok, messages} = ActionHandler.handle(ExportWordsV1UI, message, authorize?: false)
+      assert_valid_export_messages(messages)
 
-      assert response["actionId"] == "ex_1"
+      assert [%{"callRendererFunction" => _download} | _rest] = messages
 
-      assert %{"value" => %{"status" => "ok", "result" => %{"rows" => 3}}} =
-               response["actionResponse"]
+      assert %{"agentFunctionResponse" => %{"functionCallId" => "ex_1", "value" => value}} =
+               List.last(messages)
+
+      assert %{"kind" => "success", "result" => %{"filename" => "table.csv", "rows" => 3}} =
+               value
     end
 
     test "a successful export reports a success /ui/feedback for the status Text" do
@@ -226,7 +212,10 @@ defmodule AshA2ui.ExportTest do
       assert Enum.find_value(messages, fn
                %{"updateDataModel" => %{"path" => "/ui/feedback", "value" => value}} -> value
                _other -> nil
-             end) == %{"kind" => "success", "message" => "Exported table.csv (3 rows)."}
+             end) ==
+               Experience.feedback("success", "Exported table.csv (3 rows).", %{
+                 "result" => %{"filename" => "table.csv", "rows" => 3}
+               })
     end
   end
 
@@ -296,13 +285,14 @@ defmodule AshA2ui.ExportTest do
       assert {:error, messages} =
                ActionHandler.handle(WordReportV1UI, message, authorize?: false)
 
-      response =
+      feedback =
         Enum.find_value(messages, fn
-          %{"updateDataModel" => %{"path" => "/ui/response", "value" => value}} -> value
+          %{"updateDataModel" => %{"path" => "/ui/feedback", "value" => value}} -> value
           _ -> nil
         end)
 
-      assert response["message"] =~ "at least one column"
+      assert %{"kind" => "error", "code" => "INVALID_ACTION"} = feedback
+      assert feedback["message"] =~ "at least one column"
     end
   end
 end

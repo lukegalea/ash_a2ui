@@ -55,8 +55,11 @@ defmodule AshA2ui.QueryApplyOnChangeTest do
 
   test "a query refresh keeps autoApply" do
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
+        "surfaceId" => "test_surface",
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
         "name" => "query",
         "context" => %{"query" => %{"filters" => %{"status" => "approved"}}, "page" => 1}
       }

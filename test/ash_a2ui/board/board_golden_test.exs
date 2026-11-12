@@ -57,7 +57,7 @@ defmodule AshA2ui.Board.BoardGoldenTest do
 
   defp claim_envelope(card) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "invoke",
         "surfaceId" => "board_tasks",

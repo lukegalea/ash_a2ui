@@ -657,8 +657,10 @@ defmodule AshA2ui.DynamicTest do
       surface = resolve!(minimal_spec())
 
       envelope = %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
+          "sourceComponentId" => "test_component",
+          "timestamp" => "2026-11-12T12:00:00Z",
           "name" => "submit_form",
           "surfaceId" => surface.surface_id,
           "context" => %{"values" => %{"name" => "round-trip"}}
@@ -683,8 +685,10 @@ defmodule AshA2ui.DynamicTest do
       surface = resolve!(minimal_spec())
 
       envelope = %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
+          "sourceComponentId" => "test_component",
+          "timestamp" => "2026-11-12T12:00:00Z",
           "name" => "submit_form",
           # A tampering client claims another surface — it is ignored.
           "surfaceId" => "spoofed_surface",

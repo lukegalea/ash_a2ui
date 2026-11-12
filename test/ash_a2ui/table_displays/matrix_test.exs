@@ -184,7 +184,7 @@ defmodule AshA2ui.TableDisplays.MatrixTest do
       {_components, value} = parts(MatrixUI)
 
       envelope = %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
           "name" => "query",
           "surfaceId" => "result_matrix",

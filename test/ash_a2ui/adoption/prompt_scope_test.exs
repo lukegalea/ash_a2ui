@@ -88,9 +88,9 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
     {Map.new(components, &{&1["id"], &1}), data}
   end
 
-  defp handle(ui, surface_id, name, context, version \\ "v0.9.1") do
+  defp handle(ui, surface_id, name, context) do
     envelope = %{
-      "version" => version,
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface_id,
@@ -218,8 +218,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
                  TasksV1UI,
                  "scoped_tasks_v1",
                  "prompt",
-                 %{"action" => "delegate", "recordId" => intake.id},
-                 "v1.0"
+                 %{"action" => "delegate", "recordId" => intake.id}
                )
 
       Enum.each(messages, &assert_valid_agent_message/1)

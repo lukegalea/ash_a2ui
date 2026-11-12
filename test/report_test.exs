@@ -12,14 +12,16 @@ defmodule AshA2ui.ReportTest do
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
+  alias AshA2ui.Experience
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.BucketWord
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.WordReportUI
   alias AshA2ui.Test.WordReportV1UI
 
   defp envelope(name, context, surface \\ "word_report") do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface,
@@ -250,35 +252,27 @@ defmodule AshA2ui.ReportTest do
       assert run["action"]["event"]["wantResponse"] == true
     end
 
-    test "a report run answers its actionId with the structured result" do
-      message = %{
-        "version" => "v1.0",
-        "action" => %{
-          "name" => "report",
-          "surfaceId" => "word_report_v1",
-          "actionId" => "run_1",
-          "context" => %{"params" => %{"min_length" => "1"}}
-        }
-      }
+    test "a report run called as ashAction answers with the structured result" do
+      message =
+        Messages.call("report", "word_report_v1", %{"params" => %{"min_length" => "1"}},
+          id: "run_1"
+        )
 
-      assert {:ok, [response | followups]} =
-               ActionHandler.handle(WordReportV1UI, message, authorize?: false)
+      assert {:ok, messages} = ActionHandler.handle(WordReportV1UI, message, authorize?: false)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
-      assert response["actionId"] == "run_1"
+      assert %{"agentFunctionResponse" => %{"functionCallId" => "run_1", "value" => value}} =
+               List.last(messages)
 
-      assert %{"value" => %{"status" => "ok", "result" => %{"count" => 1}}} =
-               response["actionResponse"]
+      assert %{"kind" => "success", "result" => %{"count" => 1}} = value
+      assert [%{"word" => "abcdef"}] = value_at(messages, "/report/lengths/rows")
 
-      assert_valid_agent_message(response)
-      Enum.each(followups, &assert_valid_agent_message/1)
-
-      assert [%{"word" => "abcdef"}] = value_at(followups, "/report/lengths/rows")
-
-      # the status Text binds /ui/feedback/message on v1.0 too
-      assert value_at(followups, "/ui/feedback") == %{
-               "kind" => "success",
-               "message" => "Report complete: 1 row."
-             }
+      # the status Text binds /ui/feedback/message
+      assert value_at(messages, "/ui/feedback") ==
+               Experience.feedback("success", "Report complete: 1 row.", %{
+                 "functionCallId" => "run_1",
+                 "result" => %{"count" => 1}
+               })
     end
   end
 end

@@ -111,7 +111,7 @@ defmodule AshA2ui.Experience.CatalogNegotiationTest do
 
     test "the action handler's refresh follows the build's catalog" do
       envelope = %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
           "name" => "query",
           "surfaceId" => "experience_task",
