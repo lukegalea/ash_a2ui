@@ -44,6 +44,7 @@ defmodule AshA2ui.Adoption.ActorReadsTest do
 
   defp root(messages) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} -> value
       %{"updateDataModel" => %{"path" => "/", "value" => value}} -> value
       _other -> nil
     end)
@@ -93,7 +94,7 @@ defmodule AshA2ui.Adoption.ActorReadsTest do
 
   test "an action's refresh read carries the actor and tenant", %{job: job} do
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "invoke",
         "surfaceId" => "adoption_jobs",

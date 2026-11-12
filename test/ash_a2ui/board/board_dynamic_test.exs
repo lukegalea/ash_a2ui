@@ -19,6 +19,7 @@ defmodule AshA2ui.Board.BoardDynamicTest do
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.Test.BoardTask
   alias AshA2ui.Test.ComposedBoard.Job
+  alias AshA2ui.Test.Surface
 
   @allowlist Dynamic.allowlist([BoardTask, Job])
 
@@ -66,6 +67,7 @@ defmodule AshA2ui.Board.BoardDynamicTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)
@@ -84,7 +86,7 @@ defmodule AshA2ui.Board.BoardDynamicTest do
 
     messages = Dynamic.build_surface(surface, authorize?: false)
     Enum.each(messages, &assert_valid_agent_message/1)
-    data = Enum.find_value(messages, &get_in(&1, ["updateDataModel", "value"]))
+    data = Surface.data_model(messages)
 
     # Two lanes x two swimlanes: one cell table each, swimlane-major.
     assert data["records"] |> Map.keys() |> Enum.sort() ==
@@ -98,13 +100,13 @@ defmodule AshA2ui.Board.BoardDynamicTest do
     assert [%{"name" => "card"}] = data["records"]["board_open__very_high"]
     assert data["_swimlane_tone_board__very_high"] == "danger"
 
-    components = Enum.find_value(messages, &get_in(&1, ["updateComponents", "components"]))
+    components = Surface.components(messages)
     assert Enum.any?(components, &(&1["id"] == "board_board_stages"))
 
     # The transition row action moves the card; the template-key refresh
     # re-reads every cell.
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "invoke",
         "surfaceId" => surface.surface_id,
@@ -236,7 +238,7 @@ defmodule AshA2ui.Board.BoardDynamicTest do
     data =
       surface
       |> Dynamic.build_surface(authorize?: false)
-      |> Enum.find_value(&get_in(&1, ["updateDataModel", "value"]))
+      |> Surface.data_model()
 
     assert [%{"title" => "No region yet"}] = data["records"]["jobs_new__none"]
   end

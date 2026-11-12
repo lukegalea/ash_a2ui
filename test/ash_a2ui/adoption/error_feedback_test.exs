@@ -38,7 +38,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
     ActionHandler.handle(
       ui,
       %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
           "name" => "invoke",
           "surfaceId" => surface_id,
@@ -53,6 +53,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
 
   defp write_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)
@@ -61,7 +62,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
   test "an invalid error without a field reads as its message", %{job: job} do
     assert {:error, messages} = invoke(JobsUI, "adoption_jobs", :lock, job)
 
-    assert write_at(messages, "/ui/feedback") == %{
+    assert Map.take(write_at(messages, "/ui/feedback"), ["kind", "message"]) == %{
              "kind" => "error",
              "message" => "This job is locked by another team."
            }
@@ -72,7 +73,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
   test "a forbidden action reads as not authorized", %{job: job} do
     assert {:error, messages} = invoke(JobsUI, "adoption_jobs", :escalate, job)
 
-    assert write_at(messages, "/ui/feedback") == %{
+    assert Map.take(write_at(messages, "/ui/feedback"), ["kind", "message"]) == %{
              "kind" => "error",
              "message" => "You are not authorized to perform this action."
            }
@@ -91,7 +92,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
 
     assert write_at(messages, "/errors/note") =~ "required"
 
-    assert write_at(messages, "/ui/feedback") == %{
+    assert Map.take(write_at(messages, "/ui/feedback"), ["kind", "message"]) == %{
              "kind" => "error",
              "message" => "Validation failed. Please review the field errors."
            }
@@ -106,7 +107,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
 
     assert_received {:messages, messages}
 
-    assert write_at(messages, "/ui/feedback") == %{
+    assert Map.take(write_at(messages, "/ui/feedback"), ["kind", "message"]) == %{
              "kind" => "error",
              "message" => "The action failed."
            }
@@ -134,7 +135,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
              ActionHandler.handle(
                JobsUI,
                %{
-                 "version" => "v0.9.1",
+                 "version" => "1.0",
                  "action" => %{
                    "name" => "submit_form",
                    "surfaceId" => "adoption_jobs",
@@ -156,7 +157,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
              ActionHandler.handle(
                JobsUI,
                %{
-                 "version" => "v0.9.1",
+                 "version" => "1.0",
                  "action" => %{
                    "name" => "submit_form",
                    "surfaceId" => "adoption_jobs",

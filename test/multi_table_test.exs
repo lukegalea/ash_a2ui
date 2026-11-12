@@ -13,10 +13,11 @@ defmodule AshA2ui.MultiTableTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.ReviewItem
+  alias AshA2ui.Test.Surface
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "review",
@@ -29,6 +30,7 @@ defmodule AshA2ui.MultiTableTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _ -> nil
     end)
@@ -38,8 +40,7 @@ defmodule AshA2ui.MultiTableTest do
 
   defp components_by_id(messages) do
     messages
-    |> Enum.find_value(& &1["updateComponents"])
-    |> Map.fetch!("components")
+    |> Surface.components()
     |> Map.new(&{&1["id"], &1})
   end
 
@@ -153,12 +154,12 @@ defmodule AshA2ui.MultiTableTest do
                "edit_new_items_button"
              ]
 
-      assert components["table_cell_done_items_state_value"]["text"] == %{"path" => "state"}
+      assert components["table_cell_done_items_state_value"]["text"] == %{"@path" => "state"}
     end
 
     test "headings show the humanized component names", %{components: components} do
-      assert components["table_heading_new_items"]["text"] == "New items"
-      assert components["table_heading_done_items"]["text"] == "Done items"
+      assert components["table_heading_new_items"]["text"] == "## New items"
+      assert components["table_heading_done_items"]["text"] == "## Done items"
     end
 
     test "row action buttons carry component + the whole /query binding", %{
@@ -166,13 +167,16 @@ defmodule AshA2ui.MultiTableTest do
     } do
       assert %{
                "action" => %{
-                 "event" => %{
-                   "name" => "invoke",
-                   "context" => %{
-                     "action" => "approve",
-                     "recordId" => %{"path" => "id"},
-                     "component" => "new_items",
-                     "query" => %{"path" => "/query"}
+                 "functionCall" => %{
+                   "@call" => "ashAction",
+                   "args" => %{
+                     "name" => "invoke",
+                     "context" => %{
+                       "action" => "approve",
+                       "recordId" => %{"@path" => "id"},
+                       "component" => "new_items",
+                       "query" => %{"@path" => "/query"}
+                     }
                    }
                  }
                }
@@ -180,23 +184,26 @@ defmodule AshA2ui.MultiTableTest do
     end
 
     test "query controls are scoped to the table's query path", %{components: components} do
-      assert %{"value" => %{"path" => "/query/new_items/search"}} =
+      assert %{"value" => %{"@path" => "/query/new_items/search"}} =
                components["query_new_items_search_input"]
 
       assert %{
                "action" => %{
-                 "event" => %{
-                   "name" => "query",
-                   "context" => %{
-                     "query" => %{"path" => "/query/new_items"},
-                     "component" => "new_items",
-                     "page" => 1
+                 "functionCall" => %{
+                   "@call" => "ashAction",
+                   "args" => %{
+                     "name" => "query",
+                     "context" => %{
+                       "query" => %{"@path" => "/query/new_items"},
+                       "component" => "new_items",
+                       "page" => 1
+                     }
                    }
                  }
                }
              } = components["query_new_items_apply_button"]
 
-      assert %{"text" => %{"path" => "/query/new_items/_range_text"}} =
+      assert %{"text" => %{"@path" => "/query/new_items/_range_text"}} =
                components["query_new_items_page_text"]
 
       # the query-less table gets no controls

@@ -10,7 +10,9 @@ defmodule AshA2ui.Test.SchemaHelper.Resolver do
   `catalog.json` is an alias, as in the upstream runner
   (`specification/v1_0/test/run_tests.py`): it names whichever catalog the
   messages are validated against. The `:catalogs` option lists the files
-  (relative to `priv/a2ui/v1_0`, default the basic catalog alone). One file
+  (relative to `priv/a2ui/v1_0`). The default is what every ash_a2ui surface
+  uses: the basic catalog and the ash_a2ui catalog, which declares
+  `ashAction` and `downloadFile`. One file
   is served as `catalog.json` with its `$id` rewritten to the requested URI,
   so that its relative `common_types.json` refs land on the vendored common
   types. Several files are the mixed-catalog case: each is served as
@@ -39,12 +41,12 @@ defmodule AshA2ui.Test.SchemaHelper.Resolver do
   @behaviour JSV.Resolver
 
   @base "https://a2ui.org/specification/v1_0/"
-  @basic_catalog "catalogs/basic/v1/catalog.json"
+  @default_catalogs ["catalogs/basic/v1/catalog.json", "catalogs/ash_a2ui/catalog.json"]
 
-  @doc "The URI prefix every vendored v1.0 schema lives under."
+  @doc "The URI prefix every vendored A2UI 1.0 schema lives under."
   def base, do: @base
 
-  @doc "The vendored v1.0 directory."
+  @doc "The vendored A2UI 1.0 directory."
   def dir, do: Application.app_dir(:ash_a2ui, ["priv", "a2ui", "v1_0"])
 
   @doc "Reads and decodes a vendored file, `relative` to `priv/a2ui/v1_0`."
@@ -84,7 +86,7 @@ defmodule AshA2ui.Test.SchemaHelper.Resolver do
 
   def resolve(uri, _opts), do: {:error, {:not_an_a2ui_uri, uri}}
 
-  @doc "The catalog files `opts` (`catalogs:`) selects, the basic catalog by default."
+  @doc "The catalog files `opts` (`catalogs:`) selects, the basic and ash_a2ui catalogs by default."
   def catalog_files(opts), do: catalogs(opts)
 
   @doc "The URI, relative to `base/0`, the `index`th of `files` is served under."
@@ -93,7 +95,7 @@ defmodule AshA2ui.Test.SchemaHelper.Resolver do
 
   defp catalogs(opts) do
     case Keyword.get(opts, :catalogs) do
-      nil -> [@basic_catalog]
+      nil -> @default_catalogs
       [_ | _] = files -> files
       file when is_binary(file) -> [file]
     end

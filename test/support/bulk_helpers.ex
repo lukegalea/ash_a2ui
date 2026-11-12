@@ -48,10 +48,10 @@ defmodule AshA2ui.Test.BulkHelpers do
     %{"project" => %{"search" => "", "value" => project.id, "label" => project.name}}
   end
 
-  @doc "A v0.9.1 client action envelope."
+  @doc "A client action envelope."
   def envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "bulk_tasks",
@@ -65,6 +65,7 @@ defmodule AshA2ui.Test.BulkHelpers do
   @doc "The value of the first updateDataModel write at `path`."
   def value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)

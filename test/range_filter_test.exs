@@ -27,7 +27,7 @@ defmodule AshA2ui.RangeFilterTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{"name" => name, "surfaceId" => "appointments", "context" => context}
     }
   end
@@ -164,7 +164,7 @@ defmodule AshA2ui.RangeFilterTest do
       messages = Info.build_surface(AshA2ui.Test.AppointmentsUI, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
 
-      [_create, %{"updateComponents" => %{"components" => components}}, data_model] = messages
+      [%{"createSurface" => %{"components" => components, "dataModel" => data_model}}] = messages
 
       controls = Enum.find(components, &(&1["id"] == "query_controls_body"))
       assert "query_range_scheduled_for_from" in controls["children"]
@@ -172,9 +172,9 @@ defmodule AshA2ui.RangeFilterTest do
 
       from_input = Enum.find(components, &(&1["id"] == "query_range_scheduled_for_from"))
       assert from_input["component"] == "TextField"
-      assert from_input["value"] == %{"path" => "/query/ranges/scheduled_for/from"}
+      assert from_input["value"] == %{"@path" => "/query/ranges/scheduled_for/from"}
 
-      assert data_model["updateDataModel"]["value"]["query"]["ranges"] == %{
+      assert data_model["query"]["ranges"] == %{
                "scheduled_for" => %{"from" => "", "to" => ""}
              }
     end

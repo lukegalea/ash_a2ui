@@ -4,7 +4,7 @@ defmodule AshA2ui.RelationshipTest do
   `/options/<field>` convention, option loading with actor/tenant opts,
   submit casting) and `source` table columns (relationship loading, nil-safe
   serialization). Every emitted message is validated against the vendored
-  v0.9.1 schemas.
+  A2UI 1.0 schemas.
   """
 
   use ExUnit.Case, async: true
@@ -14,14 +14,15 @@ defmodule AshA2ui.RelationshipTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.{Author, Post}
+  alias AshA2ui.Test.Surface
 
   defp components_by_id(messages) do
-    update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
-    Map.new(update["updateComponents"]["components"], &{&1["id"], &1})
+    Surface.components_by_id(messages)
   end
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _ -> nil
     end)
@@ -29,7 +30,7 @@ defmodule AshA2ui.RelationshipTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "posts",
@@ -88,7 +89,7 @@ defmodule AshA2ui.RelationshipTest do
       assert %{
                "component" => "ChoicePicker",
                "variant" => "mutuallyExclusive",
-               "value" => %{"path" => "/form/author_id"},
+               "value" => %{"@path" => "/form/author_id"},
                "options" => _options
              } = components["form_input_author_id"]
     end
@@ -108,8 +109,7 @@ defmodule AshA2ui.RelationshipTest do
       components = components_by_id(messages)
       assert components["form_input_author_id"]["options"] == expected_options
 
-      assert %{"updateDataModel" => %{"path" => "/", "value" => value}} =
-               Enum.find(messages, &Map.has_key?(&1, "updateDataModel"))
+      value = Surface.data_model(messages)
 
       assert value["options"] == %{"author_id" => expected_options}
     end
@@ -312,7 +312,7 @@ defmodule AshA2ui.RelationshipTest do
 
       components = components_by_id(messages)
 
-      assert %{"component" => "Text", "text" => %{"path" => "author_email"}} =
+      assert %{"component" => "Text", "text" => %{"@path" => "author_email"}} =
                components["table_cell_author_email_value"]
 
       records = value_at(messages, "/")["records"]

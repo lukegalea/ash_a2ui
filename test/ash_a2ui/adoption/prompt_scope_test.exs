@@ -22,8 +22,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
     Principal,
     SearchTasksUI,
     Task,
-    TasksUI,
-    TasksV1UI
+    TasksUI
   }
 
   @red %{id: "u-red", team: "red"}
@@ -72,25 +71,14 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
     if Keyword.get(opts, :validate?, true),
       do: Enum.each(messages, &assert_valid_agent_message/1)
 
-    {components, data} =
-      case messages do
-        [%{"createSurface" => %{"components" => components, "dataModel" => data}}] ->
-          {components, data}
-
-        _v0_9_1 ->
-          {Enum.find_value(
-             messages,
-             &(&1["updateComponents"] && &1["updateComponents"]["components"])
-           ),
-           Enum.find_value(messages, &(&1["updateDataModel"] && &1["updateDataModel"]["value"]))}
-      end
+    [%{"createSurface" => %{"components" => components, "dataModel" => data}}] = messages
 
     {Map.new(components, &{&1["id"], &1}), data}
   end
 
-  defp handle(ui, surface_id, name, context, version \\ "v0.9.1") do
+  defp handle(ui, surface_id, name, context) do
     envelope = %{
-      "version" => version,
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface_id,
@@ -105,6 +93,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
 
   defp write_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)
@@ -123,10 +112,10 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
 
       assert by_id[base]["component"] == "Column"
       assert by_id[base]["children"] == ["#{base}_label", "#{base}_selected", "#{base}_options"]
-      assert by_id["#{base}_label"]["text"] == "Principal"
+      assert by_id["#{base}_label"]["text"] == "#### Principal"
 
       assert by_id["#{base}_selected"]["text"] == %{
-               "path" => "/prompt/select/delegate/principal_id/label"
+               "@path" => "/prompt/select/delegate/principal_id/label"
              }
 
       assert by_id["#{base}_options"]["children"] == %{
@@ -135,13 +124,18 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
              }
 
       assert by_id["#{base}_option_button"]["action"] == %{
-               "event" => %{
-                 "name" => "option_select",
-                 "context" => %{
-                   "field" => "principal_id",
-                   "value" => %{"path" => "value"},
-                   "prompt" => "delegate",
-                   "recordId" => %{"path" => "/prompt/record/delegate"}
+               "functionCall" => %{
+                 "@call" => "ashAction",
+                 "catalogId" => AshA2ui.Encoder.ash_catalog_id(),
+                 "args" => %{
+                   "sourceComponentId" => "#{base}_option_button",
+                   "name" => "option_select",
+                   "context" => %{
+                     "field" => "principal_id",
+                     "value" => %{"@path" => "value"},
+                     "prompt" => "delegate",
+                     "recordId" => %{"@path" => "/prompt/record/delegate"}
+                   }
                  }
                }
              }
@@ -170,16 +164,17 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
              ]
 
       assert by_id["#{base}_search_input"]["value"] == %{
-               "path" => "/prompt/select/delegate/principal_id/search"
+               "@path" => "/prompt/select/delegate/principal_id/search"
              }
 
-      assert by_id["#{base}_search_button"]["action"]["event"] == %{
+      assert by_id["#{base}_search_button"]["action"]["functionCall"]["args"]
+             |> Map.delete("sourceComponentId") == %{
                "name" => "option_search",
                "context" => %{
                  "field" => "principal_id",
-                 "search" => %{"path" => "/prompt/select/delegate/principal_id/search"},
+                 "search" => %{"@path" => "/prompt/select/delegate/principal_id/search"},
                  "prompt" => "delegate",
-                 "recordId" => %{"path" => "/prompt/record/delegate"}
+                 "recordId" => %{"@path" => "/prompt/record/delegate"}
                }
              }
     end
@@ -209,17 +204,16 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
                "/prompt/options/delegate/principal_id"
     end
 
-    test "the scoped prompt is valid on the A2UI 1.0 wire", %{intake: intake} do
-      {by_id, _data} = surface(TasksV1UI)
+    test "the scoped prompt and its option writes are schema-valid", %{intake: intake} do
+      {by_id, _data} = surface(TasksUI)
       assert Map.has_key?(by_id, "row_action_delegate_prompt_select_principal_id_options")
 
       assert {:ok, messages} =
                handle(
-                 TasksV1UI,
-                 "scoped_tasks_v1",
+                 TasksUI,
+                 "scoped_tasks",
                  "prompt",
-                 %{"action" => "delegate", "recordId" => intake.id},
-                 "v1.0"
+                 %{"action" => "delegate", "recordId" => intake.id}
                )
 
       Enum.each(messages, &assert_valid_agent_message/1)

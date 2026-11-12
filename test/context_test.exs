@@ -5,7 +5,7 @@ defmodule AshA2ui.ContextTest do
   `context_select` / `context_clear` client actions with their cascades
   (dependent options, auto_select_single, detail records, scoped table
   refreshes), and context-scoped `query` reads. Every emitted message is
-  validated against the vendored v0.9.1 JSON Schemas.
+  validated against the vendored A2UI 1.0 JSON Schemas.
   """
 
   use ExUnit.Case, async: false
@@ -28,7 +28,7 @@ defmodule AshA2ui.ContextTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{"name" => name, "surfaceId" => "appointments", "context" => context}
     }
   end
@@ -182,8 +182,8 @@ defmodule AshA2ui.ContextTest do
       messages = Info.build_surface(AppointmentsUI, authorize?: false)
       assert_all_valid(messages)
 
-      [_create, %{"updateComponents" => %{"components" => components}}, data_model] = messages
-      value = data_model["updateDataModel"]["value"]
+      [%{"createSurface" => %{"components" => components, "dataModel" => data_model}}] = messages
+      value = data_model
 
       # All three contexts start unselected; both details empty.
       assert value["context"]["owner"] == %{"search" => "", "value" => "", "label" => ""}
@@ -269,7 +269,7 @@ defmodule AshA2ui.ContextTest do
     test "formless surfaces render no View/Edit row controls (no panel to open)" do
       seed()
 
-      [_create, %{"updateComponents" => %{"components" => components}}, _data] =
+      [%{"createSurface" => %{"components" => components, "dataModel" => _data}}] =
         Info.build_surface(AppointmentsUI, authorize?: false)
 
       ids = MapSet.new(components, & &1["id"])
@@ -292,19 +292,19 @@ defmodule AshA2ui.ContextTest do
     test "row select_context button dispatches context_select with bindings" do
       seed()
 
-      [_create, %{"updateComponents" => %{"components" => components}}, _data] =
+      [%{"createSurface" => %{"components" => components, "dataModel" => _data}}] =
         Info.build_surface(AppointmentsUI, authorize?: false)
 
       button = Enum.find(components, &(&1["id"] == "row_context_button"))
-      event = button["action"]["event"]
+      event = button["action"]["functionCall"]["args"]
 
       assert event["name"] == "context_select"
 
       assert event["context"] == %{
                "context" => "appointment",
-               "value" => %{"path" => "id"},
-               "query" => %{"path" => "/query"},
-               "contexts" => %{"path" => "/context"}
+               "value" => %{"@path" => "id"},
+               "query" => %{"@path" => "/query"},
+               "contexts" => %{"@path" => "/context"}
              }
     end
 
@@ -318,8 +318,8 @@ defmodule AshA2ui.ContextTest do
         )
 
       assert_all_valid(messages)
-      [_create, _components, data_model] = messages
-      value = data_model["updateDataModel"]["value"]
+      [%{"createSurface" => %{"components" => _components, "dataModel" => data_model}}] = messages
+      value = data_model
 
       assert [%{"title" => "Ada North checkup"}] = value["records"]
       assert [%{"label" => "North"}, %{"label" => "South"}] = value["options"]["clinic"]
@@ -328,10 +328,9 @@ defmodule AshA2ui.ContextTest do
     end
 
     test "context-less surfaces keep the frozen data-model shape" do
-      [_create, _components, data_model] =
+      [%{"createSurface" => %{"dataModel" => value}}] =
         Info.build_surface(AshA2ui.Test.MinimalUI, authorize?: false)
 
-      value = data_model["updateDataModel"]["value"]
       refute Map.has_key?(value, "context")
       refute Map.has_key?(value, "detail")
     end
@@ -417,7 +416,7 @@ defmodule AshA2ui.ContextTest do
 
       # a settled selection clears the previous outcome (and so settles the
       # admin dataGrid's busy "Select <context>" row action)
-      assert value_at(messages, "/ui/feedback") == %{"kind" => nil, "message" => ""}
+      assert value_at(messages, "/ui/feedback") == AshA2ui.Experience.clear_feedback()
     end
 
     test "auto_select_single cascades a sole dependent option into selection" do
@@ -573,7 +572,7 @@ defmodule AshA2ui.ContextTest do
       assert value_at(messages, "/detail/owner") == %{}
       assert value_at(messages, "/records") == []
       assert value_at(messages, "/query")["totalCount"] == 0
-      assert value_at(messages, "/ui/feedback") == %{"kind" => nil, "message" => ""}
+      assert value_at(messages, "/ui/feedback") == AshA2ui.Experience.clear_feedback()
     end
 
     test "clearing only the dependent keeps the parent" do

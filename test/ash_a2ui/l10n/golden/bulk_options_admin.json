@@ -1,0 +1,17 @@
+[
+  {
+    "updateDataModel": {
+      "path": "/ui/feedback",
+      "surfaceId": "bulk_tasks",
+      "value": {
+        "code": "INVALID_ACTION",
+        "functionCallId": "",
+        "kind": "error",
+        "message": "Context \"project\" is not searchable: it declares no option_search.",
+        "result": {},
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  }
+]

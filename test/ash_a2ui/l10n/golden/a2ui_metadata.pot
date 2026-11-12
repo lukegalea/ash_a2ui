@@ -49,7 +49,7 @@ msgid "Annotate task"
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
-#: test/support/word_report_ui.ex:82
+#: test/support/word_report_ui.ex:78
 msgid "Appointment"
 msgstr ""
 
@@ -91,10 +91,10 @@ msgid "Archived"
 msgstr ""
 
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
-#: test/support/board_task_ui.ex:88
+#: test/support/board_task_ui.ex:87
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
 msgctxt "one_of:status"
@@ -132,7 +132,7 @@ msgstr ""
 msgid "Author email"
 msgstr ""
 
-#: test/support/enrollment.ex:151
+#: test/support/enrollment.ex:118
 #: test/support/post.ex:1
 #: test/support/ticket.ex:1
 #: test/support/ticket_search_ui.ex:1
@@ -157,18 +157,18 @@ msgstr ""
 #: test/support/adoption.ex:394
 #: test/support/adoption_ui.ex:77
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
 msgid "Board"
 msgstr ""
 
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:111
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:110
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
-#: test/support/board_task_ui.ex:88
+#: test/support/board_task_ui.ex:87
 #: test/support/l10n_review_fixtures.ex:2
 msgid "Board task"
 msgstr ""
@@ -178,11 +178,11 @@ msgstr ""
 msgid "Body"
 msgstr ""
 
-#: test/support/calendar_event.ex:182
+#: test/support/calendar_event.ex:180
 msgid "Booked"
 msgstr ""
 
-#: test/support/calendar_event.ex:182
+#: test/support/calendar_event.ex:180
 #: test/support/calendar_event.ex:80
 msgctxt "one_of:status"
 msgid "Booked"
@@ -190,7 +190,7 @@ msgstr ""
 
 #: test/support/editable_words_ui.ex:1
 #: test/support/editable_words_ui.ex:26
-#: test/support/word_report_ui.ex:51
+#: test/support/word_report_ui.ex:48
 msgid "Bucket word"
 msgstr ""
 
@@ -208,7 +208,7 @@ msgstr ""
 msgid "Bulk task"
 msgstr ""
 
-#: test/support/calendar_event.ex:182
+#: test/support/calendar_event.ex:180
 #: test/support/calendar_event.ex:80
 msgctxt "one_of:status"
 msgid "Cancelled"
@@ -258,8 +258,8 @@ msgstr ""
 #: test/support/adoption.ex:394
 #: test/support/adoption_ui.ex:77
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
 msgid "Claim"
 msgstr ""
@@ -272,10 +272,10 @@ msgstr ""
 #: test/support/adoption_ui.ex:6
 #: test/support/adoption_ui.ex:77
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
-#: test/support/board_task_ui.ex:88
+#: test/support/board_task_ui.ex:87
 msgctxt "one_of:status"
 msgid "Claimed"
 msgstr ""
@@ -324,35 +324,34 @@ msgid "Comment count"
 msgstr ""
 
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
+#: test/support/board_task_ui.ex:132
 #: test/support/canvas.ex:172
 msgid "Complete"
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
-#: test/support/board_task_ui.ex:88
-#: test/support/word_report_ui.ex:82
+#: test/support/board_task_ui.ex:87
+#: test/support/word_report_ui.ex:78
 msgctxt "one_of:status"
 msgid "Completed"
 msgstr ""
 
 #: test/support/calendar_event.ex:80
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
-#: test/support/enrollment.ex:151
+#: test/support/enrollment.ex:118
 #: test/support/enrollment.ex:79
 msgid "Confirm"
 msgstr ""
 
-#: test/support/calendar_event.ex:182
+#: test/support/calendar_event.ex:180
 msgid "Confirmed"
 msgstr ""
 
-#: test/support/calendar_event.ex:182
+#: test/support/calendar_event.ex:180
 #: test/support/calendar_event.ex:80
 msgctxt "one_of:status"
 msgid "Confirmed"
@@ -397,7 +396,7 @@ msgstr ""
 msgid "Created {date}"
 msgstr ""
 
-#: test/support/board_task_ui.ex:133
+#: test/support/board_task_ui.ex:132
 msgid "Critical"
 msgstr ""
 
@@ -423,7 +422,6 @@ msgstr ""
 #: test/support/prompt_scope.ex:132
 #: test/support/prompt_scope.ex:161
 #: test/support/prompt_scope.ex:190
-#: test/support/prompt_scope.ex:220
 msgid "Delegate"
 msgstr ""
 
@@ -437,7 +435,7 @@ msgstr ""
 #: test/support/article.ex:1
 #: test/support/bulk_tasks_ui.ex:1
 #: test/support/canvas.ex:172
-#: test/support/enrollment.ex:112
+#: test/support/enrollment.ex:79
 #: test/support/experience_ui.ex:10
 #: test/support/experience_ui.ex:136
 #: test/support/kitchen_sink.ex:1
@@ -518,7 +516,6 @@ msgstr ""
 
 #: test/support/appointments_ui.ex:1
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
 #: test/support/enrollment.ex:79
 msgid "Email"
 msgstr ""
@@ -536,7 +533,7 @@ msgid "Ends soon"
 msgstr ""
 
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
+#: test/support/enrollment.ex:79
 msgid "Enrollment"
 msgstr ""
 
@@ -553,8 +550,8 @@ msgid "Estate user"
 msgstr ""
 
 #: test/support/calendar_event.ex:151
-#: test/support/calendar_event.ex:182
-#: test/support/calendar_event.ex:218
+#: test/support/calendar_event.ex:180
+#: test/support/calendar_event.ex:216
 #: test/support/calendar_event.ex:80
 msgid "Event"
 msgstr ""
@@ -620,7 +617,7 @@ msgid "Flag"
 msgstr ""
 
 #: test/support/diagram_flow.ex:138
-#: test/support/diagram_flow.ex:161
+#: test/support/diagram_flow.ex:160
 msgid "Flow"
 msgstr ""
 
@@ -636,7 +633,7 @@ msgstr ""
 #: test/support/adoption.ex:394
 #: test/support/adoption_ui.ex:77
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
+#: test/support/board_task_ui.ex:132
 #: test/support/board_task_ui.ex:52
 #: test/support/column_task.ex:1
 #: test/support/l10n_review_fixtures.ex:2
@@ -733,9 +730,9 @@ msgstr ""
 msgid "Low"
 msgstr ""
 
-#: test/support/board_task_ui.ex:111
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:110
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/enum_types.ex:15
 msgctxt "enum:Elixir.AshA2ui.Test.Severity"
 msgid "Low"
@@ -745,7 +742,7 @@ msgstr ""
 #: test/support/adoption.ex:394
 #: test/support/adoption_ui.ex:77
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
+#: test/support/board_task_ui.ex:132
 #: test/support/board_task_ui.ex:52
 #: test/support/column_task.ex:1
 #: test/support/l10n_review_fixtures.ex:2
@@ -758,9 +755,9 @@ msgstr ""
 msgid "Mark done"
 msgstr ""
 
-#: test/support/board_task_ui.ex:111
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:110
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/enum_types.ex:15
 msgctxt "enum:Elixir.AshA2ui.Test.Severity"
 msgid "Medium"
@@ -782,13 +779,12 @@ msgstr ""
 #: test/support/action_handler_fixtures.ex:67
 #: test/support/appointments_ui.ex:1
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:111
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:110
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
-#: test/support/board_task_ui.ex:88
+#: test/support/board_task_ui.ex:87
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
 #: test/support/enrollment.ex:79
 #: test/support/enum_types.ex:15
 #: test/support/experience_ui.ex:10
@@ -902,10 +898,10 @@ msgstr ""
 #: test/support/adoption_ui.ex:6
 #: test/support/adoption_ui.ex:77
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
-#: test/support/board_task_ui.ex:88
+#: test/support/board_task_ui.ex:87
 #: test/support/bulk_cards_ui.ex:1
 #: test/support/bulk_presets_ui.ex:1
 #: test/support/bulk_tasks_ui.ex:1
@@ -1027,7 +1023,6 @@ msgid "Principal"
 msgstr ""
 
 #: test/support/prompt_scope.ex:161
-#: test/support/prompt_scope.ex:220
 msgid "Principal id"
 msgstr ""
 
@@ -1035,7 +1030,7 @@ msgstr ""
 #: test/support/adoption.ex:394
 #: test/support/adoption_ui.ex:77
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
+#: test/support/board_task_ui.ex:132
 #: test/support/board_task_ui.ex:52
 #: test/support/column_task.ex:1
 #: test/support/l10n_review_fixtures.ex:2
@@ -1141,7 +1136,7 @@ msgstr ""
 #: test/support/bucket_words_ui.ex:60
 #: test/support/editable_words_ui.ex:1
 #: test/support/editable_words_ui.ex:26
-#: test/support/word_report_ui.ex:51
+#: test/support/word_report_ui.ex:48
 msgid "Replacement"
 msgstr ""
 
@@ -1163,13 +1158,12 @@ msgid "Review item"
 msgstr ""
 
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
 #: test/support/enrollment.ex:79
 msgid "Role"
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
-#: test/support/word_report_ui.ex:82
+#: test/support/word_report_ui.ex:78
 msgctxt "one_of:status"
 msgid "Scheduled"
 msgstr ""
@@ -1231,9 +1225,9 @@ msgctxt "select_context"
 msgid "Select person"
 msgstr ""
 
-#: test/support/board_task_ui.ex:111
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:110
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/enum_types.ex:15
 msgid "Severity"
 msgstr ""
@@ -1278,8 +1272,8 @@ msgstr ""
 msgid "Starts at"
 msgstr ""
 
-#: test/support/calendar_event.ex:182
-#: test/support/calendar_event.ex:218
+#: test/support/calendar_event.ex:180
+#: test/support/calendar_event.ex:216
 #: test/support/calendar_event.ex:80
 msgid "Starts on"
 msgstr ""
@@ -1300,14 +1294,14 @@ msgstr ""
 #: test/support/appointments_ui.ex:1
 #: test/support/article.ex:1
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
-#: test/support/board_task_ui.ex:88
+#: test/support/board_task_ui.ex:87
 #: test/support/bulk_cards_ui.ex:1
 #: test/support/bulk_presets_ui.ex:1
 #: test/support/bulk_tasks_ui.ex:1
-#: test/support/calendar_event.ex:182
+#: test/support/calendar_event.ex:180
 #: test/support/calendar_event.ex:80
 #: test/support/captioned_task.ex:1
 #: test/support/column_task.ex:1
@@ -1325,7 +1319,7 @@ msgstr ""
 #: test/support/referral.ex:1
 #: test/support/sort_only_ui.ex:1
 #: test/support/tabbed_presets_ui.ex:1
-#: test/support/word_report_ui.ex:82
+#: test/support/word_report_ui.ex:78
 msgid "Status"
 msgstr ""
 
@@ -1349,7 +1343,7 @@ msgstr ""
 msgid "Still to do"
 msgstr ""
 
-#: test/support/enrollment.ex:151
+#: test/support/enrollment.ex:118
 #: test/support/links.ex:135
 #: test/support/links.ex:206
 #: test/support/ticket.ex:1
@@ -1399,12 +1393,10 @@ msgstr ""
 #: test/support/prompt_scope.ex:132
 #: test/support/prompt_scope.ex:161
 #: test/support/prompt_scope.ex:190
-#: test/support/prompt_scope.ex:220
 msgid "Task"
 msgstr ""
 
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
 #: test/support/enrollment.ex:79
 msgid "Team"
 msgstr ""
@@ -1441,8 +1433,8 @@ msgstr ""
 #: test/support/bulk_tasks_ui.ex:1
 #: test/support/calendar_event.ex:121
 #: test/support/calendar_event.ex:151
-#: test/support/calendar_event.ex:182
-#: test/support/calendar_event.ex:218
+#: test/support/calendar_event.ex:180
+#: test/support/calendar_event.ex:216
 #: test/support/calendar_event.ex:80
 #: test/support/captioned_task.ex:1
 #: test/support/column_task.ex:1
@@ -1458,11 +1450,10 @@ msgstr ""
 #: test/support/prompt_scope.ex:132
 #: test/support/prompt_scope.ex:161
 #: test/support/prompt_scope.ex:190
-#: test/support/prompt_scope.ex:220
 #: test/support/sort_only_ui.ex:1
 #: test/support/submission.ex:1
 #: test/support/tabbed_presets_ui.ex:1
-#: test/support/word_report_ui.ex:82
+#: test/support/word_report_ui.ex:78
 msgid "Title"
 msgstr ""
 
@@ -1472,7 +1463,7 @@ msgid "To Do"
 msgstr ""
 
 #: test/support/board_task_ui.ex:1
-#: test/support/board_task_ui.ex:133
+#: test/support/board_task_ui.ex:132
 msgid "To do"
 msgstr ""
 
@@ -1521,9 +1512,9 @@ msgstr ""
 msgid "Verified"
 msgstr ""
 
-#: test/support/board_task_ui.ex:111
-#: test/support/board_task_ui.ex:133
-#: test/support/board_task_ui.ex:189
+#: test/support/board_task_ui.ex:110
+#: test/support/board_task_ui.ex:132
+#: test/support/board_task_ui.ex:188
 #: test/support/enum_types.ex:15
 msgctxt "enum:Elixir.AshA2ui.Test.Severity"
 msgid "Very high"
@@ -1548,8 +1539,7 @@ msgid "Week"
 msgstr ""
 
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
-#: test/support/enrollment.ex:151
+#: test/support/enrollment.ex:118
 #: test/support/enrollment.ex:79
 msgid "What"
 msgstr ""
@@ -1563,8 +1553,7 @@ msgid "Where the work happens.\n\n**Portfolio** — every property of the accoun
 msgstr ""
 
 #: test/support/enrollment.ex:1
-#: test/support/enrollment.ex:112
-#: test/support/enrollment.ex:151
+#: test/support/enrollment.ex:118
 #: test/support/enrollment.ex:79
 msgid "Who"
 msgstr ""
@@ -1583,7 +1572,7 @@ msgstr ""
 #: test/support/editable_words_ui.ex:26
 #: test/support/word_report_ui.ex:1
 #: test/support/word_report_ui.ex:23
-#: test/support/word_report_ui.ex:51
+#: test/support/word_report_ui.ex:48
 msgid "Word"
 msgstr ""
 

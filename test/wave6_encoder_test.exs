@@ -2,7 +2,7 @@ defmodule AshA2ui.Wave6EncoderTest do
   @moduledoc """
   Encoder tests for Wave 6 layout features: card-style table rows
   (`row_layout`) and grouped N-column form grids (`group`), all messages
-  validated against the vendored v0.9.1 JSON Schemas.
+  validated against the vendored A2UI 1.0 JSON Schemas.
   """
 
   use ExUnit.Case, async: false
@@ -11,6 +11,7 @@ defmodule AshA2ui.Wave6EncoderTest do
 
   alias Ash.DataLayer.Ets
   alias AshA2ui.Test.{KitchenSink, Promotion}
+  alias AshA2ui.Test.Surface
 
   setup do
     on_exit(fn ->
@@ -23,18 +24,12 @@ defmodule AshA2ui.Wave6EncoderTest do
   end
 
   defp components(messages) do
-    %{"updateComponents" => %{"components" => components}} =
-      Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+    components = Surface.components(messages)
 
     Map.new(components, &{&1["id"], &1})
   end
 
-  defp data_model(messages) do
-    %{"updateDataModel" => %{"path" => "/", "value" => value}} =
-      Enum.find(messages, &Map.has_key?(&1, "updateDataModel"))
-
-    value
-  end
+  defp data_model(messages), do: Surface.data_model(messages)
 
   describe "row_layout card rows" do
     setup do
@@ -85,8 +80,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       assert components["record_row_title"] == %{
                "id" => "record_row_title",
                "component" => "Text",
-               "text" => %{"path" => "name"},
-               "variant" => "h4",
+               "text" => %{"@call" => "formatString", "args" => %{"value" => "#### ${name}"}},
                "weight" => 1
              }
 
@@ -96,7 +90,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       assert components["record_row_badge"] == %{
                "id" => "record_row_badge",
                "component" => "Text",
-               "text" => %{"path" => "_badge_is_active"},
+               "text" => %{"@path" => "_badge_is_active"},
                "variant" => "caption"
              }
     end
@@ -123,10 +117,10 @@ defmodule AshA2ui.Wave6EncoderTest do
 
       assert components["record_row_meta_label_slug"]["variant"] == "caption"
       assert components["record_row_meta_label_slug"]["text"] == "Slug"
-      assert components["record_row_meta_value_slug"]["text"] == %{"path" => "slug"}
+      assert components["record_row_meta_value_slug"]["text"] == %{"@path" => "slug"}
 
       # format :date on expires_at is honored inside the meta grid
-      assert components["record_row_meta_value_expires_at"]["text"]["call"] == "formatDate"
+      assert components["record_row_meta_value_expires_at"]["text"]["@call"] == "formatDate"
     end
 
     test "rows carry the computed badge display text", %{messages: messages} do
@@ -181,12 +175,11 @@ defmodule AshA2ui.Wave6EncoderTest do
       assert components["form_group_details_heading"] == %{
                "id" => "form_group_details_heading",
                "component" => "Text",
-               "text" => "Details",
-               "variant" => "h3"
+               "text" => "### Details"
              }
 
       # label defaults to the humanized group name
-      assert components["form_group_scheduling_heading"]["text"] == "Scheduling"
+      assert components["form_group_scheduling_heading"]["text"] == "### Scheduling"
     end
 
     test "grouped fields lay out in rows of equal-weight columns", %{messages: messages} do
@@ -208,7 +201,7 @@ defmodule AshA2ui.Wave6EncoderTest do
 
       # the inputs themselves are the unchanged per-field components
       assert components["form_input_name"]["component"] == "TextField"
-      assert components["form_error_name"]["text"] == %{"path" => "/errors/name"}
+      assert components["form_error_name"]["text"] == %{"@path" => "/errors/name"}
     end
 
     test "uneven rows are padded with empty spacer columns" do
@@ -361,7 +354,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       assert components["record_row_active_items"]["child"] == "record_row_active_items_body"
 
       assert components["record_row_active_items_badge"]["text"] ==
-               %{"path" => "_badge_is_active"}
+               %{"@path" => "_badge_is_active"}
 
       assert components["record_row_active_items_meta_row_0"]["children"] ==
                [

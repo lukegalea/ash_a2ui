@@ -38,7 +38,7 @@ defmodule AshA2ui.CalculationAggregateTest do
 
   defp envelope(name, surface_id, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface_id,
@@ -51,6 +51,7 @@ defmodule AshA2ui.CalculationAggregateTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _ -> nil
     end)

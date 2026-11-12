@@ -2,7 +2,7 @@ defmodule AshA2uiTest do
   @moduledoc """
   End-to-end test: resource -> `build_surface` -> simulated client `action`
   envelopes through `ActionHandler.handle/3` -> updated data model, with every
-  server->client message validated against the vendored A2UI v0.9.1 schemas.
+  server->client message validated against the vendored A2UI 1.0 schemas.
 
   Covers both authoring modes: the on-resource `a2ui` block
   (`AshA2ui.Test.KitchenSink`) and the standalone UI module
@@ -19,7 +19,7 @@ defmodule AshA2uiTest do
 
   defp envelope(name, surface_id, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface_id,
@@ -31,13 +31,17 @@ defmodule AshA2uiTest do
   end
 
   test "on-resource block: surface -> submit_form create -> invoke row action -> data model" do
-    # 1. Initial surface: ordered, schema-valid message list.
+    # 1. Initial surface: one schema-valid inline createSurface.
     messages = Info.build_surface(KitchenSink)
 
     assert [
-             %{"createSurface" => %{"surfaceId" => "kitchen_sink"}},
-             %{"updateComponents" => _},
-             %{"updateDataModel" => %{"path" => "/", "value" => %{"records" => []}}}
+             %{
+               "createSurface" => %{
+                 "surfaceId" => "kitchen_sink",
+                 "components" => [_ | _],
+                 "dataModel" => %{"records" => []}
+               }
+             }
            ] = messages
 
     Enum.each(messages, &assert_valid_agent_message/1)
@@ -61,7 +65,7 @@ defmodule AshA2uiTest do
              %{"updateDataModel" => %{"path" => "/form", "value" => %{}}},
              %{"updateDataModel" => %{"path" => "/errors", "value" => %{}}},
              %{"updateDataModel" => %{"path" => "/ui/action_result", "value" => %{}}},
-             %{"updateDataModel" => %{"path" => "/ui/action_result_text", "value" => ""}},
+             %{"updateDataModel" => %{"path" => "/ui/feedback/resultText", "value" => ""}},
              %{"updateDataModel" => %{"path" => "/ui/intent", "value" => "browse"}},
              %{"updateDataModel" => %{"path" => "/ui/panel", "value" => %{"visible" => []}}},
              %{
@@ -126,9 +130,13 @@ defmodule AshA2uiTest do
     messages = Info.build_surface(MinimalUI)
 
     assert [
-             %{"createSurface" => %{"surfaceId" => "minimal_standalone"}},
-             %{"updateComponents" => %{"components" => components}},
-             %{"updateDataModel" => _}
+             %{
+               "createSurface" => %{
+                 "surfaceId" => "minimal_standalone",
+                 "components" => components,
+                 "dataModel" => _
+               }
+             }
            ] = messages
 
     Enum.each(messages, &assert_valid_agent_message/1)

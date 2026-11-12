@@ -27,6 +27,7 @@ defmodule AshA2ui.LinksTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.Links.{Note, NotesUI, Participant, Person}
+  alias AshA2ui.Test.Surface
 
   setup do
     for resource <- [Participant, Note, Person] do
@@ -71,6 +72,7 @@ defmodule AshA2ui.LinksTest do
 
   defp data_model(messages) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} -> value
       %{"updateDataModel" => %{"path" => "/", "value" => value}} -> value
       _other -> nil
     end)
@@ -82,19 +84,19 @@ defmodule AshA2ui.LinksTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)
   end
 
   defp components_by_id(messages) do
-    update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
-    Map.new(update["updateComponents"]["components"], &{&1["id"], &1})
+    Surface.components_by_id(messages)
   end
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "notes",
@@ -324,12 +326,13 @@ defmodule AshA2ui.LinksTest do
 
       assert path == "/detail/note/_links/person_name"
       refute Map.has_key?(comps["detail_note_detail_field_title"], "link")
-      assert comps["detail_note_detail_field_body"]["value"] == %{"path" => "/detail/note/body"}
+      assert comps["detail_note_detail_field_body"]["value"] == %{"@path" => "/detail/note/body"}
     end
 
     test "the panel's FieldDisplay binds the view record's link" do
       comps = NotesUI |> AshA2ui.Info.build_surface() |> components_by_id()
 
+      # an admin descriptor: a plain path the admin renderer resolves
       assert comps["field_display_person_id"]["link"] == %{
                "path" => "/ui/panel/record/_links/person_id"
              }
@@ -350,13 +353,18 @@ defmodule AshA2ui.LinksTest do
                "component" => "Button",
                "variant" => "borderless",
                "child" => ^value_id,
-               "action" => %{"event" => %{"name" => "open_surface", "context" => context}}
+               "action" => %{
+                 "functionCall" => %{
+                   "@call" => "ashAction",
+                   "args" => %{"name" => "open_surface", "context" => context}
+                 }
+               }
              } = button
 
       assert context == %{
                "field" => field,
-               "surface" => %{"path" => "#{prefix}_links/#{field}/surface"},
-               "recordId" => %{"path" => "#{prefix}_links/#{field}/recordId"}
+               "surface" => %{"@path" => "#{prefix}_links/#{field}/surface"},
+               "recordId" => %{"@path" => "#{prefix}_links/#{field}/recordId"}
              }
 
       # the value Text is unchanged: same id, same binding, now the child
@@ -465,13 +473,13 @@ defmodule AshA2ui.LinksTest do
     end
 
     test "the v1.0 surface carries the same link buttons, schema-valid" do
-      [create] = AshA2ui.Info.build_surface(NotesUI, spec_version: "1.0", link_buttons: true)
+      [create] = AshA2ui.Info.build_surface(NotesUI, link_buttons: true)
       assert_valid_agent_message(create)
 
       comps = Map.new(create["createSurface"]["components"], &{&1["id"], &1})
       button = link_button(comps, "record_row_meta_value_person_name")
-      assert button["action"]["event"]["name"] == "open_surface"
-      assert button["action"]["event"]["wantResponse"] == true
+      assert button["action"]["functionCall"]["args"]["name"] == "open_surface"
+      assert button["action"]["functionCall"]["@call"] == "ashAction"
     end
 
     test "a field the resolver vetoes keeps its plain value Text", %{bob: bob} do
@@ -581,7 +589,7 @@ defmodule AshA2ui.LinksTest do
 
     test "on v1.0 an accepted request answers its actionResponse", %{ada: ada} do
       message = %{
-        "version" => "v1.0",
+        "version" => "1.0",
         "action" => %{
           "name" => "open_surface",
           "surfaceId" => "notes",
@@ -592,7 +600,7 @@ defmodule AshA2ui.LinksTest do
         }
       }
 
-      assert {:ok, [response]} = ActionHandler.handle(NotesUI, message, spec_version: "1.0")
+      assert {:ok, [response]} = ActionHandler.handle(NotesUI, message)
       assert response["actionResponse"] == %{"value" => %{"status" => "ok", "message" => ""}}
       assert_valid_agent_message(response)
     end
