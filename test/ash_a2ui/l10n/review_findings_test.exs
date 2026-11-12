@@ -31,7 +31,7 @@ defmodule AshA2ui.L10n.ReviewFindingsTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "experience_task",
@@ -144,7 +144,7 @@ defmodule AshA2ui.L10n.ReviewFindingsTest do
   end
 
   test "an admin filter hint is translated and extracted" do
-    pseudo = L10nScenarios.run(L10nScenarios.scenario("hub_build_v0_9_1_admin"), @pseudo)
+    pseudo = L10nScenarios.run(L10nScenarios.scenario("hub_build_admin"), @pseudo)
     assert pseudo =~ ~s("hint": "⟪Statuses update nightly.⟫")
     assert {nil, "Statuses update nightly."} in Metadata.surface_messages(HubUI)
   end

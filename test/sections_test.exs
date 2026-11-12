@@ -19,6 +19,7 @@ defmodule AshA2ui.SectionsTest do
   alias AshA2ui.Test.BucketWord
   alias AshA2ui.Test.BucketWordsUI
   alias AshA2ui.Test.BucketWordsV1UI
+  alias AshA2ui.Test.Surface
 
   defp envelope(name, context, version \\ "v0.9.1", surface \\ "bucket_words") do
     %{
@@ -35,6 +36,7 @@ defmodule AshA2ui.SectionsTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _ -> nil
     end)
@@ -183,8 +185,7 @@ defmodule AshA2ui.SectionsTest do
 
       components =
         messages
-        |> Enum.find_value(& &1["updateComponents"])
-        |> Map.fetch!("components")
+        |> Surface.components()
         |> Map.new(&{&1["id"], &1})
 
       alpha_sfx = "_#{runtime_name(ctx.alpha)}"
@@ -208,8 +209,8 @@ defmodule AshA2ui.SectionsTest do
                "action_result_panel"
              ]
 
-      assert components["table_heading#{alpha_sfx}"]["text"] == "Alpha"
-      assert components["table_heading#{zebra_sfx}"]["text"] == "Zebra"
+      assert components["table_heading#{alpha_sfx}"]["text"] == "## Alpha"
+      assert components["table_heading#{zebra_sfx}"]["text"] == "## Zebra"
 
       assert components["records_list#{alpha_sfx}"]["children"]["path"] ==
                "/records/#{runtime_name(ctx.alpha)}"
@@ -220,6 +221,7 @@ defmodule AshA2ui.SectionsTest do
 
       data_model =
         Enum.find_value(messages, fn
+          %{"createSurface" => %{"dataModel" => value}} -> value
           %{"updateDataModel" => %{"path" => "/", "value" => value}} -> value
           _ -> nil
         end)
@@ -323,7 +325,7 @@ defmodule AshA2ui.SectionsTest do
 
     test "an actionId'd invoke on a section row is answered with an actionResponse", ctx do
       message = %{
-        "version" => "v1.0",
+        "version" => "1.0",
         "action" => %{
           "name" => "invoke",
           "surfaceId" => "bucket_words_v1",

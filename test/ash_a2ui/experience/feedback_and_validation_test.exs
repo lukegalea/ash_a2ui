@@ -14,7 +14,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
 
   defp envelope(name, context \\ %{}) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "experience_task",
@@ -76,7 +76,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
 
       values = by_path(messages)
 
-      assert values["/ui/feedback"] == %{
+      assert Map.take(values["/ui/feedback"], ["kind", "message"]) == %{
                "kind" => "success",
                "message" => "Created successfully."
              }
@@ -105,7 +105,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
       values = by_path(messages)
 
       # typed success on the path the status Text binds...
-      assert values["/ui/feedback"] == %{
+      assert Map.take(values["/ui/feedback"], ["kind", "message"]) == %{
                "kind" => "success",
                "message" => "Destroy completed."
              }
@@ -220,7 +220,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
 
     test "a query allowlist rejection" do
       envelope = %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
           "name" => "query",
           "context" => %{"query" => %{"sort" => %{"field" => "category", "dir" => "asc"}}}
@@ -234,7 +234,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
 
     test "on v1.0 the rejection keeps the /ui/response contract and mirrors into /ui/feedback" do
       envelope = %{
-        "version" => "v1.0",
+        "version" => "1.0",
         "action" => %{
           "name" => "explode",
           "surfaceId" => "kitchen_sink_v1",
@@ -255,7 +255,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
       assert values["/ui/response"]["status"] == "error"
       assert values["/ui/response"]["message"] =~ "Unknown action"
 
-      assert values["/ui/feedback"] == %{
+      assert Map.take(values["/ui/feedback"], ["kind", "message"]) == %{
                "kind" => "error",
                "message" => values["/ui/response"]["message"]
              }

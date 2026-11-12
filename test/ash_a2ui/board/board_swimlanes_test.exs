@@ -17,8 +17,9 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
   alias AshA2ui.ResolvedView
   alias AshA2ui.Sections
   alias AshA2ui.Test.BoardTask
+  alias AshA2ui.Test.Surface
   alias AshA2ui.Test.SwimlaneBoardUI
-  alias AshA2ui.Test.SwimlaneBoardV1UI
+  alias AshA2ui.Test.SwimlaneBoardUnqueriedUI
 
   @cells [
     "board_open__very_high",
@@ -81,12 +82,12 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
 
     components =
       messages
-      |> Enum.find_value(& &1["updateComponents"])
-      |> Map.fetch!("components")
+      |> Surface.components()
       |> Map.new(&{&1["id"], &1})
 
     value =
       Enum.find_value(messages, fn
+        %{"createSurface" => %{"dataModel" => value}} -> value
         %{"updateDataModel" => %{"path" => "/", "value" => value}} -> value
         _other -> nil
       end)
@@ -96,7 +97,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "swimlane_tasks",
@@ -109,6 +110,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)
@@ -157,7 +159,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
     assert view.refreshes == %{claim: @cells, complete: @cells}
 
     # Unlisted swimlanes are neutral; every value without swimlane_values.
-    v1 = expanded(SwimlaneBoardV1UI)
+    v1 = expanded(SwimlaneBoardUnqueriedUI)
 
     assert Enum.map(v1.tables, & &1.name) == [
              "board_open__low",
@@ -235,9 +237,9 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
                ["stage_#{lane}_heading", "stage_#{lane}_total"]
 
       assert components["stage_#{lane}_heading"] |> Map.take(["text", "variant"]) ==
-               %{"text" => label, "variant" => "h3"}
+               %{"text" => "### " <> label}
 
-      assert components["stage_#{lane}_total"]["text"] == %{"path" => "/_lane_total_#{lane}"}
+      assert components["stage_#{lane}_total"]["text"] == %{"@path" => "/_lane_total_#{lane}"}
     end
 
     # Each swimlane row: its header (label + total) over a Row of its cells,
@@ -250,8 +252,8 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
       assert components[row]["component"] == "Column"
       assert components[row]["children"] == ["#{row}_header", "#{row}_cells"]
       assert components["#{row}_header"]["children"] == ["#{row}_heading", "#{row}_total"]
-      assert components["#{row}_heading"]["text"] == label
-      assert components["#{row}_total"]["text"] == %{"path" => "/_swimlane_total_#{swimlane}"}
+      assert components["#{row}_heading"]["text"] == "### " <> label
+      assert components["#{row}_total"]["text"] == %{"@path" => "/_swimlane_total_#{swimlane}"}
 
       assert components["#{row}_cells"] == %{
                "id" => "#{row}_cells",
@@ -295,8 +297,8 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
     assert value["_swimlane_tone_board__very_high"] == "danger"
     assert value["_swimlane_tone_board__low"] == "success"
 
-    # --- v1.0 (no query: totals from the row count) ---
-    assert [message] = AshA2ui.Info.build_surface(SwimlaneBoardV1UI, authorize?: false)
+    # --- a board without a query: totals from the row count ---
+    assert [message] = AshA2ui.Info.build_surface(SwimlaneBoardUnqueriedUI, authorize?: false)
     assert_valid_agent_message(message)
 
     create = message["createSurface"]
@@ -335,7 +337,8 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
     for id <-
           ["board_board_lanes", "board_board_stages", "swimlane_board__low_cells"] ++
             Enum.map(@cells, &"lane_#{&1}") do
-      assert admin[id] == components[id], "#{id} differs under the admin catalog"
+      assert Surface.unqualified(admin[id]) == components[id],
+             "#{id} differs under the admin catalog"
     end
 
     assert admin_value["_swimlane_tone_board__very_high"] == "danger"

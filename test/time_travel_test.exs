@@ -35,6 +35,7 @@ defmodule AshA2ui.TimeTravelTest do
 
   defp data_model(messages) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} -> value
       %{"updateDataModel" => %{"path" => "/", "value" => value}} -> value
       _other -> nil
     end)

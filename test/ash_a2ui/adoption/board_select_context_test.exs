@@ -72,25 +72,25 @@ defmodule AshA2ui.Adoption.BoardSelectContextTest do
   test "every card carries the select control", %{job: job} do
     messages = AshA2ui.Info.build_surface(SelectBoardUI, actor: @red)
     Enum.each(messages, &assert_valid_agent_message/1)
-    [_create, components, data] = messages
-    by_id = Map.new(components["updateComponents"]["components"], &{&1["id"], &1})
+    [%{"createSurface" => %{"components" => components, "dataModel" => data}}] = messages
+    by_id = Map.new(components, &{&1["id"], &1})
 
     for lane <- ["board_open", "board_claimed"] do
       button = by_id["row_context_#{lane}_button"]
       assert button["component"] == "Button"
       assert by_id["row_context_#{lane}_text"]["text"] == "Select job"
-      assert button["action"]["event"]["name"] == "context_select"
-      assert button["action"]["event"]["context"]["context"] == "job"
-      assert button["action"]["event"]["context"]["value"] == %{"path" => "id"}
+      assert button["action"]["functionCall"]["args"]["name"] == "context_select"
+      assert button["action"]["functionCall"]["args"]["context"]["context"] == "job"
+      assert button["action"]["functionCall"]["args"]["context"]["value"] == %{"@path" => "id"}
     end
 
-    assert [%{"id" => id}] = data["updateDataModel"]["value"]["records"]["board_open"]
+    assert [%{"id" => id}] = data["records"]["board_open"]
     assert id == job.id
   end
 
   test "selecting a card fills the detail", %{job: job} do
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "context_select",
         "surfaceId" => "adoption_select_board",

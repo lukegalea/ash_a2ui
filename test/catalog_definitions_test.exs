@@ -72,7 +72,9 @@ defmodule AshA2ui.CatalogDefinitionsTest do
 
     test "anyFunction lists every function", %{catalog: catalog} do
       refs = Enum.map(catalog["$defs"]["anyFunction"]["oneOf"], & &1["$ref"])
-      assert Enum.sort(refs) == Enum.map(Enum.sort(Map.keys(catalog["functions"])), &"#/functions/#{&1}")
+
+      assert Enum.sort(refs) ==
+               Enum.map(Enum.sort(Map.keys(catalog["functions"])), &"#/functions/#{&1}")
     end
   end
 

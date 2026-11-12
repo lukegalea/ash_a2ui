@@ -83,7 +83,7 @@ defmodule AshA2ui.Calendar.CalendarPresetTest do
 
   defp envelope(context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "query",
         "surfaceId" => "calendar_presets",
@@ -106,6 +106,7 @@ defmodule AshA2ui.Calendar.CalendarPresetTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)

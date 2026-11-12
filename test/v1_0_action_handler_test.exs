@@ -38,7 +38,6 @@ defmodule AshA2ui.V10ActionHandlerTest.Gadget do
 
   a2ui do
     surface_id "gadget_v1"
-    spec_version "1.0"
 
     component :table do
       fields [:name]
@@ -78,7 +77,6 @@ defmodule AshA2ui.V10ActionHandlerTest.Protected do
 
   a2ui do
     surface_id "protected_v1"
-    spec_version "1.0"
 
     component :table do
       fields [:name]

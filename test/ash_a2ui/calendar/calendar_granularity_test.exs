@@ -18,6 +18,7 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.Calendar.{Event, MonthUI, SwitchUI}
+  alias AshA2ui.Test.SchemaHelper
 
   setup do
     on_exit(fn -> Application.delete_env(:ash_a2ui, :catalog) end)
@@ -83,7 +84,7 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
 
   defp envelope(context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "query",
         "surfaceId" => "calendar_switch",
@@ -96,6 +97,7 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)
@@ -176,7 +178,10 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
     assert Enum.take(by_id["calendar_nav"]["children"], -3) ==
              ~w(calendar_month_button calendar_week_button calendar_day_button)
 
-    assert by_id["calendar_week_button"]["action"]["event"]["context"]["granularity"] == "week"
+    assert by_id["calendar_week_button"]["action"]["functionCall"]["args"]["context"][
+             "granularity"
+           ] == "week"
+
     assert by_id["calendar_week_text"]["text"] == "Week"
 
     # A calendar without a switch has no size Buttons.
@@ -194,7 +199,7 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
 
     catalog = "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 
-    assert AshA2ui.Test.SchemaHelper.validate_catalog_component(catalog, "calendarView", view) ==
+    assert SchemaHelper.validate_catalog_component(catalog, "calendarView", view) ==
              :ok
   end
 

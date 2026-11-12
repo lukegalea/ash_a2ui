@@ -117,17 +117,16 @@ defmodule AshA2ui.DynamicTest do
       refute resolve!(minimal_spec()).surface_id == resolve!(minimal_spec()).surface_id
     end
 
-    test "build_surface emits the schema-valid message triple" do
+    test "build_surface emits one schema-valid createSurface" do
       Ash.create!(Minimal, %{name: "one"}, authorize?: false)
 
       messages = minimal_spec() |> resolve!() |> Dynamic.build_surface(authorize?: false)
 
-      assert [%{"createSurface" => _}, %{"updateComponents" => _}, %{"updateDataModel" => _}] =
-               messages
+      assert [%{"createSurface" => _}] = messages
 
       Enum.each(messages, &assert_valid_agent_message/1)
 
-      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      [%{"createSurface" => %{"dataModel" => data_model}}] = messages
       assert [%{"name" => "one"}] = data_model["records"]
     end
 
@@ -235,7 +234,7 @@ defmodule AshA2ui.DynamicTest do
       # Unscoped: require_context unmet, the table renders no records.
       messages = Dynamic.build_surface(surface, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
-      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      [%{"createSurface" => %{"dataModel" => data_model}}] = messages
       assert data_model["records"] == []
 
       # Scoped to the selected owner, the appointment appears.
@@ -245,7 +244,7 @@ defmodule AshA2ui.DynamicTest do
           context_state: %{"owner" => %{"value" => owner.id}}
         )
 
-      [_create, _components, %{"updateDataModel" => %{"value" => scoped_model}}] = scoped
+      [%{"createSurface" => %{"dataModel" => scoped_model}}] = scoped
       assert [%{"title" => "checkup"}] = scoped_model["records"]
       assert scoped_model["detail"]["owner"]["name"] == "Ada"
     end
@@ -283,7 +282,7 @@ defmodule AshA2ui.DynamicTest do
       messages = Dynamic.build_surface(surface, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
 
-      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      [%{"createSurface" => %{"dataModel" => data_model}}] = messages
       assert data_model["form"]["notes"] == []
       assert data_model["form"]["tags"] == []
 
@@ -352,7 +351,7 @@ defmodule AshA2ui.DynamicTest do
 
       runtime_name = "per_bucket_#{String.replace(bucket.id, "-", "_")}"
 
-      [_create, _components, %{"updateDataModel" => %{"value" => data_model}}] = messages
+      [%{"createSurface" => %{"dataModel" => data_model}}] = messages
       assert [%{"word" => "misspeld"}] = data_model["records"][runtime_name]
     end
 
@@ -657,7 +656,7 @@ defmodule AshA2ui.DynamicTest do
       surface = resolve!(minimal_spec())
 
       envelope = %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
           "name" => "submit_form",
           "surfaceId" => surface.surface_id,
@@ -683,7 +682,7 @@ defmodule AshA2ui.DynamicTest do
       surface = resolve!(minimal_spec())
 
       envelope = %{
-        "version" => "v0.9.1",
+        "version" => "1.0",
         "action" => %{
           "name" => "submit_form",
           # A tampering client claims another surface — it is ignored.

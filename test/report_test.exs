@@ -14,12 +14,13 @@ defmodule AshA2ui.ReportTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.BucketWord
+  alias AshA2ui.Test.Surface
   alias AshA2ui.Test.WordReportUI
   alias AshA2ui.Test.WordReportV1UI
 
   defp envelope(name, context, surface \\ "word_report") do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface,
@@ -32,6 +33,7 @@ defmodule AshA2ui.ReportTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _ -> nil
     end)
@@ -90,12 +92,12 @@ defmodule AshA2ui.ReportTest do
 
       components =
         messages
-        |> Enum.find_value(& &1["updateComponents"])
-        |> Map.fetch!("components")
+        |> Surface.components()
         |> Map.new(&{&1["id"], &1})
 
       data_model =
         Enum.find_value(messages, fn
+          %{"createSurface" => %{"dataModel" => value}} -> value
           %{"updateDataModel" => %{"path" => "/", "value" => value}} -> value
           _ -> nil
         end)
@@ -117,14 +119,14 @@ defmodule AshA2ui.ReportTest do
 
       param = components["report_lengths_param_min_length"]
       assert param["component"] == "TextField"
-      assert param["value"] == %{"path" => "/report/lengths/params/min_length"}
+      assert param["value"] == %{"@path" => "/report/lengths/params/min_length"}
 
-      event = components["report_lengths_run_button"]["action"]["event"]
+      event = components["report_lengths_run_button"]["action"]["functionCall"]["args"]
       assert event["name"] == "report"
 
       assert event["context"] == %{
                "component" => "lengths",
-               "params" => %{"path" => "/report/lengths/params"}
+               "params" => %{"@path" => "/report/lengths/params"}
              }
 
       assert components["report_lengths_list"]["children"] == %{
@@ -138,7 +140,7 @@ defmodule AshA2ui.ReportTest do
                "report_lengths_cell_state"
              ]
 
-      assert components["report_lengths_cell_length_value"]["text"] == %{"path" => "length"}
+      assert components["report_lengths_cell_length_value"]["text"] == %{"@path" => "length"}
     end
 
     test "the initial data model carries the reserved /report region", %{
@@ -247,12 +249,12 @@ defmodule AshA2ui.ReportTest do
           &(&1["id"] == "report_lengths_run_button")
         )
 
-      assert run["action"]["event"]["wantResponse"] == true
+      assert run["action"]["functionCall"]["@call"] == "ashAction"
     end
 
     test "a report run answers its actionId with the structured result" do
       message = %{
-        "version" => "v1.0",
+        "version" => "1.0",
         "action" => %{
           "name" => "report",
           "surfaceId" => "word_report_v1",

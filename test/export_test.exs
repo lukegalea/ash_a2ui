@@ -21,7 +21,7 @@ defmodule AshA2ui.ExportTest do
 
   defp envelope(name, context, surface) do
     %{
-      "version" => "v1.0",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface,
@@ -38,7 +38,7 @@ defmodule AshA2ui.ExportTest do
 
   defp download(messages) do
     Enum.find_value(messages, fn
-      %{"callFunction" => %{"call" => "downloadFile", "args" => args}} -> args
+      %{"callFunction" => %{"@call" => "downloadFile", "args" => args}} -> args
       _ -> nil
     end)
   end
@@ -122,13 +122,12 @@ defmodule AshA2ui.ExportTest do
       assert "export_controls" in components["root"]["children"]
       assert components["export_controls"]["children"] == ["export_button"]
 
-      event = components["export_button"]["action"]["event"]
+      event = components["export_button"]["action"]["functionCall"]["args"]
       assert event["name"] == "export"
-      assert event["wantResponse"] == true
 
       assert event["context"] == %{
                "component" => "table",
-               "query" => %{"path" => "/query"}
+               "query" => %{"@path" => "/query"}
              }
     end
 
@@ -147,14 +146,14 @@ defmodule AshA2ui.ExportTest do
 
       checkbox = components["report_lengths_export_column_length"]
       assert checkbox["component"] == "CheckBox"
-      assert checkbox["value"] == %{"path" => "/export/lengths/columns/length"}
+      assert checkbox["value"] == %{"@path" => "/export/lengths/columns/length"}
 
-      event = components["report_lengths_export_button"]["action"]["event"]
+      event = components["report_lengths_export_button"]["action"]["functionCall"]["args"]
 
       assert event["context"] == %{
                "component" => "lengths",
-               "params" => %{"path" => "/report/lengths/params"},
-               "columns" => %{"path" => "/export/lengths/columns"}
+               "params" => %{"@path" => "/report/lengths/params"},
+               "columns" => %{"@path" => "/export/lengths/columns"}
              }
 
       assert message["createSurface"]["dataModel"]["export"] == %{
@@ -200,7 +199,7 @@ defmodule AshA2ui.ExportTest do
 
     test "a successful export answers the actionId with the structured result" do
       message = %{
-        "version" => "v1.0",
+        "version" => "1.0",
         "action" => %{
           "name" => "export",
           "surfaceId" => "export_words_v1",
@@ -317,30 +316,6 @@ defmodule AshA2ui.ExportVerifierTest do
 
   import ExUnit.CaptureIO
 
-  test "an export on a 0.9.1 surface does not compile cleanly" do
-    result =
-      capture_io(:stderr, fn ->
-        defmodule ExportOn091 do
-          @moduledoc false
-          use AshA2ui.Standalone
-
-          a2ui do
-            for_resource AshA2ui.Test.BucketWord
-
-            component :table do
-              fields [:word]
-
-              export do
-                filename "words.csv"
-              end
-            end
-          end
-        end
-      end)
-
-    assert result =~ ~r/export is v1\.0-only/
-  end
-
   test "an export on a form component does not compile cleanly" do
     result =
       capture_io(:stderr, fn ->
@@ -350,7 +325,6 @@ defmodule AshA2ui.ExportVerifierTest do
 
           a2ui do
             for_resource AshA2ui.Test.BucketWord
-            spec_version("1.0")
 
             component :form do
               fields [:word]
@@ -375,7 +349,6 @@ defmodule AshA2ui.ExportVerifierTest do
 
           a2ui do
             for_resource AshA2ui.Test.BucketWord
-            spec_version("1.0")
 
             component :table do
               fields [:word]

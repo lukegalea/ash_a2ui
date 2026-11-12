@@ -18,10 +18,11 @@ defmodule AshA2ui.EditableTest do
   alias AshA2ui.Test.BucketWordsUI
   alias AshA2ui.Test.EditableWordsUI
   alias AshA2ui.Test.EditableWordsV1UI
+  alias AshA2ui.Test.Surface
 
   defp envelope(name, context, surface \\ "editable_words") do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => surface,
@@ -34,6 +35,7 @@ defmodule AshA2ui.EditableTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _ -> nil
     end)
@@ -74,8 +76,7 @@ defmodule AshA2ui.EditableTest do
 
       components =
         messages
-        |> Enum.find_value(& &1["updateComponents"])
-        |> Map.fetch!("components")
+        |> Surface.components()
         |> Map.new(&{&1["id"], &1})
 
       %{components: components}
@@ -92,24 +93,24 @@ defmodule AshA2ui.EditableTest do
 
       input = components["table_cell_replacement_input"]
       assert input["component"] == "TextField"
-      assert input["value"] == %{"path" => "replacement"}
+      assert input["value"] == %{"@path" => "replacement"}
 
       error = components["table_cell_replacement_error"]
-      assert error["text"] == %{"path" => "_error_replacement"}
+      assert error["text"] == %{"@path" => "_error_replacement"}
     end
 
     test "the Save button dispatches edit_cell with the row id, field and value", %{
       components: components
     } do
-      event = components["table_cell_replacement_save_button"]["action"]["event"]
+      event = components["table_cell_replacement_save_button"]["action"]["functionCall"]["args"]
 
       assert event["name"] == "edit_cell"
 
       assert event["context"] == %{
-               "recordId" => %{"path" => "id"},
+               "recordId" => %{"@path" => "id"},
                "component" => "table",
                "field" => "replacement",
-               "value" => %{"path" => "replacement"}
+               "value" => %{"@path" => "replacement"}
              }
     end
 
@@ -234,15 +235,15 @@ defmodule AshA2ui.EditableTest do
           &(&1["id"] == "table_cell_replacement_save_button")
         )
 
-      assert save["action"]["event"]["wantResponse"] == true
-      assert save["action"]["event"]["name"] == "edit_cell"
+      assert save["action"]["functionCall"]["@call"] == "ashAction"
+      assert save["action"]["functionCall"]["args"]["name"] == "edit_cell"
     end
 
     test "a successful commit answers the cell's actionId with an ok actionResponse", %{
       word: word
     } do
       message = %{
-        "version" => "v1.0",
+        "version" => "1.0",
         "action" => %{
           "name" => "edit_cell",
           "surfaceId" => "editable_words_v1",
@@ -268,7 +269,7 @@ defmodule AshA2ui.EditableTest do
       word: word
     } do
       message = %{
-        "version" => "v1.0",
+        "version" => "1.0",
         "action" => %{
           "name" => "edit_cell",
           "surfaceId" => "editable_words_v1",

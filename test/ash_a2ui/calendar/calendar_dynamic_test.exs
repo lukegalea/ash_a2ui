@@ -16,6 +16,7 @@ defmodule AshA2ui.Calendar.CalendarDynamicTest do
   alias AshA2ui.Dynamic.Error
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.Test.Calendar.{Event, MonthUI}
+  alias AshA2ui.Test.Surface
 
   @allowlist Dynamic.allowlist([Event])
 
@@ -50,6 +51,7 @@ defmodule AshA2ui.Calendar.CalendarDynamicTest do
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
+      %{"createSurface" => %{"dataModel" => value}} when path == "/" -> value
       %{"updateDataModel" => %{"path" => ^path, "value" => value}} -> value
       _other -> nil
     end)
@@ -85,17 +87,17 @@ defmodule AshA2ui.Calendar.CalendarDynamicTest do
       )
 
     Enum.each(messages, &assert_valid_agent_message/1)
-    data = Enum.find_value(messages, &get_in(&1, ["updateDataModel", "value"]))
+    data = Surface.data_model(messages)
 
     assert data["query"]["window"]["from"] == "2026-10-12"
     assert Enum.map(data["records"], & &1["title"]) == ["Red Mon"]
 
-    components = Enum.find_value(messages, &get_in(&1, ["updateComponents", "components"]))
+    components = Surface.components(messages)
     assert Enum.any?(components, &(&1["id"] == "calendar_nav"))
 
     # The window action is the standard query, served on the held surface.
     envelope = %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "query",
         "surfaceId" => surface.surface_id,
