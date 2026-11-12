@@ -158,9 +158,6 @@ defmodule AshA2ui.MixProject do
           AshA2ui.Combobox,
           AshA2ui.Web.ComposerLive
         ],
-        "External Transports": [
-          AshA2ui.AgUi
-        ],
         Internals: ~r/.*/
       ]
     ]
