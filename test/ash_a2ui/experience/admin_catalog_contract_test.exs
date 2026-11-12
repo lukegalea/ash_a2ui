@@ -34,6 +34,10 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     "confirmDialog" => ~w(title body confirmLabel destructive)
   }
 
+  # The catalog's own minor-version history (A2UI 1.0 catalogs carry it in
+  # metadata.extensions; the top level is closed).
+  defp changelog(catalog), do: catalog["metadata"]["extensions"]["changelog"]
+
   @tag ac: "A2UI-101B/AC-1"
   test "catalog declares the full component vocabulary" do
     assert {:ok, catalog} =
@@ -60,7 +64,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
   test "catalog 1.1 is additive: version, column hints, rowClick, field links, openSurface" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert catalog["version"] == Experience.admin_catalog_version()
+    assert catalog["metadata"]["extensions"]["version"] == Experience.admin_catalog_version()
     assert catalog["catalogId"] == Experience.admin_catalog_id()
 
     grid = catalog["components"]["dataGrid"]
@@ -76,7 +80,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     assert Map.has_key?(catalog["components"]["fieldDisplay"]["properties"], "link")
 
     open_surface = catalog["functions"]["openSurface"]
-    assert open_surface["properties"]["call"]["const"] == "openSurface"
+    assert open_surface["properties"]["@call"]["const"] == "openSurface"
     assert open_surface["properties"]["args"]["required"] == ["surface"]
 
     source = File.read!(@renderer_asset_path)
@@ -100,15 +104,15 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
              ["component", "granularity", "window", "windowAction", "children"]
 
     assert calendar["properties"]["granularity"]["enum"] == ["day", "week", "month"]
-    assert Map.has_key?(catalog["x-changelog"], "1.3.0")
+    assert Map.has_key?(changelog(catalog), "1.3.0")
   end
 
   test "catalog 1.11 is additive: badge helpPath, column caption and sortFirst, sort reset" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert catalog["version"] == "1.11.0"
+    assert catalog["metadata"]["extensions"]["version"] == "1.11.0"
     assert Experience.admin_catalog_version() == "1.11.0"
-    assert Map.has_key?(catalog["x-changelog"], "1.11.0")
+    assert Map.has_key?(changelog(catalog), "1.11.0")
 
     grid = catalog["components"]["dataGrid"]["properties"]
     column = grid["columns"]["items"]
@@ -127,7 +131,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
   test "catalog 1.10 is additive: column help and sortField, detail helpPath, page sizes" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert Map.has_key?(catalog["x-changelog"], "1.10.0")
+    assert Map.has_key?(changelog(catalog), "1.10.0")
 
     column = catalog["components"]["dataGrid"]["properties"]["columns"]["items"]
     assert column["required"] == ["label", "path"]
@@ -144,7 +148,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
   test "catalog 1.9 is additive: dataGrid rowClick labelPath, variantPath and inline" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert Map.has_key?(catalog["x-changelog"], "1.9.0")
+    assert Map.has_key?(changelog(catalog), "1.9.0")
 
     row_click = catalog["components"]["dataGrid"]["properties"]["rowClick"]
     assert row_click["properties"]["labelPath"]["type"] == "string"
@@ -156,7 +160,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
   test "catalog 1.8 is additive: dataGrid column subtitle, icon, more and detail" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert Map.has_key?(catalog["x-changelog"], "1.8.0")
+    assert Map.has_key?(changelog(catalog), "1.8.0")
 
     column = catalog["components"]["dataGrid"]["properties"]["columns"]["items"]
     assert column["required"] == ["label", "path"]
@@ -173,7 +177,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
   test "catalog 1.7 is additive: sortable dataGrid headers" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert Map.has_key?(catalog["x-changelog"], "1.7.0")
+    assert Map.has_key?(changelog(catalog), "1.7.0")
 
     grid = catalog["components"]["dataGrid"]
     assert grid["properties"]["columns"]["items"]["properties"]["sortable"]["type"] == "boolean"
@@ -184,7 +188,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
   test "catalog 1.6 is additive: entityPage headerVisible" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert Map.has_key?(catalog["x-changelog"], "1.6.0")
+    assert Map.has_key?(changelog(catalog), "1.6.0")
 
     page = catalog["components"]["entityPage"]
     assert page["properties"]["headerVisible"]["type"] == "boolean"
@@ -194,7 +198,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
   test "catalog 1.5 is additive: calendarView granularities" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert Map.has_key?(catalog["x-changelog"], "1.5.0")
+    assert Map.has_key?(changelog(catalog), "1.5.0")
 
     sizes = catalog["components"]["calendarView"]["properties"]["granularities"]
     assert sizes["items"]["enum"] == ["day", "week", "month"]
@@ -209,7 +213,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     diagram = catalog["components"]["liveDiagram"]
     assert diagram["properties"]["component"]["const"] == "liveDiagram"
     assert diagram["required"] == ["component", "source", "markers"]
-    assert Map.has_key?(catalog["x-changelog"], "1.4.0")
+    assert Map.has_key?(changelog(catalog), "1.4.0")
   end
 
   @tag ac: "A2UI-101B/AC-12"
