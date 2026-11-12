@@ -1,7 +1,7 @@
 [
   {
     "createSurface": {
-      "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1",
+      "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2",
       "components": [
         {
           "children": [

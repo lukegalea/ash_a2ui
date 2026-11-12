@@ -109,6 +109,16 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     assert Map.has_key?(changelog(catalog), "1.3.0")
   end
 
+  test "catalog 1.13 is additive: plain links" do
+    catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
+
+    assert changelog(catalog)["1.13.0"] =~ "{href, label} with no surface"
+    assert changelog(catalog)["2.0.0"] =~ "1.13"
+
+    field_link = catalog["components"]["fieldDisplay"]["properties"]["link"]
+    assert field_link["description"] =~ "a plain link {href, label} with no surface"
+  end
+
   test "catalog 1.12 is additive: fieldDisplay badge, emptyText, hideWhenEmpty; grid rows" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
@@ -130,7 +140,6 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
              "trailing",
              "expand"
            ]
-
   end
 
   test "catalog 2.0 is the A2UI 1.0 wire: filterPicker, the more tag's words" do
@@ -140,7 +149,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     assert Experience.admin_catalog_version() == "2.0.0"
     assert Map.has_key?(changelog(catalog), "2.0.0")
 
-    assert catalog["catalogId"] == "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1"
+    assert catalog["catalogId"] == "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2"
 
     [checkable, picker] = catalog["components"]["filterPicker"]["allOf"]
     assert checkable == %{"$ref" => "common_types.json#/$defs/Checkable"}
@@ -149,7 +158,9 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     for key <- ~w(hint counts dynamicOptions),
         do: assert(Map.has_key?(picker["properties"], key))
 
-    more = catalog["components"]["dataGrid"]["properties"]["columns"]["items"]["properties"]["more"]
+    more =
+      catalog["components"]["dataGrid"]["properties"]["columns"]["items"]["properties"]["more"]
+
     assert Enum.sort(Map.keys(more["properties"])) ==
              ~w(captionPath labelPath path textPath valuesPath)
 

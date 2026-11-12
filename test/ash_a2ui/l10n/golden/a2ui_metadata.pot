@@ -50,6 +50,7 @@ msgstr ""
 
 #: test/support/appointment_page_ui.ex:1
 #: test/support/appointments_ui.ex:1
+#: test/support/linked_visits_ui.ex:1
 #: test/support/word_report_ui.ex:78
 msgid "Appointment"
 msgstr ""
@@ -346,6 +347,7 @@ msgstr ""
 #: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
 #: test/support/board_task_ui.ex:87
+#: test/support/linked_visits_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 #: test/support/record_page_ui.ex:1
 #: test/support/word_report_ui.ex:78
@@ -720,11 +722,13 @@ msgid "Kitchen sink"
 msgstr ""
 
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:100
 #: test/support/word_report_ui.ex:23
 msgid "Length"
 msgstr ""
 
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:100
 #: test/support/word_report_ui.ex:23
 msgid "Lengths"
 msgstr ""
@@ -784,6 +788,7 @@ msgid "Medium"
 msgstr ""
 
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:100
 #: test/support/word_report_ui.ex:23
 msgid "Min length"
 msgstr ""
@@ -1200,6 +1205,7 @@ msgid "Schedule"
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
+#: test/support/linked_visits_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 #: test/support/record_page_ui.ex:1
 #: test/support/word_report_ui.ex:78
@@ -1270,6 +1276,11 @@ msgctxt "select_context"
 msgid "Select person"
 msgstr ""
 
+#: test/support/linked_visits_ui.ex:1
+msgctxt "select_context"
+msgid "Select visit"
+msgstr ""
+
 #: test/support/board_task_ui.ex:110
 #: test/support/board_task_ui.ex:132
 #: test/support/board_task_ui.ex:188
@@ -1280,6 +1291,10 @@ msgstr ""
 #: test/support/table_displays.ex:132
 msgctxt "one_of:arm"
 msgid "Shadow"
+msgstr ""
+
+#: test/support/word_report_ui.ex:100
+msgid "Shortest word to list"
 msgstr ""
 
 #: test/support/article.ex:1
@@ -1326,6 +1341,7 @@ msgstr ""
 #: test/support/review_item.ex:1
 #: test/support/submission.ex:1
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:100
 #: test/support/word_report_ui.ex:23
 msgid "State"
 msgstr ""
@@ -1356,6 +1372,7 @@ msgstr ""
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
 #: test/support/linked_filters_ui.ex:1
+#: test/support/linked_visits_ui.ex:1
 #: test/support/links.ex:135
 #: test/support/links.ex:267
 #: test/support/links.ex:333
@@ -1489,6 +1506,7 @@ msgstr ""
 #: test/support/captioned_task.ex:1
 #: test/support/column_task.ex:1
 #: test/support/linked_filters_ui.ex:1
+#: test/support/linked_visits_ui.ex:1
 #: test/support/links.ex:135
 #: test/support/links.ex:206
 #: test/support/links.ex:230
@@ -1574,8 +1592,13 @@ msgid "Very high"
 msgstr ""
 
 #: test/support/diagram_flow.ex:114
+#: test/support/linked_visits_ui.ex:1
 #: test/support/table_displays.ex:78
 msgid "Visit"
+msgstr ""
+
+#: test/support/linked_visits_ui.ex:1
+msgid "Visit card"
 msgstr ""
 
 #: test/support/owner_overview_ui.ex:1
@@ -1633,6 +1656,7 @@ msgstr ""
 #: test/support/editable_words_ui.ex:1
 #: test/support/editable_words_ui.ex:26
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:100
 #: test/support/word_report_ui.ex:23
 #: test/support/word_report_ui.ex:48
 msgid "Word"

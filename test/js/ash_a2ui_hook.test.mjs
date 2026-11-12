@@ -180,6 +180,37 @@ test("a quiet action leaves the last outcome and its result on screen", async ()
   assert.deepEqual(feedbackOf(hook, "s1"), saved, "no slow notice either");
 });
 
+test("query calls set /ui/loading until the last one is answered", async () => {
+  const hook = mountHook({actionTimeoutMs: 0});
+  bootstrap(hook);
+  const surface = hook.processor.getSurface("s1");
+  const loading = () => [surface.dataModel.get("/ui/loading"), surface.dataModel.get("/ui/loading_visible")];
+  const query = (page) =>
+    hook.runAshAction({name: "query", sourceComponentId: "pager", context: {page}}, {surface});
+
+  const first = query(2);
+  await tick();
+  const second = query(3);
+  await tick();
+  assert.deepEqual(loading(), [true, [{id: "on"}]]);
+
+  const [one, two] = sent(hook).map((message) => message.callAgentFunction.functionCallId);
+  hook.processMessages([agentResponse(one, {value: {}})]);
+  await first;
+  assert.deepEqual(loading(), [true, [{id: "on"}]], "the later fetch is still on its way");
+
+  hook.processMessages([agentResponse(two, {value: {}})]);
+  await second;
+  assert.deepEqual(loading(), [false, []]);
+});
+
+test("a write call leaves /ui/loading alone", async () => {
+  const hook = mountHook({actionTimeoutMs: 10});
+  bootstrap(hook);
+  await click(hook, "s1", "submit");
+  assert.equal(hook.processor.getSurface("s1").dataModel.get("/ui/loading"), undefined);
+});
+
 test("a timeout leaves feedback a later call owns", async () => {
   const hook = mountHook({actionTimeoutMs: 30});
   bootstrap(hook);

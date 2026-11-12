@@ -85,7 +85,7 @@ defmodule AshA2ui.Experience do
   @typedoc "The record task panel modes (`:hidden` for the closed state)."
   @type mode :: :create | :view | :edit | :hidden
 
-  @admin_catalog_id "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1"
+  @admin_catalog_id "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2"
   @feedback_kinds ["", "pending", "success", "warning", "error"]
 
   @doc """
@@ -169,7 +169,9 @@ defmodule AshA2ui.Experience do
   `visiblePath` (per-row `visible_when`) and `prompt` (prompt dialogs);
   1.7 added sortable headers (column `sortable`, the dataGrid's `sort`);
   1.10 added column `help` and `sortField`, the detail line's `helpPath`,
-  pagination page sizes and the extended ChoicePicker/TextField keys.
+  pagination page sizes and the extended ChoicePicker/TextField keys;
+  1.13 added plain links (`{href, label}` with no surface). 2.0 includes
+  every 1.x addition.
   """
   @spec admin_catalog_version() :: String.t()
   def admin_catalog_version, do: "2.0.0"

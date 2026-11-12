@@ -75,8 +75,11 @@ changes is the wire format and the way a host wires the renderer.
   same way, and its surfaces mix basic components in with `@catalogId`.
 - The catalog ids move to the package's home:
   `https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1` and
-  `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1`.
-- The admin catalog contract is 2.0.0 (`AshA2ui.Experience.admin_catalog_version/0`).
+  `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2`. A catalog id
+  names its contract's major version.
+- The admin catalog contract is 2.0.0
+  (`AshA2ui.Experience.admin_catalog_version/0`) and includes 1.13 (plain
+  links, below).
   Its version and changelog live under `metadata.extensions.ash_a2ui`, the
   prefixed extension key the 1.0 spec asks for. It declares `filterPicker`,
   the query filter picker admin surfaces emit, and the `more` tag's
@@ -137,7 +140,34 @@ changes is the wire format and the way a host wires the renderer.
   its shadow root) with the buttons, so Tab left the dialog; it now uses the
   dialog's own root.
 
+- **Live diagram: labels and badges no longer overlap.** Mermaid placed two edge
+  labels in the same spot when a state had several transitions, and the marker
+  badges sat on the node's top edge, over the state box. Edge labels are now
+  moved the shortest distance that clears each other, every node and the badges,
+  and each node's badges form a group placed beside it, off every node
+  (`priv/js/ash_a2ui_diagram_layout.js`, unit-tested).
+
 ### Features:
+
+- **`param_placeholders` on a `:report` component.** A placeholder per report
+  param (`param_placeholders search: "Search vendors"`), emitted as the param
+  TextField's `"placeholder"` under the admin catalog, as `search_placeholder`
+  is for a query's search box. Keys must be among the component's `params`.
+- **`/ui/loading` and `AshA2ui.Loading`.** A reserved flag that says a surface's
+  rows are still being fetched, with `AshA2ui.Loading.messages/3` to set it. A
+  `:report` component now carries a loading row (`report_<name>_loading`,
+  templated over `/ui/loading_visible`), so an empty report no longer reads as
+  "no rows" while its rows are on the way. The hook sets the flag while a
+  `query` or `report` call it sent is unanswered; a host that runs a report's rows
+  on arrival brackets the fetch with the same messages.
+
+- **Admin catalog 1.13: plain links.** A `field`'s `link_url :field` links
+  its value to a page or address held by another field of the same
+  resource (a path or an absolute URL), not to a surface's record. Rows carry
+  `_links/<field>` as `{href, label}` with no `surface`; `linkEntries` keeps
+  such entries and the stock catalog draws them as ordinary links. Verified:
+  a public field of the resource, and never alongside `link`, `links` or
+  `source`. The `Field` struct gains `link_url`.
 
 - **Admin catalog 1.12: record pages.** A page about one record (a
   pickerless context, its detail cards and related tables) can now be laid
@@ -1080,7 +1110,7 @@ changes is the wire format and the way a host wires the renderer.
   or nested forms keep those subtrees byte-equal to the basic-v2
   composition — only the core upgrades. The catalog definition ships at
   `priv/a2ui/admin_v1/catalog.json` (catalog id
-  `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1` since 2.0); the Lit renderer registration
+  `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2` since 2.0); the Lit renderer registration
   ships separately as `priv/js/ash_admin_catalog.js`
   (`createAshAdminCatalog(deps)`). The action handler learns nothing new —
   zero new action names or dispatch clauses.

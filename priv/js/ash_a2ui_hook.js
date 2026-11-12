@@ -39,6 +39,11 @@
  *      the container, `detail = {functionCallId, surfaceId, response}`,
  *      where `response` is `{value}` or `{error: {code, message}}`.
  *
+ * A `query` or `report` call also sets the surface's reserved `/ui/loading`
+ * flag (and `/ui/loading_visible`, see `AshA2ui.Loading`) while any such
+ * call is unanswered, so an empty table or report reads as "rows on the
+ * way" rather than "no rows".
+ *
  * An `event` action carries no correlation: it goes out as an `action`
  * message with no pending state.
  *
@@ -144,6 +149,11 @@ import {
   rpcError,
   slowFeedback,
 } from "./ash_a2ui_protocol.js";
+
+// The ash_a2ui actions that fetch the data a surface shows: the hook marks
+// the surface loading (AshA2ui.Loading) from the call until the agent
+// answers it.
+const FETCH_ACTIONS = new Set(["query", "report"]);
 
 let hookDeps = null;
 
@@ -546,7 +556,9 @@ export const AshA2ui = {
     const surfaceId = context && context.surface && context.surface.id;
     const functionCallId = randomCallId();
     const quiet = quietAction(args);
+    const fetches = Boolean(args) && FETCH_ACTIONS.has(args.name);
 
+    if (fetches) this.trackFetch(surfaceId, functionCallId, true);
     if (!quiet) {
       this.writeFeedback(
         surfaceId,
@@ -574,6 +586,8 @@ export const AshA2ui = {
       }
     }
 
+    if (fetches) this.trackFetch(surfaceId, functionCallId, false);
+
     if (this.el && typeof this.el.dispatchEvent === "function") {
       this.el.dispatchEvent(
         new CustomEvent(ACTION_RESPONSE_EVENT, {
@@ -584,6 +598,34 @@ export const AshA2ui = {
     }
 
     return response.value;
+  },
+
+  /**
+   * Counts the surface's data fetches in flight and writes the reserved
+   * `/ui/loading` flag (and its `/ui/loading_visible` zero-or-one list, see
+   * `AshA2ui.Loading`) when the first starts and the last is answered or
+   * times out, so an earlier answer never hides a later fetch's loading row.
+   */
+  trackFetch(surfaceId, functionCallId, started) {
+    if (!this.fetching) this.fetching = new Map();
+    const calls = this.fetching.get(surfaceId) || new Set();
+    const before = calls.size;
+    if (started) calls.add(functionCallId);
+    else calls.delete(functionCallId);
+    this.fetching.set(surfaceId, calls);
+    if ((before === 0) !== (calls.size === 0)) this.writeLoading(surfaceId, calls.size > 0);
+  },
+
+  /** Writes the reserved `/ui/loading` flag and `/ui/loading_visible` list. */
+  writeLoading(surfaceId, loading) {
+    if (!this.processor || !this.surfaceExists(surfaceId)) return;
+    this.apply([
+      {version: PROTOCOL_VERSION, updateDataModel: {surfaceId, path: "/ui/loading", value: loading}},
+      {
+        version: PROTOCOL_VERSION,
+        updateDataModel: {surfaceId, path: "/ui/loading_visible", value: loading ? [{id: "on"}] : []},
+      },
+    ]);
   },
 
   /**

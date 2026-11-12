@@ -173,7 +173,10 @@ defmodule AshA2ui.RendererMessagesTest do
 
     test "the quiet actions are the ones the shipped hook writes no pending state for" do
       source = File.read!("priv/js/ash_a2ui_protocol.js")
-      [_all, list] = Regex.run(~r/export const QUIET_ACTIONS = Object\.freeze\(\[([^\]]*)\]/, source)
+
+      [_all, list] =
+        Regex.run(~r/export const QUIET_ACTIONS = Object\.freeze\(\[([^\]]*)\]/, source)
+
       names = Regex.scan(~r/"([a-z_]+)"/, list, capture: :all_but_first) |> List.flatten()
 
       assert Enum.sort(names) == Enum.sort(ActionHandler.quiet_actions())

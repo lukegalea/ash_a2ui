@@ -133,6 +133,19 @@ defmodule AshA2ui do
         Table/detail only.
         """
       ],
+      link_url: [
+        type: :atom,
+        doc: """
+        Renders this field as a plain link to a page or address rather than to a
+        surface's record: `link_url :quote_request_url` names a public attribute
+        or calculation of the same resource whose value is the URL (a path such as
+        `/requests/42`, or an absolute address). The field's own value is the link
+        text; a `nil` or `""` URL means no link. Rows carry `_links/<field>` as
+        `%{"href", "label"}` with no `"surface"`, and renderers follow the href
+        (admin catalog 1.13). Cannot be combined with `link`, `links` or `source`.
+        Table/detail only.
+        """
+      ],
       link_label: [
         type: :atom,
         doc: """
@@ -1741,6 +1754,16 @@ defmodule AshA2ui do
         (bound to the reserved `/report/<name>/params/<param>` paths and
         submitted by the Run button). Defaults to all of the action's
         arguments, in declaration order.
+        """
+      ],
+      param_placeholders: [
+        type: :keyword_list,
+        doc: """
+        A placeholder per `:report` param, e.g.
+        `param_placeholders search: "Search vendors", status: "Any status"`.
+        Emitted as that param's TextField `"placeholder"` on the admin
+        catalog (the basic TextField takes none); the field keeps its
+        `"label"` as its accessible name. Keys must be among `params`.
         """
       ],
       create_action: [

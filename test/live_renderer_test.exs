@@ -368,7 +368,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert %{"agentFunctionResponse" => %{"functionCallId" => "fc_query", "value" => %{}}} =
                  List.last(messages)
 
-        refute Enum.any?(messages, &match?(%{"updateDataModel" => %{"path" => "/ui/feedback"}}, &1))
+        refute Enum.any?(
+                 messages,
+                 &match?(%{"updateDataModel" => %{"path" => "/ui/feedback"}}, &1)
+               )
+
         assert %{"search" => "x"} = :sys.get_state(view.pid).socket.assigns.ash_a2ui_query_state
       end
 

@@ -1,5 +1,5 @@
 /**
- * Shared design tokens and helpers for the Ash admin catalog v1 renderer
+ * Shared design tokens and helpers for the Ash admin catalog v2 renderer
  * (`ash_admin_catalog.js`). Internal module — the public surface of this
  * library's JS is `createAshAdminCatalog/1`; everything here exists so the
  * ten admin components share one deliberate design system.
@@ -577,7 +577,12 @@ export function badgeTone(tone) {
 export function linkEntries(value) {
   const list = Array.isArray(value) ? value : value ? [value] : [];
   return list.filter(
-    (entry) => entry && typeof entry === "object" && typeof entry.surface === "string" && entry.surface !== "",
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      ((typeof entry.surface === "string" && entry.surface !== "") ||
+        // 1.13: a plain link, a page or address with no surface.
+        (!entry.surface && typeof entry.href === "string" && entry.href !== "")),
   );
 }
 
