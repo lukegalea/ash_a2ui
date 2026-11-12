@@ -15,8 +15,10 @@ defmodule AshA2ui.Test.SchemaHelper do
       `agent_to_renderer_list.json`), `validate_agent_message/2`;
     * messages the renderer sends: `assert_valid_renderer_message/2`,
       `validate_renderer_message/2`;
-    * a payload that mixes catalogs passes `catalogs: [file, ...]` to any of
-      them (default: the basic catalog alone);
+    * the catalogs a payload uses are `catalogs: [file, ...]`, paths relative
+      to `priv/a2ui/v1_0` (default: the basic and ash_a2ui catalogs, what
+      every ash_a2ui surface uses; an admin surface adds
+      `admin_catalogs/0`);
     * catalogs: `assert_valid_catalog/1`, `validate_catalog/1` (structure
       against `catalog_definition.json`, plus the UAX #31 identifier and
       restricted-`$ref`-target rules the upstream runner checks in code);
@@ -91,6 +93,17 @@ defmodule AshA2ui.Test.SchemaHelper do
 
   ## Catalogs
 
+  @doc """
+  The catalog files an admin-catalog (`catalog: :admin_v1`) surface uses:
+  pass them as `catalogs:`.
+  """
+  def admin_catalogs,
+    do: [
+      "catalogs/basic/v1/catalog.json",
+      "catalogs/ash_a2ui/catalog.json",
+      "../admin_v1/catalog.json"
+    ]
+
   @doc "Asserts `catalog` is a valid catalog definition. Returns it."
   def assert_valid_catalog(catalog),
     do: assert_valid(validate_catalog(catalog), catalog, "catalog")
@@ -115,13 +128,16 @@ defmodule AshA2ui.Test.SchemaHelper do
 
   @doc """
   Validates `component` against the schema of the component `name` in
-  `catalog` (a decoded catalog map), with the catalog's `$defs` in scope.
+  `catalog` (a decoded catalog map), with the catalog's `$defs` in scope and
+  its relative refs (`common_types.json#/$defs/...`) resolved against the
+  vendored spec.
   """
   def validate_catalog_component(catalog, name, component) do
     catalog
     |> Map.fetch!("components")
     |> Map.fetch!(name)
     |> Map.put("$defs", Map.get(catalog, "$defs", %{}))
+    |> Map.put("$id", Resolver.base() <> "catalog_component_#{name}.json")
     |> build_schema()
     |> validate(component)
   end
@@ -136,7 +152,7 @@ defmodule AshA2ui.Test.SchemaHelper do
   `catalogs:` names the catalog file, or the list of mixed catalog files,
   that the `catalog.json` refs resolve to (relative to `priv/a2ui/v1_0`), as
   a conformance suite's `"catalog"` key does upstream. The default is the
-  basic catalog alone. A payload that mixes catalogs (`@catalogId`,
+  basic and ash_a2ui catalogs. A payload that mixes catalogs (`@catalogId`,
   `FunctionCall.catalogId`) validates against the list of every catalog it
   uses. Built schemas are cached.
   """
