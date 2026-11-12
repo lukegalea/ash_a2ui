@@ -11,7 +11,7 @@
         "skipped": 0
       }
     },
-    "version": "v1.0"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -72,7 +72,7 @@
         }
       ]
     },
-    "version": "v1.0"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -80,7 +80,7 @@
       "surfaceId": "bulk_tasks",
       "value": []
     },
-    "version": "v1.0"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -103,7 +103,7 @@
         "totalCount": 3
       }
     },
-    "version": "v1.0"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -111,7 +111,7 @@
       "surfaceId": "bulk_tasks",
       "value": {}
     },
-    "version": "v1.0"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -119,13 +119,16 @@
       "surfaceId": "bulk_tasks",
       "value": {}
     },
-    "version": "v1.0"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
-      "path": "/ui/response",
+      "path": "/ui/feedback",
       "surfaceId": "bulk_tasks",
       "value": {
+        "code": "",
+        "functionCallId": "",
+        "kind": "success",
         "message": "Approve: 1 of 1 selected records done.",
         "result": {
           "errors": [],
@@ -134,21 +137,9 @@
           "refused": 0,
           "skipped": 0
         },
-        "resultText": "",
-        "status": "ok"
+        "resultText": ""
       }
     },
-    "version": "v1.0"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/feedback",
-      "surfaceId": "bulk_tasks",
-      "value": {
-        "kind": "success",
-        "message": "Approve: 1 of 1 selected records done."
-      }
-    },
-    "version": "v1.0"
+    "version": "1.0"
   }
 ]

@@ -9,7 +9,7 @@
       "surfaceId": "experience_task",
       "value": "create"
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -38,7 +38,7 @@
         ]
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -46,7 +46,7 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -54,18 +54,22 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
-        "kind": null,
-        "message": ""
+        "code": "",
+        "functionCallId": "",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "submit_form",
@@ -77,18 +81,22 @@
       "surfaceId": "experience_task",
       "value": "attribute name is required"
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
+        "code": "VALIDATION_FAILED",
+        "functionCallId": "",
         "kind": "error",
-        "message": "Validation failed. Please review the field errors."
+        "message": "Validation failed. Please review the field errors.",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "submit_form",
@@ -109,7 +117,7 @@
         }
       ]
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -117,7 +125,7 @@
       "surfaceId": "experience_task",
       "value": []
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -151,7 +159,7 @@
         "totalCount": 4
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -159,7 +167,7 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -167,23 +175,7 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result",
-      "surfaceId": "experience_task",
-      "value": {}
-    },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result_text",
-      "surfaceId": "experience_task",
-      "value": ""
-    },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -191,7 +183,7 @@
       "surfaceId": "experience_task",
       "value": "browse"
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -208,18 +200,22 @@
         "visible": []
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
+        "code": "",
+        "functionCallId": "",
         "kind": "success",
-        "message": "Created successfully."
+        "message": "Created successfully.",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "view_record",
@@ -231,7 +227,7 @@
       "surfaceId": "experience_task",
       "value": "view"
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -256,7 +252,7 @@
         ]
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -264,18 +260,22 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
-        "kind": null,
-        "message": ""
+        "code": "",
+        "functionCallId": "",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -286,7 +286,7 @@
         "name": "one"
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "start_edit",
@@ -298,7 +298,7 @@
       "surfaceId": "experience_task",
       "value": "edit"
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -327,7 +327,7 @@
         ]
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -335,18 +335,22 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
-        "kind": null,
-        "message": ""
+        "code": "",
+        "functionCallId": "",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -357,7 +361,7 @@
         "name": "one"
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "submit_form",
@@ -378,7 +382,7 @@
         }
       ]
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -386,7 +390,7 @@
       "surfaceId": "experience_task",
       "value": []
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -420,7 +424,7 @@
         "totalCount": 4
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -428,7 +432,7 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -436,23 +440,7 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result",
-      "surfaceId": "experience_task",
-      "value": {}
-    },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result_text",
-      "surfaceId": "experience_task",
-      "value": ""
-    },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -460,7 +448,7 @@
       "surfaceId": "experience_task",
       "value": "browse"
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -477,18 +465,22 @@
         "visible": []
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
+        "code": "",
+        "functionCallId": "",
         "kind": "success",
-        "message": "Updated successfully."
+        "message": "Updated successfully.",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "cancel_record_task",
@@ -500,7 +492,7 @@
       "surfaceId": "experience_task",
       "value": "browse"
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -517,7 +509,7 @@
         "visible": []
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -525,7 +517,7 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -533,18 +525,22 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
-        "kind": null,
-        "message": ""
+        "code": "",
+        "functionCallId": "",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "query",
@@ -565,7 +561,7 @@
         }
       ]
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -573,7 +569,7 @@
       "surfaceId": "experience_task",
       "value": []
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -607,7 +603,7 @@
         "totalCount": 4
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "invoke",
@@ -628,7 +624,7 @@
         }
       ]
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -636,7 +632,7 @@
       "surfaceId": "experience_task",
       "value": []
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -670,7 +666,7 @@
         "totalCount": 3
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -678,7 +674,7 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -686,34 +682,22 @@
       "surfaceId": "experience_task",
       "value": {}
     },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result",
-      "surfaceId": "experience_task",
-      "value": {}
-    },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result_text",
-      "surfaceId": "experience_task",
-      "value": ""
-    },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
+        "code": "",
+        "functionCallId": "",
         "kind": "success",
-        "message": "Destroy completed."
+        "message": "Destroy completed.",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "invoke",
@@ -724,11 +708,15 @@
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
+        "code": "INVALID_ACTION",
+        "functionCallId": "",
         "kind": "error",
-        "message": "Action \"nope\" is not allowed: it is not listed in the view's row_actions."
+        "message": "Action \"nope\" is not allowed: it is not listed in the view's row_actions.",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "action": "bogus",
@@ -739,10 +727,14 @@
       "path": "/ui/feedback",
       "surfaceId": "experience_task",
       "value": {
+        "code": "UNKNOWN_ACTION",
+        "functionCallId": "",
         "kind": "error",
-        "message": "Unknown action \"bogus\"."
+        "message": "Unknown action \"bogus\".",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   }
 ]

@@ -11,7 +11,7 @@
         "skipped": 0
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -72,7 +72,7 @@
         }
       ]
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -80,7 +80,7 @@
       "surfaceId": "bulk_tasks",
       "value": []
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -106,7 +106,7 @@
         "totalCount": 3
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -114,7 +114,7 @@
       "surfaceId": "bulk_tasks",
       "value": {}
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -122,33 +122,27 @@
       "surfaceId": "bulk_tasks",
       "value": {}
     },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result",
-      "surfaceId": "bulk_tasks",
-      "value": {}
-    },
-    "version": "v0.9.1"
-  },
-  {
-    "updateDataModel": {
-      "path": "/ui/action_result_text",
-      "surfaceId": "bulk_tasks",
-      "value": ""
-    },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
       "path": "/ui/feedback",
       "surfaceId": "bulk_tasks",
       "value": {
+        "code": "",
+        "functionCallId": "",
         "kind": "success",
-        "message": "Approve: 1 of 1 selected records done."
+        "message": "Approve: 1 of 1 selected records done.",
+        "result": {
+          "errors": [],
+          "failed": 0,
+          "ok": 1,
+          "refused": 0,
+          "skipped": 0
+        },
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   }
 ]

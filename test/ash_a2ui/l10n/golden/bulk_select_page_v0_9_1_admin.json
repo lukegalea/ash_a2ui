@@ -63,7 +63,7 @@
         }
       ]
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -71,7 +71,7 @@
       "surfaceId": "bulk_tasks",
       "value": []
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   },
   {
     "updateDataModel": {
@@ -97,6 +97,6 @@
         "totalCount": 3
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   }
 ]

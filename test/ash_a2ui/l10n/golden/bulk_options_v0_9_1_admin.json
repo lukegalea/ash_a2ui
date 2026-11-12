@@ -4,10 +4,14 @@
       "path": "/ui/feedback",
       "surfaceId": "bulk_tasks",
       "value": {
+        "code": "INVALID_ACTION",
+        "functionCallId": "",
         "kind": "error",
-        "message": "Context \"project\" is not searchable: it declares no option_search."
+        "message": "Context \"project\" is not searchable: it declares no option_search.",
+        "result": {},
+        "resultText": ""
       }
     },
-    "version": "v0.9.1"
+    "version": "1.0"
   }
 ]
