@@ -13,6 +13,7 @@ defmodule AshA2ui.RelatedTablesTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.Links.{Note, Participant, PeopleTaskUI, PeopleUI, Person}
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Paginated
   alias AshA2ui.Test.Surface
 
@@ -49,16 +50,7 @@ defmodule AshA2ui.RelatedTablesTest do
   defp root(messages), do: value_at(messages, "/")
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "people",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "people", context)
   end
 
   test "related tables resolve against their own resource" do
@@ -322,16 +314,7 @@ defmodule AshA2ui.RelatedTablesTest do
       initial = data["records"]
 
       {:ok, messages} =
-        ActionHandler.handle(Paginated, %{
-          "version" => "1.0",
-          "action" => %{
-            "surfaceId" => "test_surface",
-            "sourceComponentId" => "test_component",
-            "timestamp" => "2026-11-12T12:00:00Z",
-            "name" => "query",
-            "context" => %{"query" => %{}}
-          }
-        })
+        ActionHandler.handle(Paginated, Messages.call("query", "test_surface", %{"query" => %{}}))
 
       refreshed = value_at(messages, "/records")
 

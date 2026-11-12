@@ -316,16 +316,13 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/query")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
-        envelope = %{
-          "version" => "1.0",
-          "action" => %{
-            "name" => "query",
-            "surfaceId" => "paginated",
-            "sourceComponentId" => "query_apply_button",
-            "timestamp" => "2026-07-10T12:00:00Z",
-            "context" => %{"query" => %{"search" => "nothing matches this"}, "page" => 1}
-          }
-        }
+        envelope =
+          Messages.call(
+            "query",
+            "paginated",
+            %{"query" => %{"search" => "nothing matches this"}, "page" => 1},
+            source: "query_apply_button"
+          )
 
         SchemaHelper.assert_valid_renderer_message(envelope)
         render_hook(view, "a2ui:message", envelope)
@@ -336,7 +333,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert [
                  %{"updateDataModel" => %{"path" => "/records", "value" => []}},
                  %{"updateDataModel" => %{"path" => "/_empty_visible", "value" => [_on]}},
-                 %{"updateDataModel" => %{"path" => "/query", "value" => query_state}}
+                 %{"updateDataModel" => %{"path" => "/query", "value" => query_state}},
+                 %{"agentFunctionResponse" => %{"value" => %{}}}
                ] = messages
 
         assert %{
@@ -381,7 +379,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         capture_log(fn ->
-          render_hook(view, "a2ui:message", %{"version" => "v1.0", "action" => %{}})
+          render_hook(view, "a2ui:message", %{"version" => "v1.0", "callAgentFunction" => %{}})
           _ = :sys.get_state(view.pid)
         end)
 
@@ -394,19 +392,16 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/query-pubsub")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
-        envelope = %{
-          "version" => "1.0",
-          "action" => %{
-            "name" => "query",
-            "surfaceId" => "paginated",
-            "sourceComponentId" => "query_apply_button",
-            "timestamp" => "2026-07-10T12:00:00Z",
-            "context" => %{"query" => %{"search" => "needle"}, "page" => 1}
-          }
-        }
+        envelope =
+          Messages.call("query", "paginated", %{"query" => %{"search" => "needle"}, "page" => 1},
+            source: "query_apply_button"
+          )
 
         render_hook(view, "a2ui:message", envelope)
-        assert_push_event(view, "a2ui:messages", %{messages: [_records, _empty_state, _query]})
+
+        assert_push_event(view, "a2ui:messages", %{
+          messages: [_records, _empty_state, _query, _response]
+        })
 
         Phoenix.PubSub.broadcast(
           AshA2ui.Test.PubSub,
@@ -432,16 +427,13 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/context-pubsub")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
-        envelope = %{
-          "version" => "1.0",
-          "action" => %{
-            "name" => "context_select",
-            "surfaceId" => Fixtures.surface_id(),
-            "sourceComponentId" => "context_owner_option_button",
-            "timestamp" => "2026-07-10T12:00:00Z",
-            "context" => %{"context" => "owner", "value" => "o-1", "contexts" => %{}}
-          }
-        }
+        envelope =
+          Messages.call(
+            "context_select",
+            Fixtures.surface_id(),
+            %{"context" => "owner", "value" => "o-1", "contexts" => %{}},
+            source: "context_owner_option_button"
+          )
 
         SchemaHelper.assert_valid_renderer_message(envelope)
         render_hook(view, "a2ui:message", envelope)
@@ -532,16 +524,13 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/deep-link?tab=notes")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
-        render_hook(view, "a2ui:message", %{
-          "version" => "1.0",
-          "action" => %{
-            "name" => "context_select",
-            "surfaceId" => "notes",
-            "sourceComponentId" => "row_select",
-            "timestamp" => "2026-10-12T12:00:00Z",
-            "context" => %{"context" => "person", "value" => ada.id}
-          }
-        })
+        render_hook(
+          view,
+          "a2ui:message",
+          Messages.call("context_select", "notes", %{"context" => "person", "value" => ada.id},
+            source: "row_select"
+          )
+        )
 
         path = assert_patch(view)
         %URI{path: "/live-renderer/deep-link", query: query} = URI.parse(path)
@@ -610,20 +599,20 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
                  |> Enum.any?(&(&1["id"] == "table_cell_participations_note_title_value_link"))
                end)
 
-        render_hook(view, "a2ui:message", %{
-          "version" => "1.0",
-          "action" => %{
-            "name" => "open_surface",
-            "surfaceId" => "people",
-            "sourceComponentId" => "table_cell_participations_note_title_value_link",
-            "timestamp" => "2026-10-16T12:00:00Z",
-            "context" => %{
+        render_hook(
+          view,
+          "a2ui:message",
+          Messages.call(
+            "open_surface",
+            "people",
+            %{
               "field" => "note_title",
               "surface" => "note",
               "recordId" => kickoff.id
-            }
-          }
-        })
+            },
+            source: "table_cell_participations_note_title_value_link"
+          )
+        )
 
         assert_redirect(view, "/app/r/note/#{kickoff.id}")
       end
@@ -653,16 +642,16 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/people-deep-link")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
-        render_hook(view, "a2ui:message", %{
-          "version" => "1.0",
-          "action" => %{
-            "name" => "open_surface",
-            "surfaceId" => "people",
-            "sourceComponentId" => "forged",
-            "timestamp" => "2026-10-16T12:00:00Z",
-            "context" => %{"field" => "note_title", "surface" => "admin", "recordId" => "x"}
-          }
-        })
+        render_hook(
+          view,
+          "a2ui:message",
+          Messages.call(
+            "open_surface",
+            "people",
+            %{"field" => "note_title", "surface" => "admin", "recordId" => "x"},
+            source: "forged"
+          )
+        )
 
         assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
 

@@ -15,6 +15,7 @@ defmodule AshA2ui.TableDisplays.TimelineTest do
   alias AshA2ui.Dynamic.Error
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.ResolvedView
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
   alias AshA2ui.Test.TableDisplays.{TimelineUI, Visit}
 
@@ -76,16 +77,7 @@ defmodule AshA2ui.TableDisplays.TimelineTest do
   end
 
   defp envelope(context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "query",
-        "surfaceId" => "visit_timeline",
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-10-21T00:00:00Z",
-        "context" => context
-      }
-    }
+    Messages.call("query", "visit_timeline", context)
   end
 
   describe "encoding" do

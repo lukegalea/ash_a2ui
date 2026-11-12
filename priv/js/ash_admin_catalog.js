@@ -604,9 +604,9 @@ export function buildSchemas(basicCatalog = null) {
       primaryLabel: DynamicStringSchema.nullable().optional(),
       busy: DynamicBooleanSchema.nullable().optional(),
       destructive: Bool.optional(),
-      // Emitted as {"event": submit_event} — the frozen submit_form
-      // envelope, binder-resolved into a callable (ActionSchema classifies
-      // ACTION via its REF description and its {event} union option).
+      // Emitted as the submit_form ashAction call ({"functionCall": ...}),
+      // binder-resolved into a callable (ActionSchema classifies ACTION via
+      // its REF description).
       action: ActionSchema.optional(),
       children: ChildListSchema.optional(),
       weight: Num.optional(),
@@ -740,11 +740,11 @@ function primaryVariantTone(variant) {
 
 /**
  * The action an admin envelope sends, as an `actionSpec`: a row action
- * entry (`{label, action: <name>, context}`) or a bare admin event
+ * entry (`{label, action: <name>, context}`) or a bare admin envelope
  * (`{name, context}`: pagination, sort, the empty-state clear, the
  * calendar window) is server-handled and goes out as the ash_a2ui
- * catalog's `ashAction`; a full Action (`{functionCall}` or `{event}`)
- * keeps its own form. Null for anything else.
+ * catalog's `ashAction`; a full `ashAction` Action (`{functionCall}`)
+ * keeps its catalog id. Null for anything else, an event action included.
  */
 function adminActionSpec(envelope) {
   if (!envelope || typeof envelope !== "object") return null;

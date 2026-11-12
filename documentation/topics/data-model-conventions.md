@@ -252,7 +252,7 @@ written whole, and `createSurface.dataModel` starts it idle:
 | `kind` | `"success"`, `"warning"`, `"error"`, `"pending"` (written by the hook while a call is in flight), or `""` (idle) |
 | `message` | Display-ready text |
 | `code` | `""` on success and idle, otherwise the error code (`VALIDATION_FAILED`, `FORBIDDEN`, `ACTION_FAILED`, ...); `"TIMEOUT"` on a pending map the hook rewrote because the call has gone unanswered past its watchdog |
-| `functionCallId` | The call this outcome answers, `""` for a plain `action` event |
+| `functionCallId` | The call this outcome answers, `""` when it answers none (a refused `action` event, a host's own write) |
 | `result` | The serialized map a map-returning generic action returned (`{}` otherwise) |
 | `resultText` | The same result as display-ready text: one `Humanized key: value` line per key, sorted by key (`""` otherwise) |
 

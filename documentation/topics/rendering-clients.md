@@ -44,9 +44,10 @@ Renderer → agent. The messages the handler accepts, each verbatim:
 }
 ```
 
-Alongside it: a plain `action` event (same `name` and `context`, no
-response), `rendererFunctionResponse` (the answer to a
-`callRendererFunction`) and `error` (a renderer-side failure, logged).
+Alongside it: `rendererFunctionResponse` (the answer to a
+`callRendererFunction`) and `error` (a renderer-side failure, logged). A
+plain `action` event is refused with an `UNKNOWN_FUNCTION` feedback error;
+the encoder never emits one.
 
 The core `args.name` values AshA2ui emits and accepts are `"submit_form"`,
 `"invoke"` (generic/row actions), `"prompt"`, `"query"` and the task-panel

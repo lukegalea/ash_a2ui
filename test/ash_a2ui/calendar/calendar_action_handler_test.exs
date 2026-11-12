@@ -13,21 +13,13 @@ defmodule AshA2ui.Calendar.CalendarActionHandlerTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.Calendar.{Event, MonthUI}
+  alias AshA2ui.Test.Messages
 
   @red %{team: "red"}
   @blue %{team: "blue"}
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "calendar_month",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "calendar_month", context)
   end
 
   defp value_at(messages, path) do

@@ -98,5 +98,12 @@
       }
     },
     "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-bulk_select",
+      "value": {}
+    },
+    "version": "1.0"
   }
 ]

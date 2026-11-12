@@ -14,6 +14,7 @@ defmodule AshA2ui.Board.BoardGoldenTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.BoardTask
+  alias AshA2ui.Test.Messages
 
   @golden_dir Path.expand("golden", __DIR__)
 
@@ -57,16 +58,9 @@ defmodule AshA2ui.Board.BoardGoldenTest do
   end
 
   defp claim_envelope(card) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "invoke",
-        "surfaceId" => "board_tasks",
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-10-17T00:00:00Z",
-        "context" => %{"action" => "claim", "recordId" => card.id}
-      }
-    }
+    Messages.call("invoke", "board_tasks", %{"action" => "claim", "recordId" => card.id},
+      id: "call-claim"
+    )
   end
 
   @tag ac: "A2UI-105B/AC-6"

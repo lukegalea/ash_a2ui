@@ -16,6 +16,7 @@ defmodule AshA2ui.Calendar.CalendarDynamicTest do
   alias AshA2ui.Dynamic.Error
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.Test.Calendar.{Event, MonthUI}
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   @allowlist Dynamic.allowlist([Event])
@@ -96,20 +97,17 @@ defmodule AshA2ui.Calendar.CalendarDynamicTest do
     assert Enum.any?(components, &(&1["id"] == "calendar_nav"))
 
     # The window action is the standard query, served on the held surface.
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "query",
-        "surfaceId" => surface.surface_id,
-        "sourceComponentId" => "calendar_next_button",
-        "timestamp" => "2026-10-17T00:00:00Z",
-        "context" => %{
+    envelope =
+      Messages.call(
+        "query",
+        surface.surface_id,
+        %{
           "component" => "schedule",
           "query" => data["query"],
           "windowDelta" => 1
-        }
-      }
-    }
+        },
+        source: "calendar_next_button"
+      )
 
     assert {:ok, reply} = Dynamic.handle_action(surface, envelope, actor: red, authorize?: false)
     assert value_at(reply, "/query")["window"]["from"] == "2026-10-19"

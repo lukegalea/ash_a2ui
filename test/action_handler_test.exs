@@ -20,7 +20,8 @@ defmodule AshA2ui.ActionHandlerTest do
 
   @actor %{id: "test-actor"}
 
-  defp envelope(name, surface_id, context), do: Messages.action(name, surface_id, context)
+  defp envelope(name, surface_id, context),
+    do: Messages.call(name, surface_id, context, id: "call-1")
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn
@@ -30,7 +31,7 @@ defmodule AshA2ui.ActionHandlerTest do
   end
 
   defp paths(messages) do
-    Enum.map(messages, & &1["updateDataModel"]["path"])
+    for(%{"updateDataModel" => %{"path" => path}} <- messages, do: path)
   end
 
   defp assert_all_valid(messages) do
@@ -320,7 +321,7 @@ defmodule AshA2ui.ActionHandlerTest do
       assert %{
                "kind" => "error",
                "code" => "INVALID_ACTION",
-               "functionCallId" => "",
+               "functionCallId" => "call-1",
                "message" => ~s(Malformed start_edit action: context is missing "recordId".)
              } = value_at(messages, "/ui/feedback")
     end
@@ -329,7 +330,7 @@ defmodule AshA2ui.ActionHandlerTest do
       record = Ash.create!(KitchenSink, %{name: "Pick", count: 5}, authorize?: false)
       env = envelope("select_row", "kitchen_sink", %{"recordId" => record.id})
 
-      assert {:error, [message]} = ActionHandler.handle(KitchenSink, env)
+      assert {:error, [message, _response]} = ActionHandler.handle(KitchenSink, env)
       assert_valid_agent_message(message)
       assert value_at([message], "/ui/feedback")["message"] == ~s(Unknown action "select_row".)
       refute value_at([message], "/form")
@@ -347,7 +348,7 @@ defmodule AshA2ui.ActionHandlerTest do
     test "unknown action name returns an UNKNOWN_ACTION feedback error" do
       env = envelope("explode", "kitchen_sink", %{})
 
-      assert {:error, [message]} = ActionHandler.handle(KitchenSink, env)
+      assert {:error, [message, _response]} = ActionHandler.handle(KitchenSink, env)
       assert_valid_agent_message(message)
 
       assert %{"kind" => "error", "code" => "UNKNOWN_ACTION", "message" => text} =
@@ -404,7 +405,10 @@ defmodule AshA2ui.ActionHandlerTest do
 
       assert [%{name: "Standalone"}] = Ash.read!(Minimal, authorize?: false)
 
-      assert Enum.all?(messages, fn message ->
+      assert [%{"agentFunctionResponse" => %{"functionCallId" => "call-1"}} | updates] =
+               Enum.reverse(messages)
+
+      assert Enum.all?(updates, fn message ->
                message["updateDataModel"]["surfaceId"] == "minimal_standalone"
              end)
     end

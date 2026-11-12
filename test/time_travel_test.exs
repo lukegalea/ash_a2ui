@@ -108,7 +108,7 @@ defmodule AshA2ui.TimeTravelTest do
       [plan] = Ash.read!(Plan)
 
       envelope =
-        Messages.action("invoke", "plans", %{
+        Messages.call("invoke", "plans", %{
           "action" => "change_tier",
           "recordId" => plan.id
         })
@@ -122,7 +122,7 @@ defmodule AshA2ui.TimeTravelTest do
 
     test "reads (query refreshes) run at the instant" do
       %{t0: t0} = plan_with_history()
-      envelope = Messages.action("query", "plans", %{})
+      envelope = Messages.call("query", "plans", %{})
 
       assert {_ok_or_error, messages} =
                ActionHandler.handle(PlanUI, envelope, as_of: DateTime.add(t0, 1, :day))

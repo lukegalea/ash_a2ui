@@ -93,13 +93,18 @@
           "variant": "borderless",
           "child": "card_move_label",
           "action": {
-            "event": {
-              "name": "move_card",
-              "context": {
-                "id": {
-                  "@path": "id"
-                },
-                "to": "done"
+            "functionCall": {
+              "@call": "ashAction",
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
+              "args": {
+                "name": "move_card",
+                "sourceComponentId": "card_move",
+                "context": {
+                  "id": {
+                    "@path": "id"
+                  },
+                  "to": "done"
+                }
               }
             }
           }

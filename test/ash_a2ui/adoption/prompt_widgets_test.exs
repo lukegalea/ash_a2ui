@@ -16,6 +16,7 @@ defmodule AshA2ui.Adoption.PromptWidgetsTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.Adoption.{Clerk, Job, JobsUI, SearchJobsUI}
+  alias AshA2ui.Test.Messages
 
   @red %{id: "u-red", team: "red"}
 
@@ -43,16 +44,7 @@ defmodule AshA2ui.Adoption.PromptWidgetsTest do
   end
 
   defp envelope(surface_id, name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => surface_id,
-        "sourceComponentId" => "test",
-        "timestamp" => "2026-10-16T00:00:00Z",
-        "context" => context
-      }
-    }
+    Messages.call(name, surface_id, context, source: "test")
   end
 
   defp write_at(messages, path) do

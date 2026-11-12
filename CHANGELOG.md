@@ -53,8 +53,11 @@ changes is the wire format and the way a host wires the renderer.
 - Every server-handled control is an `ashAction` function call against the
   ash_a2ui catalog. The renderer sends a `callAgentFunction`; the handler
   answers with an `agentFunctionResponse` (last in the reply) carrying the
-  same `functionCallId`. A plain `action` event is still accepted and gets
-  the same data-model writes, with no response message.
+  same `functionCallId`. A plain `action` event is refused: nothing runs,
+  and `/ui/feedback` gets an `UNKNOWN_FUNCTION` error. The encoder never
+  emitted one, and the hook no longer sends one (`actionMessage` is gone
+  from `ash_a2ui_protocol.js`; `actionSpec`/`dispatchActionSpec` read and
+  send `ashAction` calls only).
 - Outcomes live in one map at `/ui/feedback`:
   `{kind, message, code, functionCallId, result, resultText}`, always written
   whole. `kind` is `""` when idle (it was `null`).

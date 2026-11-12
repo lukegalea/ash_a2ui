@@ -14,6 +14,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     """
 
     alias AshA2ui.Experience
+    alias AshA2ui.Test.Messages
 
     @catalog_id "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
     @surface_id "minimal_standalone"
@@ -92,16 +93,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       }
 
     def action_envelope(name \\ "submit_form", context \\ %{"form" => %{"name" => "Acme"}}) do
-      %{
-        "version" => "1.0",
-        "action" => %{
-          "name" => name,
-          "surfaceId" => @surface_id,
-          "sourceComponentId" => "form_submit",
-          "timestamp" => "2026-07-10T12:00:00Z",
-          "context" => context
-        }
-      }
+      Messages.call(name, @surface_id, context, source: "form_submit")
     end
 
     def notify(message) do
@@ -140,13 +132,21 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       Fixtures.notify({:action_fn, ui, envelope, opts})
 
       case envelope do
-        %{"action" => %{"context" => %{"fail" => true}}} ->
+        %{
+          "callAgentFunction" => %{
+            "callFunction" => %{"args" => %{"context" => %{"fail" => true}}}
+          }
+        } ->
           {:error, Fixtures.action_error_messages()}
 
-        %{"action" => %{"context" => %{"export" => call_id}}} ->
+        %{
+          "callAgentFunction" => %{
+            "callFunction" => %{"args" => %{"context" => %{"export" => call_id}}}
+          }
+        } ->
           {:ok, [Fixtures.download_call(call_id)]}
 
-        %{"action" => _action} ->
+        %{"callAgentFunction" => _call} ->
           {:ok, Fixtures.action_ok_messages()}
 
         # Function responses, errors and malformed messages: the real
@@ -172,7 +172,9 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     # selected person id from the envelope (deep-link push_patch tests).
     def notes_context_action(ui, envelope, opts) do
       Fixtures.notify({:action_fn, ui, envelope, opts})
-      value = get_in(envelope, ["action", "context", "value"]) || ""
+
+      value =
+        get_in(envelope, ["callAgentFunction", "callFunction", "args", "context", "value"]) || ""
 
       {:ok,
        [

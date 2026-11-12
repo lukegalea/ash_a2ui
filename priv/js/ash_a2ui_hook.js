@@ -8,8 +8,8 @@
  *   - the agent-to-renderer messages `AshA2ui.LiveRenderer` pushes as the
  *     "a2ui:messages" event go to `processor.processMessagesWithErrors`;
  *   - every renderer-to-agent message goes back, verbatim, as the single
- *     LiveView event "a2ui:message": an `action` (an event action), a
- *     `callAgentFunction` (an `ashAction` call), a
+ *     LiveView event "a2ui:message": a `callAgentFunction` (an
+ *     `ashAction` call), a
  *     `rendererFunctionResponse` (the answer to a `callRendererFunction`)
  *     or an `error` (each message the processor could not apply).
  *
@@ -139,7 +139,6 @@ import {
   FEEDBACK_PATH,
   FEEDBACK_TEXT_PATH,
   PROTOCOL_VERSION,
-  actionMessage,
   ashActionCall,
   createAshFunctionCatalog,
   panelStateOf,
@@ -482,9 +481,13 @@ export const AshA2ui = {
       downloadFile,
     });
 
+    // Every server-handled control is an ashAction call. An event action
+    // (none of the encoder's surfaces has one) is not sent: the agent
+    // refuses them.
     this.processor = new deps.MessageProcessor(
       [...deps.catalogs, ashCatalog],
-      (action) => this.send(actionMessage(action)),
+      (action) =>
+        console.warn("AshA2ui hook: event actions are not sent; use ashAction", action && action.name),
       {outboundListener: (message) => this.send(message)},
     );
 

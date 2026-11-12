@@ -1,7 +1,6 @@
 // The four P0 contract fixtures (test/fixtures/v1_0_contract), fed through
 // the hook and a real processor: every message applies with no error, and
-// every Button's action reaches the agent as the message its action form
-// calls for (an `action` for an event, a `callAgentFunction` for ashAction).
+// every Button's ashAction reaches the agent as a `callAgentFunction`.
 //
 // The fixtures are spec HEAD, whose component envelope keys are
 // `@`-prefixed. @a2ui/web_core 0.15.0 rejects those keys and drops the
@@ -45,22 +44,16 @@ for (const name of ["table", "form", "board", "wizard"]) {
         await tick();
 
         const [out] = sent(hook);
-        if (button.action.event) {
-          assert.equal(
-            out?.action?.name,
-            button.action.event.name,
-            `${name}: ${button.id} sends its event`,
-          );
-          assert.equal(out.action.surfaceId, surfaceId);
-          assert.equal(out.action.sourceComponentId, button.id);
-        } else {
-          assert.equal(out?.callAgentFunction?.callFunction?.["@call"], "ashAction");
-          assert.equal(out.callAgentFunction.callFunction.catalogId, ASH_A2UI_CATALOG_ID);
-          const {functionCallId} = out.callAgentFunction;
-          hook.processMessages([
-            {version: "1.0", agentFunctionResponse: {functionCallId, value: {}}},
-          ]);
-        }
+        assert.equal(
+          out?.callAgentFunction?.callFunction?.["@call"],
+          "ashAction",
+          `${name}: ${button.id} calls ashAction`,
+        );
+        assert.equal(out.callAgentFunction.callFunction.catalogId, ASH_A2UI_CATALOG_ID);
+        assert.equal(out.callAgentFunction.surfaceId, surfaceId);
+        assert.equal(out.callAgentFunction.callFunction.args.sourceComponentId, button.id);
+        const {functionCallId} = out.callAgentFunction;
+        hook.processMessages([{version: "1.0", agentFunctionResponse: {functionCallId, value: {}}}]);
         hook.pushed.length = 0;
       }
     }

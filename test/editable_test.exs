@@ -23,16 +23,7 @@ defmodule AshA2ui.EditableTest do
   alias AshA2ui.Test.Surface
 
   defp envelope(name, context, surface \\ "editable_words") do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => surface,
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, surface, context)
   end
 
   defp value_at(messages, path) do

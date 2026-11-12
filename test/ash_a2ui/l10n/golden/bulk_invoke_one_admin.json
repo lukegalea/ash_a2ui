@@ -130,7 +130,27 @@
       "surfaceId": "bulk_tasks",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-bulk_invoke",
+        "kind": "success",
+        "message": "Approve: 1 of 1 selected records done.",
+        "result": {
+          "errors": [],
+          "failed": 0,
+          "ok": 1,
+          "refused": 0,
+          "skipped": 0
+        },
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-bulk_invoke",
+      "value": {
+        "code": "",
+        "functionCallId": "call-bulk_invoke",
         "kind": "success",
         "message": "Approve: 1 of 1 selected records done.",
         "result": {

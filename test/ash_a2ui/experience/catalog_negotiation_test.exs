@@ -16,6 +16,7 @@ defmodule AshA2ui.Experience.CatalogNegotiationTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.Experience
   alias AshA2ui.Test.Experience.Task
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   @admin "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2"
@@ -122,16 +123,10 @@ defmodule AshA2ui.Experience.CatalogNegotiationTest do
     end
 
     test "the action handler's refresh follows the build's catalog" do
-      envelope = %{
-        "version" => "1.0",
-        "action" => %{
-          "name" => "query",
-          "surfaceId" => "experience_task",
-          "sourceComponentId" => "query_apply_button",
-          "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-          "context" => %{"query" => %{}, "page" => 1}
-        }
-      }
+      envelope =
+        Messages.call("query", "experience_task", %{"query" => %{}, "page" => 1},
+          source: "query_apply_button"
+        )
 
       query_state = fn messages ->
         Enum.find_value(messages, fn

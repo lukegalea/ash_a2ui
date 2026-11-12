@@ -14,7 +14,7 @@ defmodule AshA2ui.Wave4ReferralTest do
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
-  alias AshA2ui.Test.{Author, Referral, Surface}
+  alias AshA2ui.Test.{Author, Messages, Referral, Surface}
 
   setup do
     referrer = Ash.create!(Author, %{name: "Rita Referrer", email: "rita@referrals.test"})
@@ -54,22 +54,13 @@ defmodule AshA2ui.Wave4ReferralTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "referrals",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "referrals", context)
   end
 
   defp by_path(messages) do
-    Map.new(messages, fn %{"updateDataModel" => %{"path" => path, "value" => value}} ->
-      {path, value}
-    end)
+    for %{"updateDataModel" => %{"path" => path, "value" => value}} <- messages,
+        into: %{},
+        do: {path, value}
   end
 
   defp handle!(name, context) do
@@ -139,7 +130,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                    "path" => "/ui/feedback",
                    "value" => %{"message" => status}
                  }
-               }
+               },
+               _response
              ] = messages
 
       assert status =~ "not allowlisted"
@@ -199,7 +191,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                    "path" => "/ui/feedback",
                    "value" => %{"message" => status}
                  }
-               }
+               },
+               _response
              ] = messages
 
       assert status =~ ~s(Preset "everything" is not allowlisted)
@@ -307,7 +300,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                    "path" => "/ui/feedback",
                    "value" => %{"message" => status}
                  }
-               }
+               },
+               _response
              ] = messages
 
       assert status =~ "Approve is not available for this record"
@@ -336,7 +330,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                    "path" => "/ui/feedback",
                    "value" => %{"message" => status}
                  }
-               }
+               },
+               _response
              ] = messages
 
       assert status =~ "requires a \"recordId\""
@@ -431,7 +426,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                    "path" => "/ui/feedback",
                    "value" => %{"message" => status}
                  }
-               }
+               },
+               _response
              ] = messages
 
       assert status =~ "does not declare prompt_fields"
@@ -447,7 +443,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                    "path" => "/ui/feedback",
                    "value" => %{"message" => status}
                  }
-               }
+               },
+               _response
              ] = messages
 
       assert status =~ "Decline is not available for this record"
@@ -463,7 +460,8 @@ defmodule AshA2ui.Wave4ReferralTest do
                    "path" => "/ui/feedback",
                    "value" => %{"message" => status}
                  }
-               }
+               },
+               _response
              ] = messages
 
       assert status =~ "not allowed"

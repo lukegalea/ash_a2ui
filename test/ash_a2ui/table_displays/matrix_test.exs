@@ -17,6 +17,7 @@ defmodule AshA2ui.TableDisplays.MatrixTest do
   alias AshA2ui.Dynamic.Error
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.ResolvedView
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
   alias AshA2ui.Test.TableDisplays.{ArmMatrixUI, MatrixUI, Result}
 
@@ -184,19 +185,11 @@ defmodule AshA2ui.TableDisplays.MatrixTest do
       seed()
       {_components, value} = parts(MatrixUI)
 
-      envelope = %{
-        "version" => "1.0",
-        "action" => %{
-          "name" => "query",
-          "surfaceId" => "result_matrix",
-          "sourceComponentId" => "test_component",
-          "timestamp" => "2026-10-21T00:00:00Z",
-          "context" => %{
-            "component" => "results",
-            "query" => Map.put(value["query"], "search", "allergy")
-          }
-        }
-      }
+      envelope =
+        Messages.call("query", "result_matrix", %{
+          "component" => "results",
+          "query" => Map.put(value["query"], "search", "allergy")
+        })
 
       assert {:ok, messages} = ActionHandler.handle(MatrixUI, envelope, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)

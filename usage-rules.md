@@ -71,7 +71,8 @@ Sub-rules (addressable as `ash_a2ui:<name>`):
 - Server-handled controls send a **`callAgentFunction` calling `ashAction`**
   (`{name, sourceComponentId, context}`). The server writes the outcome to
   `/ui/feedback` and answers last with an `agentFunctionResponse` carrying
-  the same `functionCallId`. Plain `action` messages are fire-and-forget.
+  the same `functionCallId`. A plain `action` message is refused
+  (`UNKNOWN_FUNCTION`); nothing emits one.
 - `/ui/feedback` is the one outcome path:
   `{kind, message, code, functionCallId, result, resultText}`. `kind` is
   `""`, `pending`, `success`, `warning` or `error`; `result`/`resultText`

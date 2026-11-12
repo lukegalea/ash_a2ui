@@ -116,11 +116,16 @@
           "child": "row_view_label",
           "weight": 1,
           "action": {
-            "event": {
-              "name": "view_record",
-              "context": {
-                "id": {
-                  "@path": "id"
+            "functionCall": {
+              "@call": "ashAction",
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
+              "args": {
+                "name": "view_record",
+                "sourceComponentId": "row_view",
+                "context": {
+                  "id": {
+                    "@path": "id"
+                  }
                 }
               }
             }
@@ -146,10 +151,15 @@
           "component": "Button",
           "child": "page_prev_label",
           "action": {
-            "event": {
-              "name": "paginate",
-              "context": {
-                "page": "prev"
+            "functionCall": {
+              "@call": "ashAction",
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
+              "args": {
+                "name": "paginate",
+                "sourceComponentId": "page_prev",
+                "context": {
+                  "page": "prev"
+                }
               }
             }
           }
@@ -174,10 +184,15 @@
           "component": "Button",
           "child": "page_next_label",
           "action": {
-            "event": {
-              "name": "paginate",
-              "context": {
-                "page": "next"
+            "functionCall": {
+              "@call": "ashAction",
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
+              "args": {
+                "name": "paginate",
+                "sourceComponentId": "page_next",
+                "context": {
+                  "page": "next"
+                }
               }
             }
           }

@@ -17,6 +17,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
   alias AshA2ui.ResolvedView
   alias AshA2ui.Sections
   alias AshA2ui.Test.BoardTask
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
   alias AshA2ui.Test.SwimlaneBoardUI
   alias AshA2ui.Test.SwimlaneBoardUnqueriedUI
@@ -96,16 +97,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "swimlane_tasks",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "swimlane_tasks", context)
   end
 
   defp value_at(messages, path) do

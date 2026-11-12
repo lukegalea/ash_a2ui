@@ -290,7 +290,7 @@ defmodule AshA2ui.DynamicTest do
       # submitting rows round-trips: create_inline maps survive, pick_existing
       # rows reduce to their picked ids (the manage_relationship inputs)
       envelope =
-        Messages.action("submit_form", surface.surface_id, %{
+        Messages.call("submit_form", surface.surface_id, %{
           "values" => %{
             "subject" => "nested round trip",
             "notes" => [%{"_row" => "r1", "body" => "first", "rating" => "2"}],
@@ -654,16 +654,8 @@ defmodule AshA2ui.DynamicTest do
     test "submit_form creates through the spec's create action and refreshes" do
       surface = resolve!(minimal_spec())
 
-      envelope = %{
-        "version" => "1.0",
-        "action" => %{
-          "sourceComponentId" => "test_component",
-          "timestamp" => "2026-11-12T12:00:00Z",
-          "name" => "submit_form",
-          "surfaceId" => surface.surface_id,
-          "context" => %{"values" => %{"name" => "round-trip"}}
-        }
-      }
+      envelope =
+        Messages.call("submit_form", surface.surface_id, %{"values" => %{"name" => "round-trip"}})
 
       assert {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
@@ -682,17 +674,9 @@ defmodule AshA2ui.DynamicTest do
     test "follow-up messages always carry the server-held surface id" do
       surface = resolve!(minimal_spec())
 
-      envelope = %{
-        "version" => "1.0",
-        "action" => %{
-          "sourceComponentId" => "test_component",
-          "timestamp" => "2026-11-12T12:00:00Z",
-          "name" => "submit_form",
-          # A tampering client claims another surface — it is ignored.
-          "surfaceId" => "spoofed_surface",
-          "context" => %{"values" => %{"name" => "own-id"}}
-        }
-      }
+      # A tampering client claims another surface — it is ignored.
+      envelope =
+        Messages.call("submit_form", "spoofed_surface", %{"values" => %{"name" => "own-id"}})
 
       {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
 
@@ -706,12 +690,13 @@ defmodule AshA2ui.DynamicTest do
       surface = resolve!(minimal_spec())
 
       envelope =
-        Messages.action("invoke", surface.surface_id, %{
+        Messages.call("invoke", surface.surface_id, %{
           "action" => "destroy",
           "recordId" => record.id
         })
 
-      assert {:error, [message]} = Dynamic.handle_action(surface, envelope, authorize?: false)
+      assert {:error, [message, _response]} =
+               Dynamic.handle_action(surface, envelope, authorize?: false)
 
       assert %{
                "updateDataModel" => %{"path" => "/ui/feedback", "value" => %{"message" => status}}
@@ -731,11 +716,12 @@ defmodule AshA2ui.DynamicTest do
       surface = resolve!(spec)
 
       envelope =
-        Messages.action("query", surface.surface_id, %{
+        Messages.call("query", surface.surface_id, %{
           "query" => %{"sort" => "count", "dir" => "asc"}
         })
 
-      assert {:error, [message]} = Dynamic.handle_action(surface, envelope, authorize?: false)
+      assert {:error, [message, _response]} =
+               Dynamic.handle_action(surface, envelope, authorize?: false)
 
       assert %{
                "updateDataModel" => %{"path" => "/ui/feedback", "value" => %{"message" => status}}
@@ -756,9 +742,9 @@ defmodule AshA2ui.DynamicTest do
       surface = resolve!(spec)
 
       envelope =
-        Messages.action("submit_form", surface.surface_id, %{"values" => %{"name" => "sneaky"}})
+        Messages.call("submit_form", surface.surface_id, %{"values" => %{"name" => "sneaky"}})
 
-      assert {:error, [message]} = Dynamic.handle_action(surface, envelope, [])
+      assert {:error, [message, _response]} = Dynamic.handle_action(surface, envelope, [])
 
       assert %{
                "updateDataModel" => %{"path" => "/ui/feedback", "value" => %{"message" => status}}
@@ -784,7 +770,7 @@ defmodule AshA2ui.DynamicTest do
 
       surface = resolve!(spec)
 
-      envelope = Messages.action("submit_form", surface.surface_id, %{"values" => %{}})
+      envelope = Messages.call("submit_form", surface.surface_id, %{"values" => %{}})
 
       assert {:error, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
@@ -872,7 +858,7 @@ defmodule AshA2ui.DynamicTest do
         )
 
       envelope =
-        Messages.action("invoke", surface.surface_id, %{
+        Messages.call("invoke", surface.surface_id, %{
           "action" => "check_in",
           "recordId" => record.id
         })

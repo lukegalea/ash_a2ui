@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import {
   ASH_A2UI_CATALOG,
   ASH_A2UI_CATALOG_ID,
-  actionMessage,
   ashActionCall,
   createAshFunctionCatalog,
   feedback,
@@ -96,36 +95,6 @@ test("rpcError prefers the agent's own error over web_core's prefixed message", 
   assert.deepEqual(rpcError(timeout), {code: "TIMEOUT", message: "[TIMEOUT] timed out"});
 
   assert.deepEqual(rpcError("boom"), {code: "UNKNOWN_ERROR", message: "boom"});
-});
-
-test("actionMessage carries only the action message's fields", () => {
-  const message = actionMessage({
-    name: "open",
-    surfaceId: "s1",
-    sourceComponentId: "b1",
-    timestamp: "2026-11-12T00:00:00.000Z",
-    context: {id: 1},
-    catalogId: "https://example.com/catalog",
-    userMessage: "Opened",
-  });
-
-  assert.deepEqual(message, {
-    version: "1.0",
-    action: {
-      name: "open",
-      surfaceId: "s1",
-      sourceComponentId: "b1",
-      timestamp: "2026-11-12T00:00:00.000Z",
-      context: {id: 1},
-      userMessage: "Opened",
-    },
-  });
-});
-
-test("actionMessage fills a missing timestamp and context", () => {
-  const {action} = actionMessage({name: "open", surfaceId: "s1", sourceComponentId: "b1"});
-  assert.deepEqual(action.context, {});
-  assert.ok(!Number.isNaN(Date.parse(action.timestamp)));
 });
 
 const create = (surfaceId) => ({version: "1.0", createSurface: {surfaceId, catalogId: "c"}});

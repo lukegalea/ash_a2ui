@@ -11,6 +11,7 @@ defmodule AshA2ui.Wave6ActionHandlerTest do
 
   alias Ash.DataLayer.Ets
   alias AshA2ui.ActionHandler
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Promotion
 
   setup do
@@ -19,16 +20,7 @@ defmodule AshA2ui.Wave6ActionHandlerTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "promotions",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "promotions", context)
   end
 
   defp value_at(messages, path) do

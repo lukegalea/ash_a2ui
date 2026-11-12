@@ -12,6 +12,7 @@ defmodule AshA2ui.Adoption.ActorReadsTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.Adoption.{Clerk, Job, JobsUI, Queue, QueuedJobsUI}
+  alias AshA2ui.Test.Messages
 
   @red %{id: "u-red", team: "red"}
 
@@ -93,16 +94,10 @@ defmodule AshA2ui.Adoption.ActorReadsTest do
   end
 
   test "an action's refresh read carries the actor and tenant", %{job: job} do
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "invoke",
-        "surfaceId" => "adoption_jobs",
-        "sourceComponentId" => "test",
-        "timestamp" => "2026-10-16T00:00:00Z",
-        "context" => %{"action" => "claim", "recordId" => job.id}
-      }
-    }
+    envelope =
+      Messages.call("invoke", "adoption_jobs", %{"action" => "claim", "recordId" => job.id},
+        source: "test"
+      )
 
     assert {:ok, messages} = ActionHandler.handle(JobsUI, envelope, actor: @red, tenant: "acme")
 

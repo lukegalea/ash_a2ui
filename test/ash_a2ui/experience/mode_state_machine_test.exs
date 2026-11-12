@@ -13,19 +13,11 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
   alias AshA2ui.Experience
   alias AshA2ui.Test.Experience.NoUpdate
   alias AshA2ui.Test.Experience.Task
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   defp envelope(name, context \\ %{}) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "experience_task",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "experience_task", context, id: "call-1")
   end
 
   defp by_path(messages) do
@@ -130,7 +122,10 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
 
       # the form is reset to its initial (empty) values and feedback cleared
       assert values["/form"] == %{}
-      assert values["/ui/feedback"] == Experience.clear_feedback()
+
+      assert values["/ui/feedback"] ==
+               Experience.feedback("", "", %{"functionCallId" => "call-1"})
+
       assert values["/errors"] == %{}
     end
 
@@ -257,7 +252,9 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert panel["view_visible"] == []
 
       assert values["/form"] == %{}
-      assert values["/ui/feedback"] == Experience.clear_feedback()
+
+      assert values["/ui/feedback"] ==
+               Experience.feedback("", "", %{"functionCallId" => "call-1"})
     end
   end
 

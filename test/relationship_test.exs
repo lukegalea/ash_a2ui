@@ -13,7 +13,7 @@ defmodule AshA2ui.RelationshipTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
-  alias AshA2ui.Test.{Author, Post}
+  alias AshA2ui.Test.{Author, Messages, Post}
   alias AshA2ui.Test.Surface
 
   defp components_by_id(messages) do
@@ -29,16 +29,7 @@ defmodule AshA2ui.RelationshipTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "posts",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "posts", context)
   end
 
   defp create_author!(attrs) do

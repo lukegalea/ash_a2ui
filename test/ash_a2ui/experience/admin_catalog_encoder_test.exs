@@ -15,6 +15,7 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
   alias AshA2ui.Experience
   alias AshA2ui.Test.Experience.{ReadOnly, Task}
   alias AshA2ui.Test.KitchenSink
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   setup do
@@ -28,16 +29,7 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
   end
 
   defp envelope(name, context \\ %{}) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "experience_task",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "experience_task", context)
   end
 
   defp components_by_id(components_message) do
@@ -213,16 +205,7 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
 
       context = Map.put(context, "query", query)
 
-      envelope = %{
-        "version" => "1.0",
-        "action" => %{
-          "sourceComponentId" => "test_component",
-          "timestamp" => "2026-11-12T12:00:00Z",
-          "name" => "query",
-          "surfaceId" => "paged_notes",
-          "context" => context
-        }
-      }
+      envelope = Messages.call("query", "paged_notes", context)
 
       assert {:ok, messages} = ActionHandler.handle(PagedNotesUI, envelope, actor: nil)
 

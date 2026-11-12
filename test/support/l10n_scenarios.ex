@@ -17,6 +17,7 @@ defmodule AshA2ui.Test.L10nScenarios do
   alias AshA2ui.Test.Experience.Task
   alias AshA2ui.Test.HubContract
   alias AshA2ui.Test.HubUI
+  alias AshA2ui.Test.Messages
 
   # The scenarios, each `{name, catalog, fun}` where `fun.(extra_opts)` returns the
   # messages. `extra_opts` is how the localization tests re-run the same
@@ -242,16 +243,7 @@ defmodule AshA2ui.Test.L10nScenarios do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "experience_task",
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-11-04T00:00:00Z",
-        "context" => context
-      }
-    }
+    Messages.call(name, "experience_task", context, id: "call-#{name}")
   end
 
   # --- helpers -------------------------------------------------------------------

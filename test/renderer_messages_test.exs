@@ -8,6 +8,8 @@ defmodule AshA2ui.RendererMessagesTest do
       is answered with `UNKNOWN_FUNCTION` or `INVALID_FUNCTION_CALL`;
     * `rendererFunctionResponse` and `error` are validated and produce no
       follow-ups;
+    * a plain `action` event is refused with an `UNKNOWN_FUNCTION`
+      feedback error and runs nothing;
     * anything else, including a wrong version, is refused with none.
 
   Every follow-up is validated against the vendored 1.0 schemas, and every
@@ -182,13 +184,21 @@ defmodule AshA2ui.RendererMessagesTest do
       assert Enum.sort(names) == Enum.sort(ActionHandler.quiet_actions())
     end
 
-    test "a plain action that writes no feedback leaves it alone and gets no response" do
-      action = Messages.action("query", "paginated", %{"query" => %{}})
+    test "a plain action event is refused with UNKNOWN_FUNCTION and runs nothing" do
+      action = Messages.action("submit_form", "kitchen_sink", %{"values" => %{"name" => "Event"}})
+      assert_valid_renderer_message(action)
 
-      assert {:ok, messages} = ActionHandler.handle(Paginated, action)
+      {result, log} = with_log(fn -> ActionHandler.handle(KitchenSink, action) end)
+
+      assert {:error, messages} = result
       assert_all_valid(messages)
-      assert feedback_writes(messages) == []
+      assert log =~ "Refused an A2UI action event"
       refute Messages.response(messages)
+
+      assert %{"kind" => "error", "code" => "UNKNOWN_FUNCTION", "functionCallId" => ""} =
+               Messages.feedback(messages)
+
+      assert Ash.read!(KitchenSink, authorize?: false) == []
     end
 
     test "a call without a catalogId resolves to ashAction by name" do
@@ -374,7 +384,7 @@ defmodule AshA2ui.RendererMessagesTest do
     end
 
     defp submit,
-      do: Messages.action("submit_form", "kitchen_sink", %{"values" => %{"name" => "M"}})
+      do: Messages.call("submit_form", "kitchen_sink", %{"values" => %{"name" => "M"}})
 
     test ~s(the version must be "1.0": "v1.0", "0.9", "v0.9.1" and none are refused) do
       for version <- ["v1.0", "0.9", "v0.9.1", 1.0] do
@@ -407,47 +417,11 @@ defmodule AshA2ui.RendererMessagesTest do
       })
     end
 
-    test "an action missing a required field is refused" do
-      for field <- ~w(name surfaceId sourceComponentId timestamp context) do
-        assert_malformed(update_in(submit(), ["action"], &Map.delete(&1, field)))
-      end
-    end
-
-    test "an action whose timestamp is not a date-time is refused" do
-      assert_malformed(put_in(submit(), ["action", "timestamp"], "yesterday"))
-    end
-
-    test "an action whose context is not an object is refused" do
-      assert_malformed(put_in(submit(), ["action", "context"], ["values"]))
-    end
-
-    test "an action with metadata other than extensions is refused" do
-      assert_malformed(put_in(submit(), ["action", "metadata"], %{"trace" => "x"}))
-    end
-
     test "something that is not a JSON object is refused" do
       with_log(fn ->
         assert {:error, []} = ActionHandler.handle(KitchenSink, "submit_form")
         assert {:error, []} = ActionHandler.handle(KitchenSink, nil)
       end)
-    end
-
-    # RFC 3339 section 5.6: the "T" and "Z" may be written lowercase.
-    test "an action whose timestamp writes the date-time separator and zone lowercase is accepted" do
-      action = put_in(submit(), ["action", "timestamp"], "2026-01-01t00:00:00z")
-
-      assert_valid_renderer_message(action)
-      assert {:ok, _messages} = ActionHandler.handle(KitchenSink, action)
-    end
-
-    test "an action carrying renderer metadata extensions and a userMessage is accepted" do
-      action =
-        submit()
-        |> put_in(["action", "userMessage"], "Saving M")
-        |> put_in(["action", "metadata"], %{"extensions" => %{"com_example_trace" => "t"}})
-
-      assert_valid_renderer_message(action)
-      assert {:ok, _messages} = ActionHandler.handle(KitchenSink, action)
     end
   end
 

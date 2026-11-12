@@ -4,13 +4,13 @@ defmodule AshA2ui.Test.Messages do
   consumes, and reads the function-call answer out of its follow-ups.
 
   `call/4` is what the shipped renderer sends for every server-handled
-  control (an `ashAction` function call); `action/4` is the plain event a
-  renderer without the ash_a2ui catalog sends.
+  control (an `ashAction` function call); `action/4` builds a plain
+  `action` event, which the handler refuses.
   """
 
   @timestamp "2026-11-12T12:00:00Z"
 
-  @doc "A plain `action` event."
+  @doc "A plain `action` event (spec-valid; `AshA2ui.ActionHandler` refuses it)."
   def action(name, surface_id, context, opts \\ []) do
     %{
       "version" => "1.0",

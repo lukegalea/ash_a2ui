@@ -96,16 +96,7 @@ defmodule AshA2ui.LinksTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "notes",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "notes", context)
   end
 
   defp admin! do
@@ -497,7 +488,7 @@ defmodule AshA2ui.LinksTest do
       # the {surface, id_path} link still resolves ("people")
       assert link_button(comps, "record_row_meta_value_subject_id")
 
-      {:ok, []} =
+      {:ok, [%{"agentFunctionResponse" => %{"value" => %{}}}]} =
         ActionHandler.handle(
           NotesUI,
           envelope("open_surface", %{
@@ -544,7 +535,7 @@ defmodule AshA2ui.LinksTest do
       bob: bob
     } do
       for {field, record_id} <- [{"person_name", ada.id}, {"subject_id", bob.id}] do
-        assert {:ok, []} =
+        assert {:ok, [%{"agentFunctionResponse" => %{"value" => %{}}}]} =
                  ActionHandler.handle(
                    NotesUI,
                    envelope("open_surface", %{
@@ -557,13 +548,13 @@ defmodule AshA2ui.LinksTest do
     end
 
     test "a row without a link for the field binds no surface: acknowledged" do
-      assert {:ok, []} =
+      assert {:ok, [%{"agentFunctionResponse" => %{"value" => %{}}}]} =
                ActionHandler.handle(
                  NotesUI,
                  envelope("open_surface", %{"field" => "person_name"})
                )
 
-      assert {:ok, []} =
+      assert {:ok, [%{"agentFunctionResponse" => %{"value" => %{}}}]} =
                ActionHandler.handle(
                  NotesUI,
                  envelope("open_surface", %{"field" => "person_name", "surface" => ""})

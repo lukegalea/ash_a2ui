@@ -14,7 +14,7 @@ defmodule AshA2ui.ContextTest do
 
   alias Ash.DataLayer.Ets
   alias AshA2ui.{ActionHandler, Experience, Info, ResolvedView}
-  alias AshA2ui.Test.{Appointment, AppointmentsUI, Clinic, ClinicMembership, Owner}
+  alias AshA2ui.Test.{Appointment, AppointmentsUI, Clinic, ClinicMembership, Messages, Owner}
 
   setup do
     on_exit(fn ->
@@ -27,16 +27,7 @@ defmodule AshA2ui.ContextTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-11-12T12:00:00Z",
-        "name" => name,
-        "surfaceId" => "appointments",
-        "context" => context
-      }
-    }
+    Messages.call(name, "appointments", context, id: "call-1")
   end
 
   defp assert_all_valid(messages), do: Enum.each(messages, &assert_valid_agent_message/1)
@@ -422,7 +413,8 @@ defmodule AshA2ui.ContextTest do
 
       # a settled selection clears the previous outcome (and so settles the
       # admin dataGrid's busy "Select <context>" row action)
-      assert value_at(messages, "/ui/feedback") == Experience.clear_feedback()
+      assert value_at(messages, "/ui/feedback") ==
+               Experience.feedback("", "", %{"functionCallId" => "call-1"})
     end
 
     test "auto_select_single cascades a sole dependent option into selection" do
@@ -578,7 +570,9 @@ defmodule AshA2ui.ContextTest do
       assert value_at(messages, "/detail/owner") == %{}
       assert value_at(messages, "/records") == []
       assert value_at(messages, "/query")["totalCount"] == 0
-      assert value_at(messages, "/ui/feedback") == Experience.clear_feedback()
+
+      assert value_at(messages, "/ui/feedback") ==
+               Experience.feedback("", "", %{"functionCallId" => "call-1"})
     end
 
     test "clearing only the dependent keeps the parent" do

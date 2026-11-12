@@ -10,6 +10,7 @@ defmodule AshA2ui.EnumTypeTest do
   use ExUnit.Case, async: true
 
   alias AshA2ui.Test.EnumRecord
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   defp components(messages) do
@@ -62,18 +63,10 @@ defmodule AshA2ui.EnumTypeTest do
   end
 
   test "submitted enum strings cast through the form action" do
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "surfaceId" => "test_surface",
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-11-12T12:00:00Z",
-        "name" => "submit_form",
-        "context" => %{
-          "values" => %{"name" => "cast me", "severity" => "very_high", "stage" => ["todo"]}
-        }
-      }
-    }
+    envelope =
+      Messages.call("submit_form", "test_surface", %{
+        "values" => %{"name" => "cast me", "severity" => "very_high", "stage" => ["todo"]}
+      })
 
     assert {:ok, _messages} = AshA2ui.ActionHandler.handle(EnumRecord, envelope, actor: nil)
 
@@ -107,18 +100,10 @@ defmodule AshA2ui.EnumTypeTest do
     Ash.create!(EnumRecord, %{name: "low one", severity: :low}, authorize?: false)
     Ash.create!(EnumRecord, %{name: "high one", severity: :very_high}, authorize?: false)
 
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "surfaceId" => "test_surface",
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-11-12T12:00:00Z",
-        "name" => "query",
-        "context" => %{
-          "query" => %{"filters" => %{"severity" => "very_high"}, "page" => 1}
-        }
-      }
-    }
+    envelope =
+      Messages.call("query", "test_surface", %{
+        "query" => %{"filters" => %{"severity" => "very_high"}, "page" => 1}
+      })
 
     assert {:ok, messages} = AshA2ui.ActionHandler.handle(EnumRecord, envelope, actor: nil)
 
@@ -130,13 +115,20 @@ defmodule AshA2ui.EnumTypeTest do
     assert record["severity"] == "Very high"
     assert record["_values"] == %{"severity" => "very_high"}
 
-    bogus = put_in(envelope, ["action", "context", "query", "filters", "severity"], "bogus")
+    bogus =
+      put_in(
+        envelope,
+        ["callAgentFunction", "callFunction", "args", "context", "query", "filters", "severity"],
+        "bogus"
+      )
+
     assert {:error, error_messages} = AshA2ui.ActionHandler.handle(EnumRecord, bogus, actor: nil)
 
     assert [
              %{
                "updateDataModel" => %{"path" => "/ui/feedback", "value" => %{"message" => status}}
-             }
+             },
+             %{"agentFunctionResponse" => %{"error" => %{"code" => "INVALID_ACTION"}}}
            ] =
              error_messages
 

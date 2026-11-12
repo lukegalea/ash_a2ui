@@ -17,16 +17,7 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
   alias AshA2ui.Test.Messages
 
   defp envelope(name, context \\ %{}) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "experience_task",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "experience_task", context, id: "call-1")
   end
 
   defp by_path(messages) do
@@ -80,7 +71,10 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
 
       values = by_path(messages)
 
-      assert values["/ui/feedback"] == Experience.feedback("success", "Created successfully.")
+      assert values["/ui/feedback"] ==
+               Experience.feedback("success", "Created successfully.", %{
+                 "functionCallId" => "call-1"
+               })
 
       assert values["/ui/intent"] == "browse"
       assert values["/ui/panel"]["visible"] == []
@@ -106,7 +100,10 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
       values = by_path(messages)
 
       # typed success on the path the status Text binds...
-      assert values["/ui/feedback"] == Experience.feedback("success", "Destroy completed.")
+      assert values["/ui/feedback"] ==
+               Experience.feedback("success", "Destroy completed.", %{
+                 "functionCallId" => "call-1"
+               })
 
       # ...with the classic status text still flowing alongside (the
       # programmatic contract, unchanged)...
@@ -213,16 +210,10 @@ defmodule AshA2ui.Experience.FeedbackAndValidationTest do
     end
 
     test "a query allowlist rejection" do
-      envelope = %{
-        "version" => "1.0",
-        "action" => %{
-          "surfaceId" => "test_surface",
-          "sourceComponentId" => "test_component",
-          "timestamp" => "2026-11-12T12:00:00Z",
-          "name" => "query",
-          "context" => %{"query" => %{"sort" => %{"field" => "category", "dir" => "asc"}}}
-        }
-      }
+      envelope =
+        Messages.call("query", "test_surface", %{
+          "query" => %{"sort" => %{"field" => "category", "dir" => "asc"}}
+        })
 
       assert {:error, messages} = ActionHandler.handle(AshA2ui.Test.Paginated, envelope)
       values = assert_error_feedback(messages, "category")

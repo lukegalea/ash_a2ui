@@ -23,6 +23,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.Experience
   alias AshA2ui.Test.Adoption.{Job, JobsUI, LeakyJobsUI, ViaJobsUI}
+  alias AshA2ui.Test.Messages
 
   @red %{id: "u-red", team: "red"}
 
@@ -38,16 +39,7 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
 
     ActionHandler.handle(
       ui,
-      %{
-        "version" => "1.0",
-        "action" => %{
-          "name" => "invoke",
-          "surfaceId" => surface_id,
-          "sourceComponentId" => "test",
-          "timestamp" => "2026-10-16T00:00:00Z",
-          "context" => context
-        }
-      },
+      Messages.call("invoke", surface_id, context, source: "test", id: "call-1"),
       actor: @red
     )
   end
@@ -65,7 +57,8 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
 
     assert write_at(messages, "/ui/feedback") ==
              Experience.feedback("error", "This job is locked by another team.", %{
-               "code" => "ACTION_FAILED"
+               "code" => "ACTION_FAILED",
+               "functionCallId" => "call-1"
              })
 
     refute Enum.any?(messages, &match?(%{"updateDataModel" => %{"path" => "/errors/" <> _}}, &1))
@@ -76,7 +69,8 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
 
     assert write_at(messages, "/ui/feedback") ==
              Experience.feedback("error", "You are not authorized to perform this action.", %{
-               "code" => "FORBIDDEN"
+               "code" => "FORBIDDEN",
+               "functionCallId" => "call-1"
              })
   end
 
@@ -95,7 +89,8 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
 
     assert write_at(messages, "/ui/feedback") ==
              Experience.feedback("error", "Validation failed. Please review the field errors.", %{
-               "code" => "VALIDATION_FAILED"
+               "code" => "VALIDATION_FAILED",
+               "functionCallId" => "call-1"
              })
   end
 
@@ -109,7 +104,10 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
     assert_received {:messages, messages}
 
     assert write_at(messages, "/ui/feedback") ==
-             Experience.feedback("error", "The action failed.", %{"code" => "ACTION_FAILED"})
+             Experience.feedback("error", "The action failed.", %{
+               "code" => "ACTION_FAILED",
+               "functionCallId" => "call-1"
+             })
 
     refute inspect(messages) =~ "alice@example.com"
     refute inspect(messages) =~ "23505"
@@ -133,16 +131,12 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
     assert {:error, messages} =
              ActionHandler.handle(
                JobsUI,
-               %{
-                 "version" => "1.0",
-                 "action" => %{
-                   "name" => "submit_form",
-                   "surfaceId" => "adoption_jobs",
-                   "sourceComponentId" => "test",
-                   "timestamp" => "2026-10-16T00:00:00Z",
-                   "context" => %{"values" => %{"title" => "New job"}}
-                 }
-               },
+               Messages.call(
+                 "submit_form",
+                 "adoption_jobs",
+                 %{"values" => %{"title" => "New job"}},
+                 source: "test"
+               ),
                actor: @red
              )
 
@@ -155,16 +149,9 @@ defmodule AshA2ui.Adoption.ErrorFeedbackTest do
     assert {:error, messages} =
              ActionHandler.handle(
                JobsUI,
-               %{
-                 "version" => "1.0",
-                 "action" => %{
-                   "name" => "submit_form",
-                   "surfaceId" => "adoption_jobs",
-                   "sourceComponentId" => "test",
-                   "timestamp" => "2026-10-16T00:00:00Z",
-                   "context" => %{"values" => %{"team" => "red"}}
-                 }
-               },
+               Messages.call("submit_form", "adoption_jobs", %{"values" => %{"team" => "red"}},
+                 source: "test"
+               ),
                actor: @red
              )
 

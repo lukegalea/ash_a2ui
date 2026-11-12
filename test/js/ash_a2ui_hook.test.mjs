@@ -252,23 +252,22 @@ test("actionTimeoutMs 0 waits for the agent", async () => {
   assert.deepEqual(hook.responses[0].response, {value: {}});
 });
 
-test("an event action goes out as an action message with no pending state", async () => {
+test("an event action is not sent: the agent answers ashAction calls only", async () => {
   const hook = mountHook();
   bootstrap(hook);
 
-  await click(hook, "s1", "help");
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args);
+  try {
+    await click(hook, "s1", "help");
+  } finally {
+    console.warn = warn;
+  }
 
-  const [message] = sent(hook);
-  assert.deepEqual(Object.keys(message).sort(), ["action", "version"]);
-  assert.equal(message.version, "1.0");
-  const {timestamp, ...action} = message.action;
-  assert.deepEqual(action, {
-    name: "help",
-    surfaceId: "s1",
-    sourceComponentId: "help",
-    context: {topic: "names"},
-  });
-  assert.ok(!Number.isNaN(Date.parse(timestamp)));
+  assert.deepEqual(sent(hook), []);
+  assert.equal(warnings.length, 1);
+  assert.match(String(warnings[0][0]), /event actions are not sent/);
   assert.deepEqual(feedbackOf(hook, "s1"), feedback());
 });
 

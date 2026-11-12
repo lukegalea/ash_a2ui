@@ -16,6 +16,7 @@ defmodule AshA2ui.Adoption.BoardSelectContextTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.Adoption.{Job, SelectBoardUI}
+  alias AshA2ui.Test.Messages
 
   @red %{id: "u-red", team: "red"}
 
@@ -89,16 +90,13 @@ defmodule AshA2ui.Adoption.BoardSelectContextTest do
   end
 
   test "selecting a card fills the detail", %{job: job} do
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "context_select",
-        "surfaceId" => "adoption_select_board",
-        "sourceComponentId" => "row_context_board_open_button",
-        "timestamp" => "2026-10-16T00:00:00Z",
-        "context" => %{"context" => "job", "value" => job.id}
-      }
-    }
+    envelope =
+      Messages.call(
+        "context_select",
+        "adoption_select_board",
+        %{"context" => "job", "value" => job.id},
+        source: "row_context_board_open_button"
+      )
 
     assert {:ok, messages} = ActionHandler.handle(SelectBoardUI, envelope, actor: @red)
 

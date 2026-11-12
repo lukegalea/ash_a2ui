@@ -12,19 +12,11 @@ defmodule AshA2ui.Board.BoardActionHandlerTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.BoardTask
   alias AshA2ui.Test.BoardTaskUI
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "board_tasks",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "board_tasks", context)
   end
 
   defp value_at(messages, path) do

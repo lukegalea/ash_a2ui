@@ -15,6 +15,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.Experience
   alias AshA2ui.Test.Adoption.{Job, LabelledBulkJobsUI, LabelledJobsUI}
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   @red %{id: "u-red", team: "red"}
@@ -64,20 +65,17 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
   end
 
   test "the bulk run's status line uses the label", %{job: job} do
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "bulk_invoke",
-        "surfaceId" => "adoption_labelled_bulk_jobs",
-        "sourceComponentId" => "test",
-        "timestamp" => "2026-10-16T00:00:00Z",
-        "context" => %{
+    envelope =
+      Messages.call(
+        "bulk_invoke",
+        "adoption_labelled_bulk_jobs",
+        %{
           "action" => "claim",
           "component" => "table",
           "records" => [%{"id" => job.id, "_selected" => true}]
-        }
-      }
-    }
+        },
+        source: "test"
+      )
 
     assert {:ok, messages} = ActionHandler.handle(LabelledBulkJobsUI, envelope, actor: @red)
 
@@ -94,16 +92,13 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
     invoke = fn ui, surface_id, action ->
       ActionHandler.handle(
         ui,
-        %{
-          "version" => "1.0",
-          "action" => %{
-            "name" => "invoke",
-            "surfaceId" => surface_id,
-            "sourceComponentId" => "test",
-            "timestamp" => "2026-10-16T00:00:00Z",
-            "context" => %{"action" => action, "recordId" => job.id, "component" => "table"}
-          }
-        },
+        Messages.call(
+          "invoke",
+          surface_id,
+          %{"action" => action, "recordId" => job.id, "component" => "table"},
+          source: "test",
+          id: "call-1"
+        ),
         actor: @red
       )
     end
@@ -116,7 +111,9 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
     end
 
     assert {:ok, messages} = invoke.(LabelledJobsUI, "adoption_labelled_jobs", "claim")
-    assert feedback.(messages) == Experience.feedback("success", "Take it: done.")
+
+    assert feedback.(messages) ==
+             Experience.feedback("success", "Take it: done.", %{"functionCallId" => "call-1"})
   end
 
   test "the dynamic spec carries the label: resolve, import and promote" do

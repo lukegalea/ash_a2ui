@@ -175,8 +175,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
     The shipped JS hook pushes `"a2ui:open_surface"` when an admin-catalog
     reference link is activated (see `AshA2ui.Links`). Basic-catalog link
-    Buttons call `ashAction` with the name `"open_surface"` instead (a plain
-    `action` event of that name works the same way), which
+    Buttons call `ashAction` with the name `"open_surface"` instead, which
     `AshA2ui.ActionHandler` validates against the surface's link fields;
     an accepted one takes the same path. Those Buttons are only rendered
     when this LiveView can navigate (an `:open_surface` callback or an
@@ -547,8 +546,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       end
     end
 
-    # A basic-catalog reference link arrives as an "open_surface" action (an
-    # ashAction call, or a plain action event). Once the handler accepted it
+    # A basic-catalog reference link arrives as an "open_surface" ashAction
+    # call. Once the handler accepted it
     # (the field links to that surface for this actor), it navigates exactly
     # like the "a2ui:open_surface" event the admin catalog's link cells push.
     defp maybe_open_surface(config, :ok, message, socket) do
@@ -562,9 +561,6 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     end
 
     defp maybe_open_surface(_config, _outcome, _message, socket), do: {:noreply, socket}
-
-    defp action_name(%{"action" => %{"name" => name} = action}),
-      do: {name, Map.get(action, "context", %{})}
 
     defp action_name(%{
            "callAgentFunction" => %{"callFunction" => %{"args" => %{"name" => name} = args}}

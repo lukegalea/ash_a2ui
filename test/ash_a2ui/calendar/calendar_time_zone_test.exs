@@ -13,6 +13,7 @@ defmodule AshA2ui.Calendar.CalendarTimeZoneTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.Calendar
   alias AshA2ui.Test.Calendar.{Event, WeekUI}
+  alias AshA2ui.Test.Messages
 
   @red %{team: "red"}
 
@@ -32,16 +33,7 @@ defmodule AshA2ui.Calendar.CalendarTimeZoneTest do
   defp put_zone(zone), do: Application.put_env(:ash_a2ui, :calendar_time_zone, zone)
 
   defp envelope(context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "query",
-        "surfaceId" => "calendar_week",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => Map.put(context, "component", "week")
-      }
-    }
+    Messages.call("query", "calendar_week", Map.put(context, "component", "week"))
   end
 
   defp query(context) do

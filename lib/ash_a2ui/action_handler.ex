@@ -42,10 +42,11 @@ defmodule AshA2ui.ActionHandler do
       `functionCallId` cannot be answered and is refused like any other
       malformed message.
 
-    * `action`, a plain event (`name`, `surfaceId`, `sourceComponentId`,
-      `timestamp` and `context`, all required). It dispatches exactly as an
-      `ashAction` call does and gets no response message, so a renderer
-      that lacks the ash_a2ui catalog can still drive a surface.
+    * `action`, a plain event, is refused. The encoder never emits an
+      event action, so a surface's controls only ever send `ashAction`
+      calls. The refusal is logged and settles `/ui/feedback` with an
+      `UNKNOWN_FUNCTION` error (the code the spec gives an agent for a
+      request it does not run); there is no call to answer.
 
     * `rendererFunctionResponse`, the renderer's answer to a
       `callRendererFunction` (an export's `downloadFile`). It is validated
@@ -247,7 +248,7 @@ defmodule AshA2ui.ActionHandler do
   status Text and the admin statusBanner bind (see
   `AshA2ui.Experience.feedback/3`): `kind` (`"success"`, `"warning"`,
   `"error"`, or `""` when idle), `message`, `code` (`""` unless an error),
-  `functionCallId` (the call's id, `""` for a plain action), `result` and
+  `functionCallId` (the call's id, `""` when no call is answered), `result` and
   `resultText`.
 
     * on success: `/records` (re-read row maps, each including `"id"`;
@@ -276,7 +277,7 @@ defmodule AshA2ui.ActionHandler do
   steps) leave `/ui/feedback` as it was unless they fail, and their
   function call is answered with an empty `value`. A renderer shows no
   pending state for them, so a page turn or a search keystroke never
-  replaces the last outcome. A plain `action` is settled the same way.
+  replaces the last outcome.
 
   Values are serialized JSON-safe (dates/datetimes to ISO 8601, decimals to
   strings, atoms to strings).
@@ -305,6 +306,9 @@ defmodule AshA2ui.ActionHandler do
 
   # The ash_a2ui catalog function every server-handled control calls.
   @ash_action "ashAction"
+
+  # The feedback a plain `action` event gets: the encoder never emits one.
+  @event_refusal "ash_a2ui runs ashAction function calls, not action events."
 
   # Renderer error codes that point into a payload (with surfaceId and path).
   @path_error_codes ~w(VALIDATION_FAILED UNALLOWED_PARENT UNALLOWED_CHILD)
@@ -382,11 +386,16 @@ defmodule AshA2ui.ActionHandler do
           {:ok, [map]} | {:error, [map]}
   def handle(resource_or_ui_module, message, opts \\ []) do
     case parse(message) do
-      {:action, name, context} ->
-        run(resource_or_ui_module, name, context, nil, opts)
-
       {:call, call_id, name, context} ->
         run(resource_or_ui_module, name, context, call_id, opts)
+
+      :refuse_event ->
+        Logger.warning(
+          "Refused an A2UI action event: ash_a2ui answers ashAction function calls only."
+        )
+
+        view = ResolvedView.resolve(resource_or_ui_module, opts)
+        {:error, [status(view, @event_refusal, "UNKNOWN_FUNCTION")]}
 
       {:refuse_call, call_id, code, text} ->
         Logger.warning("Refused A2UI callAgentFunction #{call_id} (#{code}): #{text}")
@@ -442,17 +451,16 @@ defmodule AshA2ui.ActionHandler do
 
   # Every failure settles /ui/feedback, the one path the status Text and the
   # admin statusBanner bind: one without a feedback write gets the generic
-  # one. A quiet action's success leaves the feedback as it was, and so does
-  # a plain action's. Every other action writes its outcome; should one not,
-  # a function call settles the feedback to idle, since the renderer showed
-  # a pending state under the call's id and that state must not outlive the
-  # call.
+  # one. A quiet action's success leaves the feedback as it was. Every other
+  # action writes its outcome; should one not, the call settles the feedback
+  # to idle, since the renderer showed a pending state under the call's id
+  # and that state must not outlive the call.
   #
-  # For a function call every feedback write carries the call's id, and the
-  # agentFunctionResponse goes last, so the data model (feedback included)
-  # is settled before the renderer resolves the call: `value` is the final
-  # feedback map (an empty map when the call left the feedback alone),
-  # `error` its code and message.
+  # Every feedback write carries the call's id, and the agentFunctionResponse
+  # goes last, so the data model (feedback included) is settled before the
+  # renderer resolves the call: `value` is the final feedback map (an empty
+  # map when the call left the feedback alone), `error` its code and
+  # message.
   defp settle({tag, messages}, view, call_id, name) do
     messages =
       cond do
@@ -462,20 +470,16 @@ defmodule AshA2ui.ActionHandler do
         tag == :error ->
           messages ++ [status(view, t(view, msg("The action failed.")), "ACTION_FAILED")]
 
-        call_id && name not in @quiet_actions ->
+        name not in @quiet_actions ->
           messages ++ [update_data_model(view, "/ui/feedback", Experience.clear_feedback())]
 
         true ->
           messages
       end
 
-    if call_id do
-      messages = Enum.map(messages, &stamp_call_id(&1, call_id))
-      feedback = messages |> Enum.filter(&feedback_write?/1) |> List.last()
-      {tag, messages ++ [function_response(tag, view, call_id, feedback_value(feedback))]}
-    else
-      {tag, messages}
-    end
+    messages = Enum.map(messages, &stamp_call_id(&1, call_id))
+    feedback = messages |> Enum.filter(&feedback_write?/1) |> List.last()
+    {tag, messages ++ [function_response(tag, view, call_id, feedback_value(feedback))]}
   end
 
   defp feedback_write?(message),
@@ -513,7 +517,8 @@ defmodule AshA2ui.ActionHandler do
   # four message keys (renderer_to_agent.json). The version is checked first,
   # for every kind of message. Returns:
   #
-  #   * {:action, name, context} / {:call, call_id, name, context} — dispatch;
+  #   * {:call, call_id, name, context} — dispatch;
+  #   * :refuse_event — a plain `action` event, which ash_a2ui does not run;
   #   * {:refuse_call, call_id, code, text} — a function call that can be
   #     answered, with an error (UNKNOWN_FUNCTION, INVALID_FUNCTION_CALL);
   #   * {:function_response, body} / {:renderer_error, body} — no follow-ups;
@@ -521,7 +526,7 @@ defmodule AshA2ui.ActionHandler do
   #     names fields, never their values.
   defp parse(%{"version" => "1.0"} = message) when map_size(message) == 2 do
     case message |> Map.delete("version") |> Map.to_list() do
-      [{"action", body}] -> parse_action(body)
+      [{"action", _body}] -> :refuse_event
       [{"callAgentFunction", body}] -> parse_call(body)
       [{"rendererFunctionResponse", body}] -> parse_function_response(body)
       [{"error", body}] -> parse_renderer_error(body)
@@ -535,48 +540,6 @@ defmodule AshA2ui.ActionHandler do
   defp parse(%{"version" => _version}), do: {:invalid, ~s(version is not "1.0")}
   defp parse(%{}), do: {:invalid, ~s(no "version")}
   defp parse(_message), do: {:invalid, "not a JSON object"}
-
-  defp parse_action(
-         %{
-           "name" => name,
-           "surfaceId" => surface_id,
-           "sourceComponentId" => source,
-           "timestamp" => timestamp,
-           "context" => context
-         } = body
-       )
-       when is_binary(name) and is_binary(surface_id) and is_binary(source) and
-              is_binary(timestamp) and is_map(context) do
-    cond do
-      not rfc3339?(timestamp) ->
-        {:invalid, "action timestamp is not an RFC 3339 date-time"}
-
-      not optional?(body, "userMessage", &is_binary/1) ->
-        {:invalid, "action userMessage is not a string"}
-
-      not optional?(body, "metadata", &action_metadata?/1) ->
-        {:invalid, "action metadata is not an object of extensions"}
-
-      true ->
-        {:action, name, context}
-    end
-  end
-
-  defp parse_action(_body),
-    do:
-      {:invalid,
-       "action needs a string name, surfaceId, sourceComponentId and timestamp, and a context object"}
-
-  # RFC 3339 allows a lowercase "t" separator and "z" zone (section 5.6);
-  # DateTime.from_iso8601/1 takes only the uppercase ones.
-  defp rfc3339?(timestamp),
-    do: match?({:ok, _datetime, _offset}, DateTime.from_iso8601(String.upcase(timestamp)))
-
-  defp action_metadata?(metadata) when is_map(metadata),
-    do:
-      Map.keys(metadata) -- ["extensions"] == [] and optional?(metadata, "extensions", &is_map/1)
-
-  defp action_metadata?(_metadata), do: false
 
   # A call without a functionCallId cannot be answered, since the response
   # must copy it; anything else wrong with the call is answered.

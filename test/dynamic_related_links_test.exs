@@ -18,6 +18,7 @@ defmodule AshA2ui.DynamicRelatedLinksTest do
   alias AshA2ui.Dynamic.Error
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.Test.Links.{Note, NotesUI, Participant, PeopleTaskUI, PeopleUI, Person}
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   @allowlist Dynamic.allowlist([Person, Note, Participant])
@@ -57,16 +58,7 @@ defmodule AshA2ui.DynamicRelatedLinksTest do
   end
 
   defp envelope(surface_id, name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => surface_id,
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, surface_id, context)
   end
 
   describe "import → resolve renders like the declared surface" do
@@ -127,7 +119,9 @@ defmodule AshA2ui.DynamicRelatedLinksTest do
 
       # the imported link fields validate open_surface exactly as declared
       open = envelope("notes", "open_surface", %{"field" => "subject_id", "surface" => "person"})
-      assert {:ok, []} = Dynamic.handle_action(surface, open)
+
+      assert {:ok, [%{"agentFunctionResponse" => %{"value" => %{}}}]} =
+               Dynamic.handle_action(surface, open)
     end
   end
 

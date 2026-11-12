@@ -9,7 +9,6 @@
  *     `createAshFunctionCatalog`, which binds its functions to code;
  *   - the `/ui/feedback` map: idle, pending and slow, and the quiet actions
  *     that write none;
- *   - the renderer-to-agent `action` message for an event action;
  *   - `replaceExistingSurfaces`, which lets a re-joined LiveView bootstrap a
  *     surface the processor still holds;
  *   - `panelStateOf`, which reads the record-task panel's visibility from a
@@ -260,25 +259,6 @@ export function rpcError(error) {
     code: (error && typeof error.code === "string" && error.code) || "UNKNOWN_ERROR",
     message: String((error && error.message) || error || ""),
   };
-}
-
-/**
- * The renderer-to-agent `action` message for an event action the processor
- * dispatched (its `A2uiClientAction`). Only the fields the message schema
- * declares are carried.
- */
-export function actionMessage(action) {
-  const message = {
-    name: action.name,
-    surfaceId: action.surfaceId,
-    sourceComponentId: action.sourceComponentId,
-    timestamp: action.timestamp || new Date().toISOString(),
-    context: action.context || {},
-  };
-  if (typeof action.userMessage === "string") message.userMessage = action.userMessage;
-  if (action.metadata && typeof action.metadata === "object") message.metadata = action.metadata;
-
-  return {version: PROTOCOL_VERSION, action: message};
 }
 
 /**

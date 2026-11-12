@@ -1,7 +1,7 @@
 # Actions: routing renderer messages into Ash
 
-Every inbound A2UI renderer-to-agent message (`callAgentFunction` for
-`ashAction`, or a plain `action`) must go through
+Every inbound A2UI renderer-to-agent message (a `callAgentFunction` for
+`ashAction`, a `rendererFunctionResponse` or an `error`) must go through
 `AshA2ui.ActionHandler.handle/3`. It validates the message, enforces the
 DSL allowlist, invokes the Ash action with the actor, and maps errors onto
 the reserved data-model paths. Calling Ash actions directly from transport
@@ -23,9 +23,9 @@ AshA2ui.ActionHandler.handle(resource_or_ui_module, message,
   `AshA2ui.Info.build_surface/2`.
 - The message is one full renderer-to-agent message, verbatim:
   `%{"version" => "1.0", "callAgentFunction" => ...}` (an `ashAction`
-  call; `args.name` and `args.context` carry the action) or
-  `%{"version" => "1.0", "action" => %{"name" => ..., "context" => ...}}`.
-  Anything else returns `{:error, []}`.
+  call; `args.name` and `args.context` carry the action). A plain
+  `"action"` event is refused with an `UNKNOWN_FUNCTION` `/ui/feedback`
+  error and runs nothing; a malformed message returns `{:error, []}`.
 - Push the returned messages to the client **for both `{:ok, _}` and
   `{:error, _}`** — error messages carry the validation feedback the
   renderer must display.

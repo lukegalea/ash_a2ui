@@ -19,6 +19,7 @@ defmodule AshA2ui.Board.BoardDynamicTest do
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.Test.BoardTask
   alias AshA2ui.Test.ComposedBoard.Job
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
   @allowlist Dynamic.allowlist([BoardTask, Job])
@@ -105,20 +106,17 @@ defmodule AshA2ui.Board.BoardDynamicTest do
 
     # The transition row action moves the card; the template-key refresh
     # re-reads every cell.
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "invoke",
-        "surfaceId" => surface.surface_id,
-        "sourceComponentId" => "row_action_claim",
-        "timestamp" => "2026-10-17T00:00:00Z",
-        "context" => %{
+    envelope =
+      Messages.call(
+        "invoke",
+        surface.surface_id,
+        %{
           "action" => "claim",
           "recordId" => card.id,
           "component" => "board_open__very_high"
-        }
-      }
-    }
+        },
+        source: "row_action_claim"
+      )
 
     assert {:ok, reply} = Dynamic.handle_action(surface, envelope, authorize?: false)
     assert value_at(reply, "/records/board_open__very_high") == []

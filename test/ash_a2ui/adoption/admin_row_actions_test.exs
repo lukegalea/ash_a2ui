@@ -18,6 +18,7 @@ defmodule AshA2ui.Adoption.AdminRowActionsTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.Adoption.{Job, JobsUI}
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.SchemaHelper
 
   @red %{id: "u-red", team: "red"}
@@ -51,16 +52,7 @@ defmodule AshA2ui.Adoption.AdminRowActionsTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "adoption_jobs",
-        "sourceComponentId" => "data_grid",
-        "timestamp" => "2026-10-16T00:00:00Z",
-        "context" => context
-      }
-    }
+    Messages.call(name, "adoption_jobs", context, source: "data_grid")
   end
 
   # Resolves a rowActions context against one row and the data model, the

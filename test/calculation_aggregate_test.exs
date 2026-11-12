@@ -34,19 +34,10 @@ defmodule AshA2ui.CalculationAggregateTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.CalculationAggregateTest.ArticleUI
   alias AshA2ui.ResolvedView
-  alias AshA2ui.Test.{Article, Comment}
+  alias AshA2ui.Test.{Article, Comment, Messages}
 
   defp envelope(name, surface_id, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => surface_id,
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, surface_id, context)
   end
 
   defp value_at(messages, path) do

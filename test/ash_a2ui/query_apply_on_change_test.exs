@@ -11,7 +11,7 @@ defmodule AshA2ui.QueryApplyOnChangeTest do
 
   alias AshA2ui.Dynamic
   alias AshA2ui.Dynamic.Importer
-  alias AshA2ui.Test.{BulkPresetsUI, LiveFiltersUI, SortOnlyUI}
+  alias AshA2ui.Test.{BulkPresetsUI, LiveFiltersUI, Messages, SortOnlyUI}
 
   setup do
     previous = Application.get_env(:ash_a2ui, :catalog)
@@ -63,16 +63,11 @@ defmodule AshA2ui.QueryApplyOnChangeTest do
   end
 
   test "a query refresh keeps autoApply" do
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "surfaceId" => "test_surface",
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-11-12T12:00:00Z",
-        "name" => "query",
-        "context" => %{"query" => %{"filters" => %{"status" => "approved"}}, "page" => 1}
-      }
-    }
+    envelope =
+      Messages.call("query", "test_surface", %{
+        "query" => %{"filters" => %{"status" => "approved"}},
+        "page" => 1
+      })
 
     assert {:ok, messages} = AshA2ui.ActionHandler.handle(LiveFiltersUI, envelope, actor: nil)
 

@@ -18,6 +18,7 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
   alias AshA2ui.Dynamic.Importer
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.Calendar.{Event, MonthUI, SwitchUI}
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.SchemaHelper
 
   setup do
@@ -83,16 +84,7 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
   end
 
   defp envelope(context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => "query",
-        "surfaceId" => "calendar_switch",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => Map.put(context, "component", "schedule")
-      }
-    }
+    Messages.call("query", "calendar_switch", Map.put(context, "component", "schedule"))
   end
 
   defp value_at(messages, path) do

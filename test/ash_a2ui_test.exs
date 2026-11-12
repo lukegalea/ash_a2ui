@@ -15,19 +15,10 @@ defmodule AshA2uiTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Info
-  alias AshA2ui.Test.{KitchenSink, Minimal, MinimalUI}
+  alias AshA2ui.Test.{KitchenSink, Messages, Minimal, MinimalUI}
 
   defp envelope(name, surface_id, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => surface_id,
-        "sourceComponentId" => "e2e_test",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, surface_id, context, source: "e2e_test")
   end
 
   test "on-resource block: surface -> submit_form create -> invoke row action -> data model" do
@@ -71,7 +62,8 @@ defmodule AshA2uiTest do
                  "path" => "/ui/feedback",
                  "value" => %{"kind" => "success", "message" => status}
                }
-             }
+             },
+             %{"agentFunctionResponse" => %{"value" => %{"kind" => "success"}}}
            ] = follow_ups
 
     assert row["name"] == "E2E Provider"
@@ -119,7 +111,11 @@ defmodule AshA2uiTest do
              _other -> false
            end)
 
-    assert %{"updateDataModel" => %{"path" => "/ui/feedback"}} = List.last(error_messages)
+    assert [
+             %{"agentFunctionResponse" => %{"error" => %{"code" => "VALIDATION_FAILED"}}},
+             %{"updateDataModel" => %{"path" => "/ui/feedback"}} | _earlier
+           ] = Enum.reverse(error_messages)
+
     assert Ash.read!(KitchenSink) == []
   end
 

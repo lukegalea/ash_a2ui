@@ -14,7 +14,7 @@ defmodule AshA2ui.Wave5ActionHandlerTest do
 
   alias Ash.DataLayer.Ets
   alias AshA2ui.ActionHandler
-  alias AshA2ui.Test.{Author, Tag, Ticket, TicketNote, TicketSearchUI}
+  alias AshA2ui.Test.{Author, Messages, Tag, Ticket, TicketNote, TicketSearchUI}
 
   setup do
     on_exit(fn ->
@@ -27,16 +27,7 @@ defmodule AshA2ui.Wave5ActionHandlerTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-11-12T12:00:00Z",
-        "name" => name,
-        "surfaceId" => "tickets",
-        "context" => context
-      }
-    }
+    Messages.call(name, "tickets", context)
   end
 
   defp assert_all_valid(messages), do: Enum.each(messages, &assert_valid_agent_message/1)

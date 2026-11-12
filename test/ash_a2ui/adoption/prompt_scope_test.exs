@@ -16,6 +16,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
   import ExUnit.CaptureIO
 
   alias AshA2ui.ActionHandler
+  alias AshA2ui.Test.Messages
 
   alias AshA2ui.Test.PromptScope.{
     MixedTasksUI,
@@ -77,16 +78,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
   end
 
   defp handle(ui, surface_id, name, context) do
-    envelope = %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => surface_id,
-        "sourceComponentId" => "test",
-        "timestamp" => "2026-10-17T00:00:00Z",
-        "context" => context
-      }
-    }
+    envelope = Messages.call(name, surface_id, context, source: "test")
 
     ActionHandler.handle(ui, envelope, actor: @red)
   end

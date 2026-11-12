@@ -4323,8 +4323,8 @@ defmodule AshA2ui.Encoder do
 
   # The option result List: templated over the options path, one Button per
   # option whose child Text binds the template-relative "label" and whose
-  # event context carries the template-relative "value".
-  defp option_list(base, options_path, event) do
+  # ashAction context carries the template-relative "value".
+  defp option_list(base, options_path, call) do
     [
       %{
         "id" => "#{base}_options",
@@ -4336,7 +4336,7 @@ defmodule AshA2ui.Encoder do
         "component" => "Button",
         "variant" => "borderless",
         "child" => "#{base}_option_text",
-        "action" => ash_action(event["name"], event["context"], "#{base}_option_button")
+        "action" => ash_action(call["name"], call["context"], "#{base}_option_button")
       },
       %{
         "id" => "#{base}_option_text",

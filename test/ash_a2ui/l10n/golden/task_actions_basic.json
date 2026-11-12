@@ -62,7 +62,21 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-start_create",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-start_create",
+      "value": {
+        "code": "",
+        "functionCallId": "call-start_create",
         "kind": "",
         "message": "",
         "result": {},
@@ -89,12 +103,22 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "VALIDATION_FAILED",
-        "functionCallId": "",
+        "functionCallId": "call-submit_form",
         "kind": "error",
         "message": "Validation failed. Please review the field errors.",
         "result": {},
         "resultText": ""
       }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "error": {
+        "code": "VALIDATION_FAILED",
+        "message": "Validation failed. Please review the field errors."
+      },
+      "functionCallId": "call-submit_form"
     },
     "version": "1.0"
   },
@@ -205,7 +229,21 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-submit_form",
+        "kind": "success",
+        "message": "Created successfully.",
+        "result": {},
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-submit_form",
+      "value": {
+        "code": "",
+        "functionCallId": "call-submit_form",
         "kind": "success",
         "message": "Created successfully.",
         "result": {},
@@ -265,7 +303,7 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-view_record",
         "kind": "",
         "message": "",
         "result": {},
@@ -281,6 +319,20 @@
       "value": {
         "id": "TASK_ONE",
         "name": "one"
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-view_record",
+      "value": {
+        "code": "",
+        "functionCallId": "call-view_record",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
       }
     },
     "version": "1.0"
@@ -340,7 +392,7 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-start_edit",
         "kind": "",
         "message": "",
         "result": {},
@@ -356,6 +408,20 @@
       "value": {
         "id": "TASK_ONE",
         "name": "one"
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-start_edit",
+      "value": {
+        "code": "",
+        "functionCallId": "call-start_edit",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
       }
     },
     "version": "1.0"
@@ -467,7 +533,21 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-submit_form",
+        "kind": "success",
+        "message": "Updated successfully.",
+        "result": {},
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-submit_form",
+      "value": {
+        "code": "",
+        "functionCallId": "call-submit_form",
         "kind": "success",
         "message": "Updated successfully.",
         "result": {},
@@ -527,7 +607,21 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-cancel_record_task",
+        "kind": "",
+        "message": "",
+        "result": {},
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-cancel_record_task",
+      "value": {
+        "code": "",
+        "functionCallId": "call-cancel_record_task",
         "kind": "",
         "message": "",
         "result": {},
@@ -593,6 +687,13 @@
         },
         "totalCount": 4
       }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-query",
+      "value": {}
     },
     "version": "1.0"
   },
@@ -678,7 +779,21 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-invoke",
+        "kind": "success",
+        "message": "Destroy completed.",
+        "result": {},
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-invoke",
+      "value": {
+        "code": "",
+        "functionCallId": "call-invoke",
         "kind": "success",
         "message": "Destroy completed.",
         "result": {},
@@ -697,12 +812,22 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "INVALID_ACTION",
-        "functionCallId": "",
+        "functionCallId": "call-invoke",
         "kind": "error",
         "message": "Action \"nope\" is not allowed: it is not listed in the view's row_actions.",
         "result": {},
         "resultText": ""
       }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "error": {
+        "code": "INVALID_ACTION",
+        "message": "Action \"nope\" is not allowed: it is not listed in the view's row_actions."
+      },
+      "functionCallId": "call-invoke"
     },
     "version": "1.0"
   },
@@ -716,12 +841,22 @@
       "surfaceId": "experience_task",
       "value": {
         "code": "UNKNOWN_ACTION",
-        "functionCallId": "",
+        "functionCallId": "call-bogus",
         "kind": "error",
         "message": "Unknown action \"bogus\".",
         "result": {},
         "resultText": ""
       }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "error": {
+        "code": "UNKNOWN_ACTION",
+        "message": "Unknown action \"bogus\"."
+      },
+      "functionCallId": "call-bogus"
     },
     "version": "1.0"
   }

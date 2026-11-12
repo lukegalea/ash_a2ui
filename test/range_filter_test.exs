@@ -13,7 +13,7 @@ defmodule AshA2ui.RangeFilterTest do
 
   alias Ash.DataLayer.Ets
   alias AshA2ui.{ActionHandler, Info}
-  alias AshA2ui.Test.{Appointment, Clinic, ClinicMembership, Owner}
+  alias AshA2ui.Test.{Appointment, Clinic, ClinicMembership, Messages, Owner}
 
   setup do
     on_exit(fn ->
@@ -26,16 +26,7 @@ defmodule AshA2ui.RangeFilterTest do
   end
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "sourceComponentId" => "test_component",
-        "timestamp" => "2026-11-12T12:00:00Z",
-        "name" => name,
-        "surfaceId" => "appointments",
-        "context" => context
-      }
-    }
+    Messages.call(name, "appointments", context)
   end
 
   defp value_at(messages, path) do

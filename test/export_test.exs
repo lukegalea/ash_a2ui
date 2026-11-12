@@ -21,16 +21,7 @@ defmodule AshA2ui.ExportTest do
   alias AshA2ui.Test.WordReportV1UI
 
   defp envelope(name, context, surface) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => surface,
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, surface, context, id: "call-1")
   end
 
   defp create_word!(word, replacement \\ nil) do
@@ -213,7 +204,8 @@ defmodule AshA2ui.ExportTest do
                _other -> nil
              end) ==
                Experience.feedback("success", "Exported table.csv (3 rows).", %{
-                 "result" => %{"filename" => "table.csv", "rows" => 3}
+                 "result" => %{"filename" => "table.csv", "rows" => 3},
+                 "functionCallId" => "call-1"
                })
     end
   end

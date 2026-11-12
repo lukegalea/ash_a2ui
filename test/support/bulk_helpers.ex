@@ -3,7 +3,7 @@ defmodule AshA2ui.Test.BulkHelpers do
   Shared setup and envelope helpers for the bulk-action tests (A2UI-104).
   """
 
-  alias AshA2ui.Test.{BulkProject, BulkTask}
+  alias AshA2ui.Test.{BulkProject, BulkTask, Messages}
 
   @actor %{id: "bulk-tester"}
 
@@ -48,18 +48,9 @@ defmodule AshA2ui.Test.BulkHelpers do
     %{"project" => %{"search" => "", "value" => project.id, "label" => project.name}}
   end
 
-  @doc "An A2UI 1.0 action event."
+  @doc "An `ashAction` call from the bulk toolbar."
   def envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "bulk_tasks",
-        "sourceComponentId" => "bulk_toolbar",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "bulk_tasks", context, source: "bulk_toolbar", id: "call-#{name}")
   end
 
   @doc "The value of the first updateDataModel write at `path`."

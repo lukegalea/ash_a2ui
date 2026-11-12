@@ -35,8 +35,8 @@ enforcement you haven't written.
 ## Writing: the `ashAction` call
 
 Every server-handled control is an `ashAction` function call. The renderer
-sends one renderer-to-agent message (a `callAgentFunction`, or a plain
-`action` event), and `AshA2ui.ActionHandler.handle/3` consumes it:
+sends one renderer-to-agent message (a `callAgentFunction`), and
+`AshA2ui.ActionHandler.handle/3` consumes it:
 
 ```elixir
 AshA2ui.ActionHandler.handle(MyApp.UI.TicketUI, message, actor: current_user)

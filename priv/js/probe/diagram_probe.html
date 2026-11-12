@@ -128,7 +128,7 @@
       document.getElementById("host").appendChild(surfaceEl);
 
       // The encoder sends every server-handled action as an ashAction
-      // call; the probe records it like an event action.
+      // call; the probe records each call's name and context.
       const recordAction = (action) => {
         window.__dispatched.push({name: action.name, context: action.context});
       };
@@ -136,10 +136,7 @@
         ashAction: (args, context) => recordAction({...args, surfaceId: context.surface.id}),
         downloadFile: () => undefined,
       });
-      const processor = new MessageProcessor(
-        [ashCatalog, adminCatalog, ashFunctions],
-        recordAction,
-      );
+      const processor = new MessageProcessor([ashCatalog, adminCatalog, ashFunctions]);
       processor.onSurfaceCreated((surface) => {
         window.__boot.surfaceCreated = true;
         window.__surface = surface;

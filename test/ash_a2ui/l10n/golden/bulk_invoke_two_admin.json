@@ -135,7 +135,32 @@
       "surfaceId": "bulk_tasks",
       "value": {
         "code": "",
-        "functionCallId": "",
+        "functionCallId": "call-bulk_invoke",
+        "kind": "warning",
+        "message": "Approve: 1 of 2 selected records done; 1 failed.",
+        "result": {
+          "errors": [
+            {
+              "id": "TASK_BRAVO",
+              "message": "score: must be greater than or equal to 0"
+            }
+          ],
+          "failed": 1,
+          "ok": 1,
+          "refused": 0,
+          "skipped": 0
+        },
+        "resultText": ""
+      }
+    },
+    "version": "1.0"
+  },
+  {
+    "agentFunctionResponse": {
+      "functionCallId": "call-bulk_invoke",
+      "value": {
+        "code": "",
+        "functionCallId": "call-bulk_invoke",
         "kind": "warning",
         "message": "Approve: 1 of 2 selected records done; 1 failed.",
         "result": {

@@ -10,18 +10,10 @@ defmodule AshA2ui.Wizard.WizardActionHandlerTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.Enrollment
+  alias AshA2ui.Test.Messages
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "enrollments",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "enrollments", context)
   end
 
   defp handle(name, context), do: handle_on(Enrollment, name, context)
@@ -32,7 +24,7 @@ defmodule AshA2ui.Wizard.WizardActionHandlerTest do
     {tag, messages}
   end
 
-  defp paths(messages), do: Enum.map(messages, & &1["updateDataModel"]["path"])
+  defp paths(messages), do: for(%{"updateDataModel" => %{"path" => path}} <- messages, do: path)
 
   defp value_at(messages, path) do
     messages

@@ -412,7 +412,13 @@ function promptSurface(hook) {
             id: "open",
             component: "Button",
             child: "open_label",
-            action: {event: {name: "open_prompt"}},
+            action: {
+              functionCall: {
+                "@call": "ashAction",
+                catalogId: ASH_A2UI_CATALOG_ID,
+                args: {name: "prompt", sourceComponentId: "open", context: {action: "delegate"}},
+              },
+            },
           },
           {id: "open_label", component: "Text", text: "Delegate"},
           {

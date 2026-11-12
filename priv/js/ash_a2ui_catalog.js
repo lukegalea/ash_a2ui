@@ -95,8 +95,8 @@
  * AshA2ui sends every server-handled action as an `ashAction` function call
  * against the ash_a2ui catalog (see `ash_a2ui_hook.js`). The elements here
  * that read or send an action themselves (the combobox, auto-apply, the
- * prompt Modal, row markers) read either form through `actionSpec` and send
- * it back in the form it came in through `dispatchActionSpec`. Bindings are
+ * prompt Modal, row markers) read it through `actionSpec` and send it back
+ * as the same call through `dispatchActionSpec`. Bindings are
  * `{"@path": ...}`.
  *
  * Written against @a2ui/lit + @a2ui/web_core 0.15.0 (see the hook's note
@@ -107,7 +107,7 @@
  * exact string match and renders each component type with its entry's
  * `element` under its `tagName`. Custom elements reach the surface state
  * through `this.context` (`componentModel`, `dataContext` with its
- * `surface.{dataModel, componentsModel, dispatchAction}` and
+ * `surface.{dataModel, componentsModel}` and
  * `resolveAction`), the same seams the basic catalog uses.
  */
 
@@ -213,20 +213,15 @@ export function resolveEventContext(value, dataModel, basePath = "/") {
 }
 
 /**
- * The name and context of a component's action, whichever form the agent
- * chose: an event (`{event: {name, context}}`) or an `ashAction` function
- * call (`{functionCall: {"@call": "ashAction", catalogId, args: {name,
+ * The name and context of a component's `ashAction` function call
+ * (`{functionCall: {"@call": "ashAction", catalogId, args: {name,
  * context}}}`, how AshA2ui sends every server-handled action). Returns
- * `{name, context, catalogId}`, `catalogId` being the ash_a2ui catalog's id
- * for an `ashAction` and null for an event, or null for any other action.
- * Shared with `createAshAdminCatalog`.
+ * `{name, context, catalogId}` (`catalogId` null when the call names none),
+ * or null for any other action: an event action is not sent, since the
+ * agent answers ashAction calls only. Shared with `createAshAdminCatalog`.
  */
 export function actionSpec(action) {
   if (!action || typeof action !== "object") return null;
-  const event = action.event;
-  if (event && typeof event === "object" && typeof event.name === "string") {
-    return {name: event.name, context: event.context || {}, catalogId: null};
-  }
   const call = action.functionCall;
   const args = call && call.args;
   if (call && call["@call"] === "ashAction" && args && typeof args.name === "string") {
@@ -247,8 +242,8 @@ export function componentActionSpec(componentModel) {
 /**
  * Sends `spec` (an `actionSpec`) as the component would: an `ashAction`
  * call through the data context's function resolution (the ash_a2ui
- * catalog's `ashAction` writes the pending feedback and calls the agent),
- * or, for an event, the surface's action. Its context's bindings are
+ * catalog's `ashAction` writes the pending feedback and calls the agent).
+ * Its context's bindings are
  * resolved first, under `basePath`; `update(context)`, when given, returns
  * the context to send from the resolved one. `componentContext` is the
  * element's `this.context`, and the action's source is its component.
@@ -260,21 +255,16 @@ export function dispatchActionSpec(
   {basePath = "/", update, sourceComponentId} = {},
 ) {
   const {dataContext, componentModel} = componentContext;
-  const surface = dataContext.surface;
   const source = sourceComponentId ?? componentModel.id;
-  const resolved = resolveEventContext(spec.context || {}, surface.dataModel, basePath);
+  const resolved = resolveEventContext(spec.context || {}, dataContext.surface.dataModel, basePath);
   const context = update ? update(resolved) : resolved;
 
-  if (spec.catalogId) {
-    const functionCall = {
-      "@call": "ashAction",
-      catalogId: spec.catalogId,
-      args: {name: spec.name, sourceComponentId: source, context},
-    };
-    return Promise.resolve(dataContext.resolveAction({functionCall}, {userActivation: true}));
-  }
-
-  return surface.dispatchAction({event: {name: spec.name, context}}, source);
+  const functionCall = {
+    "@call": "ashAction",
+    args: {name: spec.name, sourceComponentId: source, context},
+  };
+  if (spec.catalogId) functionCall.catalogId = spec.catalogId;
+  return Promise.resolve(dataContext.resolveAction({functionCall}, {userActivation: true}));
 }
 
 // --- ChoicePicker override ---------------------------------------------------

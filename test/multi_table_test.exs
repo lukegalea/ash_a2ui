@@ -12,20 +12,12 @@ defmodule AshA2ui.MultiTableTest do
 
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.ReviewItem
   alias AshA2ui.Test.Surface
 
   defp envelope(name, context) do
-    %{
-      "version" => "1.0",
-      "action" => %{
-        "name" => name,
-        "surfaceId" => "review",
-        "sourceComponentId" => "test_component",
-        "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-        "context" => context
-      }
-    }
+    Messages.call(name, "review", context)
   end
 
   defp value_at(messages, path) do
@@ -36,7 +28,7 @@ defmodule AshA2ui.MultiTableTest do
     end)
   end
 
-  defp paths(messages), do: Enum.map(messages, & &1["updateDataModel"]["path"])
+  defp paths(messages), do: for(%{"updateDataModel" => %{"path" => path}} <- messages, do: path)
 
   defp components_by_id(messages) do
     messages
