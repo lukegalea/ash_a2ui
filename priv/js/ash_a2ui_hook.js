@@ -2,108 +2,95 @@
  * AshA2ui LiveView JS hook.
  *
  * Hosts an `<a2ui-surface>` element (from `@a2ui/lit`) inside the LiveView
- * container, feeds it the A2UI server->client messages pushed by
- * `AshA2ui.LiveRenderer` as the "a2ui:messages" event, and forwards the
- * renderer's client `action` payloads back to the server as the
- * "a2ui:action" LiveView event (wrapped in the A2UI client envelope of the
- * surface's protocol version).
+ * container and runs an A2UI 1.0 `MessageProcessor` (from `@a2ui/web_core`)
+ * for it:
  *
- * ## A2UI v1.0 support
+ *   - the agent-to-renderer messages `AshA2ui.LiveRenderer` pushes as the
+ *     "a2ui:messages" event go to `processor.processMessagesWithErrors`;
+ *   - every renderer-to-agent message goes back, verbatim, as the single
+ *     LiveView event "a2ui:message": an `action` (an event action), a
+ *     `callAgentFunction` (an `ashAction` call), a
+ *     `rendererFunctionResponse` (the answer to a `callRendererFunction`)
+ *     or an `error` (each message the processor could not apply).
  *
- * No published `@a2ui/lit` / `@a2ui/web_core` release ships a v1.0 runtime
- * (0.10.x exposes only v0_8/v0_9 entry points; the v1_0 directory carries
- * schemas alone) — so this hook is the v1.0-capable client layer on top of
- * the v0_9 renderer. Per-message (`message.version === "v1.0"`) it:
+ * ## Action feedback: `ashAction`
  *
- *   - **expands inline `createSurface`** (v1.0's single-message bootstrap
- *     carrying `components` + `dataModel`) into the v0.9 triple the
- *     renderer understands, mapping the v1.0 basic-catalog id onto a
- *     registered catalog and carrying `surfaceProperties` through as the
- *     surface theme metadata;
- *   - **generates the `actionResponse` handshake**: outgoing actions from a
- *     v1.0 surface carry a unique `actionId` + `wantResponse: true` in a
- *     v1.0 envelope, and — the UX point — the hook optimistically writes
- *     `{status: "pending", ...}` to the surface's reserved `/ui/response`
- *     path the moment the action fires, so bound status components show
- *     feedback at 0 RTT. The server's `actionResponse` (echoing the
- *     `actionId`) resolves the pending entry; a watchdog timeout writes a
- *     timeout error into `/ui/response` if no response ever arrives. Every
- *     response also dispatches a bubbling `"ash-a2ui:action-response"`
- *     CustomEvent on the container for host-level integration.
- *   - **executes `callFunction`** server->client calls against the
- *     host-registered function table (`configureAshA2ui({functions})`;
- *     `openUrl` and `downloadFile` ship as built-ins) and pushes the `functionResponse`
- *     back as the "a2ui:function_response" LiveView event when
- *     `wantResponse` is set.
+ * Every server-handled interaction is a function-call action against the
+ * ash_a2ui catalog (`{"functionCall": {"@call": "ashAction", "catalogId":
+ * ..., "args": {name, sourceComponentId, context}}}`). The hook registers
+ * that catalog beside the host's catalogs, and its `ashAction`:
  *
- * v0.9.1 surfaces are untouched: their messages pass straight through and
- * their actions keep the v0.9.1 envelope.
+ *   1. writes `{kind: "pending", message: pendingMessage, functionCallId}`
+ *      to the surface's `/ui/feedback` at once, so bound status components
+ *      show feedback at 0 RTT;
+ *   2. sends the call as `callAgentFunction` with that `functionCallId`;
+ *   3. waits for the agent's `agentFunctionResponse`, which arrives last in
+ *      the agent's batch, after the data-model writes (the settled
+ *      `/ui/feedback` among them). If none arrives within `actionTimeoutMs`
+ *      and `/ui/feedback` still belongs to this call, it writes a `TIMEOUT`
+ *      error there;
+ *   4. dispatches the bubbling `"ash-a2ui:action-response"` CustomEvent on
+ *      the container, `detail = {functionCallId, surfaceId, response}`,
+ *      where `response` is `{value}` or `{error: {code, message}}`.
+ *
+ * An `event` action carries no correlation: it goes out as an `action`
+ * message with no pending state.
+ *
+ * ## Renderer functions
+ *
+ * A `callRendererFunction` runs a catalog function the agent may call
+ * (`allowedCallers` `agentOnly` or `rendererOrAgent`), and the processor
+ * sends its `rendererFunctionResponse`. The ash_a2ui catalog's
+ * `downloadFile` is one: the agent sends it after an export. A host that
+ * needs more renderer functions declares them in a catalog of its own.
  *
  * ## Reference links: `openSurface`
  *
  * Activating a reference link (admin catalog DataGrid link cells and
- * FieldDisplay links, or any `{"functionCall": {"call": "openSurface"}}`)
- * raises the bubbling, composed `"ash-a2ui:open-surface"` DOM event with
+ * FieldDisplay links, or the admin catalog's `openSurface` function) raises
+ * the bubbling, composed `"ash-a2ui:open-surface"` DOM event with
  * `detail = {surface, recordId?, query?, href?, surfaceId}`. The hook
  * catches it for its own surface and pushes the `"a2ui:open_surface"`
- * LiveView event with `{surface, recordId, query}` — `AshA2ui.LiveRenderer`
- * navigates to the configured `open_surface_url` by default. A
- * server-sent v1.0 `callFunction` `openSurface` takes the same path. Hosts
- * that want to handle it client-side pass
+ * LiveView event with `{surface, recordId, query}`; `AshA2ui.LiveRenderer`
+ * navigates to the configured `open_surface_url` by default. Hosts that
+ * want to handle it client-side pass
  * `configureAshA2ui({openSurface: (args, {surfaceId, href}) => ...})`.
  *
  * ## Contract with the host bundle
  *
- * This file ships without dependencies — importing `@a2ui/lit` /
+ * This file ships without dependencies: importing `@a2ui/lit` /
  * `@a2ui/web_core` is left to the host app bundle, which must:
  *
- *   1. Import `@a2ui/lit/v0_9` so the `<a2ui-surface>` custom element is
- *      registered (the import has that side effect).
+ *   1. Import `@a2ui/lit`, which registers the `<a2ui-surface>` element.
  *   2. Hand the renderer classes to this hook before `LiveSocket` mounts it:
  *
- *          import {MessageProcessor} from "@a2ui/web_core/v0_9";
- *          import {basicCatalog} from "@a2ui/lit/v0_9";
+ *          import "@a2ui/lit";
+ *          import {Catalog, MessageProcessor} from "@a2ui/web_core";
+ *          import {basicCatalog} from "@a2ui/web_core/catalogs/basic/v1";
  *          import {AshA2ui, configureAshA2ui} from "ash_a2ui/priv/js/ash_a2ui_hook.js";
  *
- *          configureAshA2ui({MessageProcessor, catalogs: [basicCatalog]});
+ *          configureAshA2ui({MessageProcessor, Catalog, catalogs: [basicCatalog]});
  *          const liveSocket = new LiveSocket("/live", Socket, {hooks: {AshA2ui}});
  *
  * Optional extras shipped alongside this hook (see the Theming topic):
  *
- *   - `ash_a2ui_theme.css` — a neutral `--a2ui-*` CSS-variable theme for
+ *   - `ash_a2ui_theme.css`: a neutral `--a2ui-*` CSS-variable theme for
  *     the basic catalog; import it into your app CSS and override tokens.
- *   - `ash_a2ui_catalog.js` — `createAshA2uiCatalog(deps)` builds a merged
- *     catalog (registered under the basic catalog id) whose ChoicePicker
- *     renders a native `<select>` for single-choice pickers and whose
- *     Column upgrades AshA2ui search-picker composites to a typeahead
- *     combobox (pass `ColumnApi` in the deps to enable).
- *   - `configureAshA2ui({..., markdown})` — wires a markdown renderer so
+ *   - `ash_a2ui_catalog.js`: `createAshA2uiCatalog(deps)` builds the basic
+ *     catalog with AshA2ui's element overrides (see its docs).
+ *   - `ash_admin_catalog.js`: `createAshAdminCatalog(deps)` builds the admin
+ *     catalog.
+ *   - `configureAshA2ui({..., markdown})`: wires a markdown renderer so
  *     Text headings render as headings instead of literal `##` markdown
  *     (see the configureAshA2ui docs below).
  *
- * Verified against @a2ui/lit / @a2ui/web_core 0.10.x sources
- * (https://github.com/a2ui-project/a2ui, renderers/web_core + renderers/lit,
- * v0_9 entry points):
- *
- *   - Message ingest is `new MessageProcessor(catalogs, actionHandler)` +
- *     `processor.processMessages(messages)` — NOT a method on the
- *     `<a2ui-surface>` element. The element only takes a `SurfaceModel` via
- *     its `surface` property, delivered through
- *     `processor.onSurfaceCreated(cb)`.
- *   - User actions are delivered to the `actionHandler` callback passed to
- *     the `MessageProcessor` constructor (an `A2uiClientAction` with `name`,
- *     `surfaceId`, `sourceComponentId`, `context`) — in v0.9 there is no
- *     public action DOM event on the surface element.
- *
- * Actions flow through exactly one path: the `actionHandler` callback passed
- * to the `MessageProcessor` constructor (an `A2uiClientAction` with `name`,
- * `surfaceId`, `sourceComponentId`, `context`). A v0.8-era DOM-event
- * fallback (`a2uiaction` listener) was removed: verified against
- * @a2ui/lit 0.10.x sources, the v0_9 renderer does not dispatch a public
- * action DOM event, so the listener could only ever double-push an action
- * when a renderer build fired both paths. Docs:
- * https://www.npmjs.com/package/@a2ui/lit and
- * https://a2ui.org/guides/client-setup/.
+ * Verified against `@a2ui/lit` / `@a2ui/web_core` 0.15.0: message ingest is
+ * `new MessageProcessor(catalogs, actionHandler, {outboundListener})` plus
+ * `processor.processMessagesWithErrors(messages)`; the `<a2ui-surface>`
+ * element takes a `SurfaceModel` through its `surface` property, delivered
+ * by `processor.onSurfaceCreated(cb)`; `processor.callAgentFunction(surfaceId,
+ * call, {functionCallId, timeoutMs})` sends `callAgentFunction` through the
+ * `outboundListener` and settles on the matching `agentFunctionResponse`.
  *
  * ## Zero jank: bootstrap skeleton and panel reveal
  *
@@ -111,7 +98,7 @@
  * to show, so `mounted()` immediately renders a lightweight skeleton
  * (heading bar + row bars) inside the hook container, styled only with the
  * `--a2ui-*` custom properties (hosts theme it with everything else). The
- * skeleton is removed the moment the first surface render lands — the
+ * skeleton is removed the moment the first surface render lands; the
  * removal waits for the surface element's first update (Lit
  * `updateComplete`) so there is no blank frame between the two. On a
  * LiveView reconnect the hook remounts and the skeleton reappears until the
@@ -120,25 +107,29 @@
  *
  * When a record-task panel opens (`start_create` / `view_record` /
  * `start_edit` flip `/ui/panel/visible`), the hook scrolls the panel into
- * view and focuses its first field — client-side, zero roundtrip. The
+ * view and focuses its first field, client-side, with no roundtrip. The
  * admin catalog's `recordPanel` manages its own focus; the reveal stays out
  * of the way when focus has already moved inside the panel.
  *
- * v0 limitation: a single surface per hook — the last surface created by the
+ * Limitation: a single surface per hook; the last surface created by the
  * processor wins the `<a2ui-surface>` element.
  *
- * The pure half of that work — mapping server->client messages onto what
- * the renderer takes — lives in `ash_a2ui_messages.js` (tested with
+ * The pure half of this work lives in `ash_a2ui_protocol.js` (tested with
  * `node --test`, `mix js.test`); this file runs the side effects around it.
  */
 
 import {
-  V1_VERSION,
-  adaptMessage,
+  FEEDBACK_PATH,
+  PROTOCOL_VERSION,
+  actionMessage,
+  ashActionCall,
+  createAshFunctionCatalog,
   panelStateOf,
+  pendingFeedback,
   replaceExistingSurfaces,
-  settledUiResponse,
-} from "./ash_a2ui_messages.js";
+  rpcError,
+  timeoutFeedback,
+} from "./ash_a2ui_protocol.js";
 
 let hookDeps = null;
 
@@ -148,64 +139,64 @@ let hookDeps = null;
  *
  * `markdown` is optional but strongly recommended: without a markdown
  * renderer the basic catalog's Text component prints headings as literal
- * markdown (`## Title`) — an upstream design decision, see
- * https://github.com/google/A2UI/issues/1226. Pass the three pieces and
- * the hook wires them up with a Lit context provider on the hook element:
+ * markdown (`## Title`). Pass the three pieces and the hook wires them up
+ * with a Lit context provider on the hook element:
  *
  *     import {ContextProvider} from "@lit/context";
- *     import {Context} from "@a2ui/lit/v0_9";
+ *     import {Context} from "@a2ui/web_core/catalogs/basic/v1";
  *     import {renderMarkdown} from "@a2ui/markdown-it";
  *
  *     configureAshA2ui({
  *       MessageProcessor,
+ *       Catalog,
  *       catalogs: [catalog],
  *       markdown: {ContextProvider, context: Context.markdown, render: renderMarkdown},
  *     });
  *
  * (`ContextProvider` attaches its `context-request` listeners directly to
- * the host element, so a plain hook container works as the provider host —
- * verified against @lit/context 1.x `context-provider.js`.)
+ * the host element, so a plain hook container works as the provider host.)
  *
  * @param {{
  *   MessageProcessor: Function,
+ *   Catalog: Function,
  *   catalogs: Array<object>,
  *   markdown?: {ContextProvider: Function, context: object, render: Function},
- *   functions?: Object<string, Function>,
  *   openSurface?: Function,
  *   pendingMessage?: string,
  *   actionTimeoutMs?: number,
  * }} deps
- *   `functions` — client-side functions the server may invoke via v1.0
- *   `callFunction` messages, keyed by name (`(args) => value | Promise`);
- *   merged over the built-in `openUrl` / `downloadFile`. `pendingMessage` — the optimistic
- *   `/ui/response` message shown while a v1.0 action is in flight (default
- *   "Working…"). `actionTimeoutMs` — v1.0 actionResponse watchdog (default
- *   10000; 0 disables). `openSurface` — `(args, {surfaceId, href}) => void`:
- *   handle reference-link navigation client-side instead of pushing the
+ *   `Catalog`: the `@a2ui/web_core` class the hook builds the ash_a2ui
+ *   function catalog with. `pendingMessage`: the optimistic `/ui/feedback`
+ *   message shown while an `ashAction` call is in flight (default
+ *   "Working…"). `actionTimeoutMs`: how long an `ashAction` call waits for
+ *   its `agentFunctionResponse` (default 10000; 0 waits forever).
+ *   `openSurface`: `(args, {surfaceId, href}) => void`, to handle
+ *   reference-link navigation client-side instead of pushing the
  *   `"a2ui:open_surface"` LiveView event.
  */
 export function configureAshA2ui(deps) {
   hookDeps = deps;
 }
 
-function resolveDeps() {
-  // Fallback for host bundles that prefer a global over calling
-  // configureAshA2ui (e.g. when the hook is bundled separately).
-  const deps = hookDeps || globalThis.__ASH_A2UI_DEPS__;
-
-  if (!deps || typeof deps.MessageProcessor !== "function") {
+/**
+ * The deps the hook runs with: `deps`, or what `configureAshA2ui` (or the
+ * `globalThis.__ASH_A2UI_DEPS__` fallback) registered, with defaults filled
+ * in.
+ */
+export function resolveDeps(deps = hookDeps || globalThis.__ASH_A2UI_DEPS__) {
+  if (!deps || typeof deps.MessageProcessor !== "function" || typeof deps.Catalog !== "function") {
     throw new Error(
       "AshA2ui hook: missing @a2ui renderer classes. Call " +
-        "configureAshA2ui({MessageProcessor, catalogs}) from your app bundle " +
+        "configureAshA2ui({MessageProcessor, Catalog, catalogs}) from your app bundle " +
         "(or set globalThis.__ASH_A2UI_DEPS__) before mounting the LiveSocket.",
     );
   }
 
   return {
     MessageProcessor: deps.MessageProcessor,
+    Catalog: deps.Catalog,
     catalogs: deps.catalogs || [],
     markdown: deps.markdown || null,
-    functions: {...BUILTIN_FUNCTIONS, ...(deps.functions || {})},
     pendingMessage: deps.pendingMessage || "Working…",
     openSurface: typeof deps.openSurface === "function" ? deps.openSurface : null,
     actionTimeoutMs: deps.actionTimeoutMs === undefined ? 10000 : deps.actionTimeoutMs,
@@ -213,35 +204,30 @@ function resolveDeps() {
 }
 
 const OPEN_SURFACE_EVENT = "ash-a2ui:open-surface";
+const ACTION_RESPONSE_EVENT = "ash-a2ui:action-response";
 
-const BUILTIN_FUNCTIONS = {
-  openUrl: (args) => {
-    if (args && typeof args.url === "string") window.open(args.url, "_blank", "noopener");
-    return null;
-  },
-  // The frozen server-generated file-export contract (see AshA2ui.Export):
-  // `dataUrl` (a data: URL — how AshA2ui delivers CSV exports) or `url`
-  // (a signed download URL, for hosts that upload instead of inlining),
-  // downloaded under `filename` via a transient anchor click.
-  downloadFile: (args) => {
-    const href = args && (typeof args.dataUrl === "string" ? args.dataUrl : args.url);
-    if (typeof href !== "string") return null;
-    const anchor = document.createElement("a");
-    anchor.href = href;
-    anchor.download = (args && args.filename) || "download";
-    anchor.rel = "noopener";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    return null;
-  },
-};
-
-function randomActionId() {
+function randomCallId() {
   if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
     return globalThis.crypto.randomUUID();
   }
   return `a2ui-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// The ash_a2ui catalog's downloadFile (agent only): `dataUrl` (a data: URL,
+// how AshA2ui delivers CSV exports) or `url` (a signed download URL, for
+// hosts that upload instead of inlining), downloaded under `filename` via a
+// transient anchor click. See AshA2ui.Export.
+function downloadFile(args) {
+  const href = args && (typeof args.dataUrl === "string" ? args.dataUrl : args.url);
+  if (typeof href !== "string" || typeof document === "undefined") return undefined;
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = (args && args.filename) || "download";
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  return undefined;
 }
 
 // --- zero-jank: bootstrap skeleton -------------------------------------------
@@ -380,19 +366,11 @@ const PANEL_IDS = ["record_panel", "form_slot", "form"];
 export const AshA2ui = {
   mounted() {
     const deps = resolveDeps();
-    const {MessageProcessor, catalogs, markdown} = deps;
-    this.deps = deps;
-
-    // v1.0 state: which surfaces speak v1.0, and the in-flight
-    // actionId -> {surfaceId, timer} entries awaiting an actionResponse.
-    this.v1Surfaces = new Set();
-    this.pendingActions = new Map();
 
     // Zero-jank state: the bootstrap skeleton, and whether the record-task
     // panel is currently open (reveal fires on the hidden -> visible flip
-    // only — background refreshes must not yank scroll/focus).
+    // only; background refreshes must not yank scroll/focus).
     this.skeletonEl = null;
-    this.panelVisible = false;
     this.renderSkeleton();
 
     // Provide the markdown renderer to Text components (which consume the
@@ -400,6 +378,7 @@ export const AshA2ui = {
     // of every rendered component. The renderer contract is
     // `(value, options) => Promise<string>`; wrap sync renderers so both
     // shapes work.
+    const {markdown} = deps;
     if (markdown && markdown.ContextProvider && markdown.context && markdown.render) {
       this.markdownProvider = new markdown.ContextProvider(this.el, {
         context: markdown.context,
@@ -412,8 +391,7 @@ export const AshA2ui = {
 
     // Reference links: element-raised requests bubble (composed) through
     // this container; catalog-function requests are raised on window with
-    // the surface id — accept those only for surfaces this hook renders.
-    this.surfaceIds = new Set();
+    // the surface id, and are accepted only for surfaces this hook renders.
     this.onOpenSurface = (event) => {
       const detail = event.detail || {};
       const ours = event.composedPath().includes(this.el) || this.surfaceIds.has(detail.surfaceId);
@@ -422,29 +400,8 @@ export const AshA2ui = {
       this.openSurface(detail);
     };
     window.addEventListener(OPEN_SURFACE_EVENT, this.onOpenSurface);
-    // The server-sent v1.0 callFunction "openSurface" takes the same route
-    // unless the host registered its own function under that name.
-    this.functions = {
-      openSurface: (args) => {
-        this.openSurface(args || {});
-        return null;
-      },
-      ...deps.functions,
-    };
 
-    this.processor = new MessageProcessor(catalogs, (action) => {
-      this.forwardAction(action);
-    });
-
-    // The surface element renders a SurfaceModel; hand it the model as soon
-    // as the processor creates it (single-surface v0 semantics).
-    if (typeof this.processor.onSurfaceCreated === "function") {
-      this.surfaceSubscription = this.processor.onSurfaceCreated((surface) => {
-        if (surface && surface.id) this.surfaceIds.add(surface.id);
-        this.surfaceEl.surface = surface;
-        this.dismissSkeleton();
-      });
-    }
+    this.start(deps);
 
     this.handleEvent("a2ui:messages", ({messages}) => {
       this.processMessages(messages || []);
@@ -454,14 +411,16 @@ export const AshA2ui = {
   destroyed() {
     if (this.onOpenSurface) window.removeEventListener(OPEN_SURFACE_EVENT, this.onOpenSurface);
 
-    for (const pending of this.pendingActions.values()) {
-      if (pending.timer) clearTimeout(pending.timer);
-    }
-    this.pendingActions.clear();
-
     if (this.surfaceSubscription && typeof this.surfaceSubscription.unsubscribe === "function") {
       this.surfaceSubscription.unsubscribe();
     }
+    if (this.errorSubscription && typeof this.errorSubscription.unsubscribe === "function") {
+      this.errorSubscription.unsubscribe();
+    }
+
+    // Rejects the in-flight ashAction calls (CANCELLED) and disposes the
+    // surfaces.
+    if (this.processor && typeof this.processor.dispose === "function") this.processor.dispose();
 
     if (this.skeletonEl && this.skeletonEl.parentNode) {
       this.skeletonEl.parentNode.removeChild(this.skeletonEl);
@@ -475,49 +434,142 @@ export const AshA2ui = {
     this.processor = null;
     this.surfaceEl = null;
     // The ContextProvider's listeners are attached to this.el, which the
-    // LiveView is discarding — dropping the reference is enough.
+    // LiveView is discarding; dropping the reference is enough.
     this.markdownProvider = null;
   },
 
   /**
-   * Feeds pushed server->client messages into the renderer, adapting v1.0
-   * messages for the v0_9 MessageProcessor (see "A2UI v1.0 support"
-   * above). The mapping itself is `adaptMessage` in
-   * `ash_a2ui_messages.js`; the consumed messages' side effects run here,
-   * in message order.
+   * Creates the processor: the host's catalogs plus the ash_a2ui function
+   * catalog bound to this hook. Needs no DOM beyond `this.el` (an
+   * EventTarget) and `this.pushEvent`.
+   */
+  start(deps) {
+    this.deps = deps;
+    this.surfaceIds = new Set();
+    this.panelVisible = false;
+
+    const ashCatalog = createAshFunctionCatalog(deps.Catalog, {
+      ashAction: (args, context) => this.runAshAction(args, context),
+      downloadFile,
+    });
+
+    this.processor = new deps.MessageProcessor(
+      [...deps.catalogs, ashCatalog],
+      (action) => this.send(actionMessage(action)),
+      {outboundListener: (message) => this.send(message)},
+    );
+
+    // The surface element renders a SurfaceModel; hand it the model as soon
+    // as the processor creates it (one surface per hook).
+    this.surfaceSubscription = this.processor.onSurfaceCreated((surface) => {
+      if (surface && surface.id) this.surfaceIds.add(surface.id);
+      if (this.surfaceEl) this.surfaceEl.surface = surface;
+      this.dismissSkeleton();
+    });
+
+    // Errors raised while a surface runs (a binding that fails, a function
+    // a surface cannot resolve) go to the console. The errors of messages
+    // the processor could not apply are sent to the agent instead.
+    this.applying = false;
+    if (this.processor.model && this.processor.model.onError) {
+      this.errorSubscription = this.processor.model.onError.subscribe((error) => {
+        if (!this.applying) console.warn("AshA2ui hook: renderer error", error);
+      });
+    }
+  },
+
+  /** Pushes one renderer-to-agent message to the LiveView. */
+  send(message) {
+    this.pushEvent("a2ui:message", message);
+  },
+
+  /**
+   * Feeds pushed agent-to-renderer messages into the processor and sends
+   * the agent an `error` message for each message it could not apply.
    */
   processMessages(messages) {
     if (!this.processor) return;
 
-    const adapted = [];
-    for (const message of messages) {
-      const {messages: mapped, createdSurfaceId, actionResponse, callFunction, deletedSurfaceId} =
-        adaptMessage(message, {catalogs: this.deps.catalogs});
-      adapted.push(...mapped);
-      if (createdSurfaceId !== undefined) this.v1Surfaces.add(createdSurfaceId);
-      if (deletedSurfaceId) this.v1Surfaces.delete(deletedSurfaceId);
-      if (actionResponse) this.resolveActionResponse(actionResponse);
-      if (callFunction) this.executeFunctionCall(callFunction);
-    }
+    const batch = replaceExistingSurfaces(messages, (id) => this.surfaceExists(id));
+    for (const error of this.apply(batch)) this.send(error);
 
-    this.feedProcessor(replaceExistingSurfaces(adapted, (id) => this.surfaceExists(id)));
-
-    // Belt and braces for the skeleton: onSurfaceCreated dismisses it, but
-    // a processor without that hook still boots a surface through a
-    // createSurface message here.
-    if (this.skeletonEl && adapted.some((message) => message && message.createSurface)) {
+    // Belt and braces for the skeleton: onSurfaceCreated dismisses it.
+    if (this.skeletonEl && batch.some((message) => message && message.createSurface)) {
       this.dismissSkeleton();
     }
 
     // Zero-jank panel reveal: only on the hidden -> visible flip, so
     // background data refreshes never yank scroll or focus.
-    for (const message of adapted) {
+    for (const message of batch) {
       const visible = panelStateOf(message);
       if (visible === null) continue;
       const wasVisible = this.panelVisible;
       this.panelVisible = visible;
       if (visible && !wasVisible) this.schedulePanelReveal();
     }
+  },
+
+  /** Applies messages, returning the `error` message of each it could not. */
+  apply(messages) {
+    this.applying = true;
+    try {
+      return this.processor.processMessagesWithErrors(messages);
+    } finally {
+      this.applying = false;
+    }
+  },
+
+  /**
+   * The ash_a2ui catalog's `ashAction`: see "Action feedback" above.
+   * Resolves to the agent's value, or to undefined when the call failed.
+   */
+  async runAshAction(args, context) {
+    const surfaceId = context && context.surface && context.surface.id;
+    const functionCallId = randomCallId();
+
+    this.writeFeedback(surfaceId, pendingFeedback(this.deps.pendingMessage, functionCallId));
+
+    let response;
+    try {
+      const value = await this.processor.callAgentFunction(surfaceId, ashActionCall(args), {
+        functionCallId,
+        timeoutMs: this.deps.actionTimeoutMs,
+      });
+      response = {value};
+    } catch (error) {
+      response = {error: rpcError(error)};
+      // Any other failure was answered by the agent, whose batch already
+      // wrote /ui/feedback. A later action owning the feedback keeps it.
+      if (response.error.code === "TIMEOUT" && this.feedbackCallId(surfaceId) === functionCallId) {
+        this.writeFeedback(surfaceId, timeoutFeedback(functionCallId));
+      }
+    }
+
+    if (this.el && typeof this.el.dispatchEvent === "function") {
+      this.el.dispatchEvent(
+        new CustomEvent(ACTION_RESPONSE_EVENT, {
+          bubbles: true,
+          detail: {functionCallId, surfaceId, response},
+        }),
+      );
+    }
+
+    return response.value;
+  },
+
+  /**
+   * Writes the surface's `/ui/feedback` map locally, through the
+   * renderer's own data model: the 0-RTT pending and timeout states.
+   */
+  writeFeedback(surfaceId, value) {
+    if (!this.processor || !this.surfaceExists(surfaceId)) return;
+    this.apply([{version: PROTOCOL_VERSION, updateDataModel: {surfaceId, path: FEEDBACK_PATH, value}}]);
+  },
+
+  /** The `functionCallId` the surface's `/ui/feedback` belongs to. */
+  feedbackCallId(surfaceId) {
+    const surface = this.processor && this.processor.getSurface(surfaceId);
+    return surface ? surface.dataModel.get(`${FEEDBACK_PATH}/functionCallId`) : undefined;
   },
 
   /**
@@ -555,10 +607,11 @@ export const AshA2ui = {
 
   /**
    * Scrolls the freshly opened record-task panel into view and focuses its
-   * first field — client-side, zero roundtrip. Waits for the surface's
-   * pending render plus a frame so the panel's DOM exists and has layout.
+   * first field, client-side. Waits for the surface's pending render plus a
+   * frame so the panel's DOM exists and has layout.
    */
   schedulePanelReveal() {
+    if (typeof requestAnimationFrame !== "function") return;
     const run = () => this.revealPanel();
     const host = this.surfaceEl;
     if (host && host.updateComplete && typeof host.updateComplete.then === "function") {
@@ -584,7 +637,7 @@ export const AshA2ui = {
     }
 
     // The admin recordPanel moves focus itself (heading on open, restore on
-    // close) — stay out of the way when focus already lives in the panel.
+    // close); stay out of the way when focus already lives in the panel.
     if (activeInside(panel)) return;
 
     const field = firstFieldDeep(panel);
@@ -603,105 +656,14 @@ export const AshA2ui = {
    * old surface must then be replaced, not created twice.
    */
   surfaceExists(surfaceId) {
-    const model = this.processor && this.processor.model;
-    if (model && typeof model.getSurface === "function") return Boolean(model.getSurface(surfaceId));
-    return this.surfaceIds.has(surfaceId);
-  },
-
-  feedProcessor(messages) {
-    if (messages.length === 0) return;
-
-    if (typeof this.processor.processMessages === "function") {
-      this.processor.processMessages(messages);
-    } else if (typeof this.processor.processMessage === "function") {
-      // Defensive: older/newer builds may only expose the singular API.
-      for (const message of messages) {
-        this.processor.processMessage(message);
-      }
-    } else {
-      console.error("AshA2ui hook: MessageProcessor has no processMessages/processMessage API");
-    }
-  },
-
-  /**
-   * Resolves a server actionResponse: clears the pending entry (and its
-   * watchdog), settles the optimistic /ui/response pending state with the
-   * response itself, and re-dispatches the response as a bubbling DOM event
-   * so host code can react per action.
-   */
-  resolveActionResponse(message) {
-    const pending = this.pendingActions.get(message.actionId);
-
-    if (pending) {
-      if (pending.timer) clearTimeout(pending.timer);
-      this.pendingActions.delete(message.actionId);
-
-      // Settle the optimistic pending write with the response payload so
-      // "Working…" never outlives its action. The actionResponse is the
-      // FIRST message of the server's reply batch, so a server /ui/response
-      // write in the same batch (e.g. an invoke result) lands after this
-      // and wins — this is only the floor.
-      const settled = settledUiResponse(message.actionResponse);
-      this.writeUiResponse(pending.surfaceId, settled);
-    }
-
-    this.el.dispatchEvent(
-      new CustomEvent("ash-a2ui:action-response", {
-        bubbles: true,
-        detail: {
-          actionId: message.actionId,
-          surfaceId: pending ? pending.surfaceId : undefined,
-          response: message.actionResponse,
-        },
-      }),
-    );
-  },
-
-  /**
-   * Executes a v1.0 server->client callFunction against the registered
-   * function table and, when `wantResponse` is set, pushes the
-   * functionResponse (or error) back as the "a2ui:function_response"
-   * LiveView event.
-   */
-  executeFunctionCall(message) {
-    const {functionCallId, wantResponse, callFunction} = message;
-    const name = callFunction && callFunction.call;
-    const fn = (this.functions || this.deps.functions)[name];
-
-    const reply = (payload) => {
-      if (wantResponse) this.pushEvent("a2ui:function_response", payload);
-    };
-
-    if (typeof fn !== "function") {
-      console.warn(`AshA2ui hook: no client function registered for callFunction "${name}"`);
-      reply({
-        version: V1_VERSION,
-        error: {code: "UNSUPPORTED_FUNCTION", message: `Unknown function: ${name}`, functionCallId},
-      });
-      return;
-    }
-
-    Promise.resolve()
-      .then(() => fn(callFunction.args || {}))
-      .then((value) =>
-        reply({
-          version: V1_VERSION,
-          functionResponse: {functionCallId, call: name, value: value === undefined ? null : value},
-        }),
-      )
-      .catch((error) =>
-        reply({
-          version: V1_VERSION,
-          error: {code: "FUNCTION_FAILED", message: String(error), functionCallId},
-        }),
-      );
+    return Boolean(this.processor && this.processor.getSurface(surfaceId));
   },
 
   /**
    * Opens another surface on a record (reference links): the host's
    * `openSurface` callback when configured, else the `"a2ui:open_surface"`
    * LiveView event with `{surface, recordId, query}` (the server builds the
-   * navigation target itself — a client-supplied href is never trusted).
+   * navigation target itself; a client-supplied href is never trusted).
    */
   openSurface(detail) {
     const surface = detail && detail.surface;
@@ -717,73 +679,6 @@ export const AshA2ui = {
       return;
     }
     this.pushEvent("a2ui:open_surface", args);
-  },
-
-  /**
-   * Writes the surface's reserved /ui/response object locally (through the
-   * renderer's own data model) — the 0-RTT pending/timeout feedback path.
-   */
-  writeUiResponse(surfaceId, value) {
-    this.feedProcessor([
-      {updateDataModel: {surfaceId, path: "/ui/response", value}},
-    ]);
-  },
-
-  /**
-   * Wraps a renderer action (the A2uiClientAction delivered to the
-   * MessageProcessor's action handler) in the A2UI client->server envelope
-   * of the surface's protocol version and pushes it to the LiveView.
-   *
-   * For v1.0 surfaces the action carries a generated `actionId` +
-   * `wantResponse: true`, an optimistic `{status: "pending"}` is written to
-   * `/ui/response` (instant feedback on the bound status components), and a
-   * watchdog turns a never-answered action into a visible timeout error.
-   */
-  forwardAction(action) {
-    if (!action || !action.name) return;
-
-    const inner = {
-      name: action.name,
-      surfaceId: action.surfaceId,
-      sourceComponentId: action.sourceComponentId,
-      timestamp: action.timestamp || new Date().toISOString(),
-      context: action.context || {},
-    };
-
-    if (!this.v1Surfaces.has(action.surfaceId)) {
-      this.pushEvent("a2ui:action", {version: "v0.9.1", action: inner});
-      return;
-    }
-
-    const actionId = randomActionId();
-    inner.actionId = actionId;
-    inner.wantResponse = true;
-
-    let timer = null;
-    if (this.deps.actionTimeoutMs > 0) {
-      timer = setTimeout(() => {
-        if (!this.pendingActions.has(actionId)) return;
-        this.pendingActions.delete(actionId);
-        this.writeUiResponse(action.surfaceId, {
-          status: "error",
-          code: "TIMEOUT",
-          message: "The server did not respond in time. Please try again.",
-          result: {},
-          resultText: "",
-        });
-      }, this.deps.actionTimeoutMs);
-    }
-
-    this.pendingActions.set(actionId, {surfaceId: action.surfaceId, timer});
-
-    this.writeUiResponse(action.surfaceId, {
-      status: "pending",
-      message: this.deps.pendingMessage,
-      result: {},
-      resultText: "",
-    });
-
-    this.pushEvent("a2ui:action", {version: V1_VERSION, action: inner});
   },
 };
 
