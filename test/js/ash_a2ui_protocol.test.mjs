@@ -121,22 +121,28 @@ const create = (surfaceId) => ({version: "1.0", createSurface: {surfaceId, catal
 
 test("replaceExistingSurfaces passes a new surface through", () => {
   const batch = [create("s1")];
-  assert.deepEqual(replaceExistingSurfaces(batch, () => false), batch);
+  assert.deepEqual(
+    replaceExistingSurfaces(batch, () => false),
+    batch,
+  );
 });
 
 test("replaceExistingSurfaces deletes a held surface before creating it again", () => {
   const batch = [create("s1")];
-  assert.deepEqual(replaceExistingSurfaces(batch, (id) => id === "s1"), [
-    {version: "1.0", deleteSurface: {surfaceId: "s1"}},
-    ...batch,
-  ]);
+  assert.deepEqual(
+    replaceExistingSurfaces(batch, (id) => id === "s1"),
+    [{version: "1.0", deleteSurface: {surfaceId: "s1"}}, ...batch],
+  );
 });
 
 test("replaceExistingSurfaces tracks creates and deletes within the batch", () => {
   assert.equal(replaceExistingSurfaces([create("s1"), create("s1")], () => false).length, 3);
 
   const batch = [{version: "1.0", deleteSurface: {surfaceId: "s1"}}, create("s1")];
-  assert.deepEqual(replaceExistingSurfaces(batch, () => true), batch);
+  assert.deepEqual(
+    replaceExistingSurfaces(batch, () => true),
+    batch,
+  );
 });
 
 test("replaceExistingSurfaces leaves its input alone", () => {

@@ -46,14 +46,20 @@ for (const name of ["table", "form", "board", "wizard"]) {
 
         const [out] = sent(hook);
         if (button.action.event) {
-          assert.equal(out?.action?.name, button.action.event.name, `${name}: ${button.id} sends its event`);
+          assert.equal(
+            out?.action?.name,
+            button.action.event.name,
+            `${name}: ${button.id} sends its event`,
+          );
           assert.equal(out.action.surfaceId, surfaceId);
           assert.equal(out.action.sourceComponentId, button.id);
         } else {
           assert.equal(out?.callAgentFunction?.callFunction?.["@call"], "ashAction");
           assert.equal(out.callAgentFunction.callFunction.catalogId, ASH_A2UI_CATALOG_ID);
           const {functionCallId} = out.callAgentFunction;
-          hook.processMessages([{version: "1.0", agentFunctionResponse: {functionCallId, value: {}}}]);
+          hook.processMessages([
+            {version: "1.0", agentFunctionResponse: {functionCallId, value: {}}},
+          ]);
         }
         hook.pushed.length = 0;
       }

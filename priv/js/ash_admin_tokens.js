@@ -620,31 +620,6 @@ export function pageWindow(page, totalPages, siblings = 1) {
 }
 
 /**
- * Resolves an A2UI data binding leaf (`{"path": ...}`) against the surface
- * data model. Relative paths resolve under `basePath` (a row's template
- * scope); absolute paths resolve as-is; non-binding values pass through —
- * matching the GenericBinder's action-context resolution semantics, which is
- * exactly how the basic catalog's buttons resolve their envelopes.
- *
- * Used by the admin components that dispatch envelopes they received as raw
- * props (DataGrid row actions) or reconstructed (ActionBar submit, Pagination
- * page turns): `surface.dispatchAction` expects resolved context values.
- */
-export function resolveEventContext(value, dataModel, basePath) {
-  if (value === null || typeof value !== "object") return value;
-  if (typeof value.path === "string" && Object.keys(value).length === 1) {
-    const abs = value.path.startsWith("/")
-      ? value.path
-      : `${basePath.replace(/\/$/, "")}/${value.path}`;
-    return dataModel.get(abs);
-  }
-  if (Array.isArray(value)) return value.map((v) => resolveEventContext(v, dataModel, basePath));
-  const out = {};
-  for (const [k, v] of Object.entries(value)) out[k] = resolveEventContext(v, dataModel, basePath);
-  return out;
-}
-
-/**
  * Reads a possibly-nested property out of a row object using a "/"-separated
  * relative path ("id", "patient/name", …). Missing keys resolve to undefined.
  */

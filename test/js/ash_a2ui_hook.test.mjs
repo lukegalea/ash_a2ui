@@ -28,7 +28,10 @@ function bootstrap(hook) {
             id: "submit",
             component: "Button",
             child: "submit_label",
-            action: ashAction("submit_form", {name: {"@path": "/form/name"}, values: {name: {"@path": "/form/name"}}}),
+            action: ashAction("submit_form", {
+              name: {"@path": "/form/name"},
+              values: {name: {"@path": "/form/name"}},
+            }),
           },
           {id: "submit_label", component: "Text", text: "Save"},
           {
@@ -74,16 +77,25 @@ test("an ashAction click sends callAgentFunction and writes pending feedback fir
   assert.deepEqual(callFunction, {
     "@call": "ashAction",
     catalogId: ASH_A2UI_CATALOG_ID,
-    args: {name: "submit_form", sourceComponentId: "submit", context: {name: "Ada", values: {name: "Ada"}}},
+    args: {
+      name: "submit_form",
+      sourceComponentId: "submit",
+      context: {name: "Ada", values: {name: "Ada"}},
+    },
   });
 
   assert.deepEqual(feedbackOf(hook, "s1"), feedback("pending", "Saving…", {functionCallId}));
 
-  hook.processMessages([settled(functionCallId, "success", "Saved"), agentResponse(functionCallId, {value: {kind: "success"}})]);
+  hook.processMessages([
+    settled(functionCallId, "success", "Saved"),
+    agentResponse(functionCallId, {value: {kind: "success"}}),
+  ]);
   await done;
 
   assert.deepEqual(feedbackOf(hook, "s1"), feedback("success", "Saved", {functionCallId}));
-  assert.deepEqual(hook.responses, [{functionCallId, surfaceId: "s1", response: {value: {kind: "success"}}}]);
+  assert.deepEqual(hook.responses, [
+    {functionCallId, surfaceId: "s1", response: {value: {kind: "success"}}},
+  ]);
   assert.equal(sent(hook).length, 1, "nothing else goes out");
 });
 
@@ -101,7 +113,9 @@ test("an agent error settles the call with the agent's code and message", async 
   ]);
   await done;
 
-  assert.deepEqual(hook.responses[0].response, {error: {code: "FORBIDDEN", message: "Not allowed"}});
+  assert.deepEqual(hook.responses[0].response, {
+    error: {code: "FORBIDDEN", message: "Not allowed"},
+  });
   assert.deepEqual(feedbackOf(hook, "s1"), feedback("error", "Not allowed", {functionCallId}));
 });
 
@@ -128,13 +142,21 @@ test("a timeout leaves feedback a later call owns", async () => {
   await tick();
   const second = click(hook, "s1", "submit");
   await tick();
-  const [, {callAgentFunction: {functionCallId: secondId}}] = sent(hook);
+  const [
+    ,
+    {
+      callAgentFunction: {functionCallId: secondId},
+    },
+  ] = sent(hook);
 
   await first;
   assert.equal(feedbackOf(hook, "s1").functionCallId, secondId);
   assert.equal(feedbackOf(hook, "s1").kind, "pending");
 
-  hook.processMessages([settled(secondId, "success", "Saved"), agentResponse(secondId, {value: {}})]);
+  hook.processMessages([
+    settled(secondId, "success", "Saved"),
+    agentResponse(secondId, {value: {}}),
+  ]);
   await second;
   assert.equal(feedbackOf(hook, "s1").kind, "success");
 });
@@ -163,7 +185,12 @@ test("an event action goes out as an action message with no pending state", asyn
   assert.deepEqual(Object.keys(message).sort(), ["action", "version"]);
   assert.equal(message.version, "1.0");
   const {timestamp, ...action} = message.action;
-  assert.deepEqual(action, {name: "help", surfaceId: "s1", sourceComponentId: "help", context: {topic: "names"}});
+  assert.deepEqual(action, {
+    name: "help",
+    surfaceId: "s1",
+    sourceComponentId: "help",
+    context: {topic: "names"},
+  });
   assert.ok(!Number.isNaN(Date.parse(timestamp)));
   assert.deepEqual(feedbackOf(hook, "s1"), feedback());
 });
@@ -204,7 +231,11 @@ test("the agent may not call ashAction on the renderer", async () => {
       callRendererFunction: {
         surfaceId: "s1",
         functionCallId: "x1",
-        callFunction: {"@call": "ashAction", catalogId: ASH_A2UI_CATALOG_ID, args: {name: "submit_form"}},
+        callFunction: {
+          "@call": "ashAction",
+          catalogId: ASH_A2UI_CATALOG_ID,
+          args: {name: "submit_form"},
+        },
       },
     },
   ]);
@@ -220,7 +251,10 @@ test("a message the processor rejects is reported to the agent as an error", () 
   bootstrap(hook);
 
   hook.processMessages([
-    {version: "1.0", updateComponents: {surfaceId: "s1", components: [{id: "submit_label", component: "Text"}]}},
+    {
+      version: "1.0",
+      updateComponents: {surfaceId: "s1", components: [{id: "submit_label", component: "Text"}]},
+    },
     {version: "1.0", updateDataModel: {surfaceId: "elsewhere", path: "/a", value: 1}},
   ]);
 
@@ -250,7 +284,10 @@ test("the panel reveal is scheduled on the hidden-to-visible flip only", () => {
   let reveals = 0;
   hook.schedulePanelReveal = () => reveals++;
 
-  const panel = (visible) => ({version: "1.0", updateDataModel: {surfaceId: "s1", path: "/ui/panel", value: {visible}}});
+  const panel = (visible) => ({
+    version: "1.0",
+    updateDataModel: {surfaceId: "s1", path: "/ui/panel", value: {visible}},
+  });
   bootstrap(hook);
   hook.processMessages([panel([1])]);
   hook.processMessages([panel([1])]);

@@ -12,7 +12,9 @@ export function mountHook(options = {}) {
   hook.pushed = [];
   hook.pushEvent = (event, payload) => hook.pushed.push({event, payload});
   hook.responses = [];
-  hook.el.addEventListener("ash-a2ui:action-response", (event) => hook.responses.push(event.detail));
+  hook.el.addEventListener("ash-a2ui:action-response", (event) =>
+    hook.responses.push(event.detail),
+  );
 
   hook.start(
     resolveDeps({
@@ -36,7 +38,9 @@ export async function click(hook, surfaceId, id, {path = "/", index} = {}) {
   const surface = hook.processor.getSurface(surfaceId);
   const component = surface.componentsModel.get(id);
   if (!component) throw new Error(`no component ${id} on ${surfaceId}`);
-  const api = component.catalog?.components.get(component.type) ?? surface.defaultCatalog.components.get(component.type);
+  const api =
+    component.catalog?.components.get(component.type) ??
+    surface.defaultCatalog.components.get(component.type);
   const context = new webCore.ComponentContext(surface, id, path, undefined, index);
   const binder = new webCore.GenericBinder(context, api.schema);
   const subscription = binder.subscribe(() => {});

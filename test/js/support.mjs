@@ -25,7 +25,9 @@ const load = (sub) => import(pathToFileURL(join(webCoreDir, sub)).href);
 
 export const webCore = await load("src/index.js");
 export const {basicCatalog} = await load("src/catalogs/basic/v1/index.js");
-export const webCoreVersion = JSON.parse(readFileSync(join(webCoreDir, "package.json"), "utf8")).version;
+export const webCoreVersion = JSON.parse(
+  readFileSync(join(webCoreDir, "package.json"), "utf8"),
+).version;
 
 export const BASIC_CATALOG_ID = basicCatalog.id;
 
