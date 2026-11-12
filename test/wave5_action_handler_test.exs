@@ -28,8 +28,14 @@ defmodule AshA2ui.Wave5ActionHandlerTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
-      "action" => %{"name" => name, "surfaceId" => "tickets", "context" => context}
+      "version" => "1.0",
+      "action" => %{
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
+        "name" => name,
+        "surfaceId" => "tickets",
+        "context" => context
+      }
     }
   end
 

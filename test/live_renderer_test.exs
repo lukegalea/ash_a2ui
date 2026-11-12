@@ -7,11 +7,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     # share the app-wide test endpoint/PubSub.
     use ExUnit.Case, async: false
 
+    import ExUnit.CaptureLog
     import Phoenix.ConnTest
     import Phoenix.LiveViewTest
 
     alias AshA2ui.Test.LiveRendererFixtures, as: Fixtures
-    alias AshA2ui.Test.{MinimalUI, SchemaHelper}
+    alias AshA2ui.Test.{Messages, MinimalUI, SchemaHelper}
     alias Plug.Conn.Query
 
     @endpoint AshA2ui.Test.Endpoint
@@ -34,14 +35,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         # a generous window on slow CI.
         assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
 
-        assert length(messages) == 3
         Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
-
-        assert [
-                 %{"createSurface" => _},
-                 %{"updateComponents" => _},
-                 %{"updateDataModel" => _}
-               ] = messages
+        assert [%{"createSurface" => %{"components" => [_ | _], "dataModel" => _}}] = messages
       end
 
       test "static render outputs the hook container without building the surface", %{conn: conn} do
@@ -97,7 +92,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert opts[:gettext_fn] == {AshA2ui.Test.PseudoLocale, :translate}
 
         envelope = Fixtures.action_envelope()
-        render_hook(view, "a2ui:action", envelope)
+        render_hook(view, "a2ui:message", envelope)
 
         assert_receive {:action_fn, MinimalUI, ^envelope, opts}
         assert opts[:locale] == "pseudo"
@@ -112,13 +107,13 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       end
     end
 
-    describe "a2ui:action round-trip" do
+    describe "a2ui:message round-trip" do
       test "routes the envelope through action_fn and pushes the ok messages", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/stubbed")
         envelope = Fixtures.action_envelope()
         SchemaHelper.assert_valid_renderer_message(envelope)
 
-        render_hook(view, "a2ui:action", envelope)
+        render_hook(view, "a2ui:message", envelope)
 
         assert_receive {:action_fn, MinimalUI, ^envelope, opts}
         assert opts[:actor] == :stub_actor
@@ -144,7 +139,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/stubbed")
         envelope = Fixtures.action_envelope("invoke", %{"fail" => true})
 
-        render_hook(view, "a2ui:action", envelope)
+        render_hook(view, "a2ui:message", envelope)
 
         assert_receive {:action_fn, MinimalUI, ^envelope, _opts}
 
@@ -153,6 +148,97 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         })
 
         Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
+      end
+    end
+
+    describe "renderer function calls" do
+      setup %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/live-renderer/function-call")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
+
+        export = Fixtures.action_envelope("export", %{"export" => "fc_export"})
+        render_hook(view, "a2ui:message", export)
+
+        assert_push_event(view, "a2ui:messages", %{
+          messages: [%{"callRendererFunction" => %{"functionCallId" => "fc_export"}} = call]
+        })
+
+        SchemaHelper.assert_valid_agent_message(call, catalogs: Messages.catalogs())
+        [view: view]
+      end
+
+      defp pending_calls(view), do: :sys.get_state(view.pid).socket.assigns.ash_a2ui_pending_calls
+
+      test "a pushed callRendererFunction is pending until its response settles it", %{
+        view: view
+      } do
+        assert pending_calls(view) == %{"fc_export" => "downloadFile"}
+
+        response = Fixtures.function_response("fc_export")
+        SchemaHelper.assert_valid_renderer_message(response)
+        render_hook(view, "a2ui:message", response)
+
+        assert_receive {:on_function_response, "downloadFile",
+                        %{"functionCallId" => "fc_export", "value" => nil}}
+
+        assert pending_calls(view) == %{}
+      end
+
+      test "an error response is logged and handed to the callback", %{view: view} do
+        log =
+          capture_log(fn ->
+            render_hook(
+              view,
+              "a2ui:message",
+              Fixtures.function_response("fc_export", {:error, "QUOTA"})
+            )
+
+            _ = :sys.get_state(view.pid)
+          end)
+
+        assert log =~ "downloadFile"
+        assert log =~ "QUOTA"
+        assert_receive {:on_function_response, "downloadFile", %{"error" => %{"code" => "QUOTA"}}}
+      end
+
+      test "a duplicate response is dropped", %{view: view} do
+        render_hook(view, "a2ui:message", Fixtures.function_response("fc_export"))
+        assert_receive {:on_function_response, "downloadFile", _response}
+
+        log =
+          capture_log(fn ->
+            render_hook(view, "a2ui:message", Fixtures.function_response("fc_export"))
+            _ = :sys.get_state(view.pid)
+          end)
+
+        assert log =~ "no pending call has that id"
+        refute_receive {:on_function_response, _name, _response}, 100
+      end
+
+      test "a response to an id this LiveView never sent is dropped", %{view: view} do
+        capture_log(fn ->
+          render_hook(view, "a2ui:message", Fixtures.function_response("fc_unknown"))
+          _ = :sys.get_state(view.pid)
+        end)
+
+        refute_receive {:on_function_response, _name, _response}, 100
+        assert pending_calls(view) == %{"fc_export" => "downloadFile"}
+      end
+
+      test "a malformed response settles nothing and pushes nothing", %{view: view} do
+        malformed = %{
+          "version" => "1.0",
+          "rendererFunctionResponse" => %{"functionCallId" => "fc_export"}
+        }
+
+        capture_log(fn ->
+          render_hook(view, "a2ui:message", malformed)
+          _ = :sys.get_state(view.pid)
+        end)
+
+        refute_receive {:on_function_response, _name, _response}, 100
+        refute_push_event(view, "a2ui:messages", %{messages: _messages}, 100)
+        assert pending_calls(view) == %{"fc_export" => "downloadFile"}
       end
     end
 
@@ -231,7 +317,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         envelope = %{
-          "version" => "v0.9.1",
+          "version" => "1.0",
           "action" => %{
             "name" => "query",
             "surfaceId" => "paginated",
@@ -242,7 +328,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         }
 
         SchemaHelper.assert_valid_renderer_message(envelope)
-        render_hook(view, "a2ui:action", envelope)
+        render_hook(view, "a2ui:message", envelope)
 
         assert_push_event(view, "a2ui:messages", %{messages: messages})
         Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
@@ -261,6 +347,41 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
                } = query_state
       end
 
+      test "an ashAction function call round-trips and is answered last", %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/live-renderer/query")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
+
+        call =
+          Messages.call("query", "paginated", %{"query" => %{"search" => "x"}}, id: "fc_query")
+
+        SchemaHelper.assert_valid_renderer_message(call,
+          catalogs: Messages.catalogs()
+        )
+
+        render_hook(view, "a2ui:message", call)
+
+        assert_push_event(view, "a2ui:messages", %{messages: messages})
+        Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
+
+        assert %{"agentFunctionResponse" => %{"functionCallId" => "fc_query", "value" => idle}} =
+                 List.last(messages)
+
+        assert %{"kind" => "", "functionCallId" => "fc_query"} = idle
+        assert %{"search" => "x"} = :sys.get_state(view.pid).socket.assigns.ash_a2ui_query_state
+      end
+
+      test "a malformed message pushes nothing", %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/live-renderer/query")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
+
+        capture_log(fn ->
+          render_hook(view, "a2ui:message", %{"version" => "v1.0", "action" => %{}})
+          _ = :sys.get_state(view.pid)
+        end)
+
+        refute_push_event(view, "a2ui:messages", %{messages: _messages}, 100)
+      end
+
       test "a PubSub refresh re-runs the client's last query state, not the defaults", %{
         conn: conn
       } do
@@ -268,7 +389,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         envelope = %{
-          "version" => "v0.9.1",
+          "version" => "1.0",
           "action" => %{
             "name" => "query",
             "surfaceId" => "paginated",
@@ -278,7 +399,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           }
         }
 
-        render_hook(view, "a2ui:action", envelope)
+        render_hook(view, "a2ui:message", envelope)
         assert_push_event(view, "a2ui:messages", %{messages: [_records, _empty_state, _query]})
 
         Phoenix.PubSub.broadcast(
@@ -306,7 +427,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
         envelope = %{
-          "version" => "v0.9.1",
+          "version" => "1.0",
           "action" => %{
             "name" => "context_select",
             "surfaceId" => Fixtures.surface_id(),
@@ -317,7 +438,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         }
 
         SchemaHelper.assert_valid_renderer_message(envelope)
-        render_hook(view, "a2ui:action", envelope)
+        render_hook(view, "a2ui:message", envelope)
 
         # The stub's follow-up rewrites /context; the LiveRenderer must
         # track it and hand it to the next refresh as :context_state.
@@ -405,8 +526,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/deep-link?tab=notes")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
-        render_hook(view, "a2ui:action", %{
-          "version" => "v0.9.1",
+        render_hook(view, "a2ui:message", %{
+          "version" => "1.0",
           "action" => %{
             "name" => "context_select",
             "surfaceId" => "notes",
@@ -478,13 +599,13 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         # the real build got link_buttons: true from the URL template
         assert Enum.any?(initial, fn message ->
                  message
-                 |> get_in(["updateComponents", "components"])
+                 |> get_in(["createSurface", "components"])
                  |> List.wrap()
                  |> Enum.any?(&(&1["id"] == "table_cell_participations_note_title_value_link"))
                end)
 
-        render_hook(view, "a2ui:action", %{
-          "version" => "v0.9.1",
+        render_hook(view, "a2ui:message", %{
+          "version" => "1.0",
           "action" => %{
             "name" => "open_surface",
             "surfaceId" => "people",
@@ -501,12 +622,33 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_redirect(view, "/app/r/note/#{kickoff.id}")
       end
 
+      test "an ashAction open_surface call navigates once accepted", %{conn: conn, ada: ada} do
+        alias AshA2ui.Test.Links.{Note, Participant}
+
+        kickoff = Ash.create!(Note, %{title: "Kickoff", person_id: ada.id}, authorize?: false)
+        Ash.create!(Participant, %{note_id: kickoff.id, person_id: ada.id}, authorize?: false)
+
+        {:ok, view, _html} = live(conn, "/live-renderer/people-deep-link")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
+
+        call =
+          Messages.call("open_surface", "people", %{
+            "field" => "note_title",
+            "surface" => "note",
+            "recordId" => kickoff.id
+          })
+
+        render_hook(view, "a2ui:message", call)
+
+        assert_redirect(view, "/app/r/note/#{kickoff.id}")
+      end
+
       test "a rejected open_surface action pushes its error and stays put", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/people-deep-link")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
-        render_hook(view, "a2ui:action", %{
-          "version" => "v0.9.1",
+        render_hook(view, "a2ui:message", %{
+          "version" => "1.0",
           "action" => %{
             "name" => "open_surface",
             "surfaceId" => "people",

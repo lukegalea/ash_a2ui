@@ -15,7 +15,17 @@ defmodule AshA2ui.Wizard.WizardSecurityTest do
   alias AshA2ui.Test.Enrollment
 
   defp handle(name, context) do
-    message = %{"version" => "v0.9.1", "action" => %{"name" => name, "context" => context}}
+    message = %{
+      "version" => "1.0",
+      "action" => %{
+        "surfaceId" => "test_surface",
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
+        "name" => name,
+        "context" => context
+      }
+    }
+
     {tag, messages} = ActionHandler.handle(Enrollment, message)
     Enum.each(messages, &assert_valid_agent_message/1)
     {tag, messages}
@@ -147,8 +157,14 @@ defmodule AshA2ui.Wizard.WizardSecurityTest do
   @tag ac: "A2UI-106/AC-7"
   test "wizard actions are refused on forms without steps" do
     message = %{
-      "version" => "v0.9.1",
-      "action" => %{"name" => "wizard_next", "context" => %{"index" => 0}}
+      "version" => "1.0",
+      "action" => %{
+        "surfaceId" => "test_surface",
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
+        "name" => "wizard_next",
+        "context" => %{"index" => 0}
+      }
     }
 
     assert {:error, messages} = ActionHandler.handle(AshA2ui.Test.Promotion, message)

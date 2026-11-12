@@ -16,7 +16,7 @@ defmodule AshA2ui.QueryActionHandlerTest do
 
   defp envelope(name, context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => name,
         "surfaceId" => "paginated",

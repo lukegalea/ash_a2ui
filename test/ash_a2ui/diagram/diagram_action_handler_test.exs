@@ -18,7 +18,7 @@ defmodule AshA2ui.Diagram.DiagramActionHandlerTest do
 
   defp envelope(context) do
     %{
-      "version" => "v0.9.1",
+      "version" => "1.0",
       "action" => %{
         "name" => "open_surface",
         "surfaceId" => "visit_flow",

@@ -215,7 +215,13 @@ defmodule AshA2ui.Experience.AdminCatalogEncoderTest do
 
       envelope = %{
         "version" => "1.0",
-        "action" => %{"name" => "query", "surfaceId" => "paged_notes", "context" => context}
+        "action" => %{
+          "sourceComponentId" => "test_component",
+          "timestamp" => "2026-11-12T12:00:00Z",
+          "name" => "query",
+          "surfaceId" => "paged_notes",
+          "context" => context
+        }
       }
 
       assert {:ok, messages} = ActionHandler.handle(PagedNotesUI, envelope, actor: nil)

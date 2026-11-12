@@ -24,7 +24,17 @@ defmodule AshA2ui.Wizard.WizardExperienceTest do
   end
 
   defp handle(name, context) do
-    message = %{"version" => "1.0", "action" => %{"name" => name, "context" => context}}
+    message = %{
+      "version" => "1.0",
+      "action" => %{
+        "surfaceId" => "test_surface",
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
+        "name" => name,
+        "context" => context
+      }
+    }
+
     {tag, messages} = ActionHandler.handle(Enrollment, message)
     Enum.each(messages, &assert_valid_agent_message/1)
     {tag, messages}

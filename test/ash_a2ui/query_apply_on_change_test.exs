@@ -66,6 +66,9 @@ defmodule AshA2ui.QueryApplyOnChangeTest do
     envelope = %{
       "version" => "1.0",
       "action" => %{
+        "surfaceId" => "test_surface",
+        "sourceComponentId" => "test_component",
+        "timestamp" => "2026-11-12T12:00:00Z",
         "name" => "query",
         "context" => %{"query" => %{"filters" => %{"status" => "approved"}}, "page" => 1}
       }

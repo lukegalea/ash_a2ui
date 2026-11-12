@@ -48,7 +48,7 @@ defmodule AshA2ui.Test.BulkHelpers do
     %{"project" => %{"search" => "", "value" => project.id, "label" => project.name}}
   end
 
-  @doc "A client action envelope."
+  @doc "An A2UI 1.0 action event."
   def envelope(name, context) do
     %{
       "version" => "1.0",

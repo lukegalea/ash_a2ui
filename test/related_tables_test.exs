@@ -324,7 +324,13 @@ defmodule AshA2ui.RelatedTablesTest do
       {:ok, messages} =
         ActionHandler.handle(Paginated, %{
           "version" => "1.0",
-          "action" => %{"name" => "query", "context" => %{"query" => %{}}}
+          "action" => %{
+            "surfaceId" => "test_surface",
+            "sourceComponentId" => "test_component",
+            "timestamp" => "2026-11-12T12:00:00Z",
+            "name" => "query",
+            "context" => %{"query" => %{}}
+          }
         })
 
       refreshed = value_at(messages, "/records")

@@ -10,6 +10,7 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
+  alias AshA2ui.Experience
   alias AshA2ui.Test.Experience.NoUpdate
   alias AshA2ui.Test.Experience.Task
   alias AshA2ui.Test.Surface
@@ -89,7 +90,7 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert ui["panel"]["submit_visible"] == []
       assert ui["panel"]["form_visible"] == []
       assert ui["panel"]["view_visible"] == []
-      assert ui["feedback"] == AshA2ui.Experience.clear_feedback()
+      assert ui["feedback"] == Experience.clear_feedback()
 
       for retired <- ["response", "action_result", "action_result_text"],
           do: refute(Map.has_key?(ui, retired))
@@ -129,16 +130,15 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
 
       # the form is reset to its initial (empty) values and feedback cleared
       assert values["/form"] == %{}
-      assert values["/ui/feedback"] == AshA2ui.Experience.clear_feedback()
+      assert values["/ui/feedback"] == Experience.clear_feedback()
       assert values["/errors"] == %{}
     end
 
     @tag ac: "A2UI-101/AC-7"
-    test "start_create speaks v1.0 on a v1.0 surface" do
-      assert {:ok, messages} =
-               ActionHandler.handle(Task, envelope("start_create"))
+    test "start_create answers in schema-valid 1.0 messages" do
+      assert {:ok, messages} = ActionHandler.handle(Task, envelope("start_create"))
 
-      assert Enum.all?(messages, &(&1["version"] == "1.0"))
+      assert_valid_agent_messages(messages)
 
       values = by_path(messages)
       assert values["/ui/intent"] == "create"
@@ -257,7 +257,7 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
       assert panel["view_visible"] == []
 
       assert values["/form"] == %{}
-      assert values["/ui/feedback"] == AshA2ui.Experience.clear_feedback()
+      assert values["/ui/feedback"] == Experience.clear_feedback()
     end
   end
 

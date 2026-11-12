@@ -13,6 +13,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.Dynamic
   alias AshA2ui.Dynamic.Importer
+  alias AshA2ui.Experience
   alias AshA2ui.Test.Adoption.{Job, LabelledBulkJobsUI, LabelledJobsUI}
   alias AshA2ui.Test.Surface
 
@@ -115,11 +116,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
     end
 
     assert {:ok, messages} = invoke.(LabelledJobsUI, "adoption_labelled_jobs", "claim")
-
-    assert Map.take(feedback.(messages), ["kind", "message"]) == %{
-             "kind" => "success",
-             "message" => "Take it: done."
-           }
+    assert feedback.(messages) == Experience.feedback("success", "Take it: done.")
   end
 
   test "the dynamic spec carries the label: resolve, import and promote" do

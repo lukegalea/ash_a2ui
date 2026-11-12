@@ -55,6 +55,7 @@ defmodule AshA2ui.DynamicTest do
   alias AshA2ui.DynamicTest.Guarded
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.KitchenSink
+  alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Minimal
 
   @allowlist Dynamic.allowlist([KitchenSink, Minimal, Guarded])
@@ -288,16 +289,14 @@ defmodule AshA2ui.DynamicTest do
 
       # submitting rows round-trips: create_inline maps survive, pick_existing
       # rows reduce to their picked ids (the manage_relationship inputs)
-      envelope = %{
-        "name" => "submit_form",
-        "context" => %{
+      envelope =
+        Messages.action("submit_form", surface.surface_id, %{
           "values" => %{
             "subject" => "nested round trip",
             "notes" => [%{"_row" => "r1", "body" => "first", "rating" => "2"}],
             "tags" => []
           }
-        }
-      }
+        })
 
       assert {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
@@ -658,6 +657,8 @@ defmodule AshA2ui.DynamicTest do
       envelope = %{
         "version" => "1.0",
         "action" => %{
+          "sourceComponentId" => "test_component",
+          "timestamp" => "2026-11-12T12:00:00Z",
           "name" => "submit_form",
           "surfaceId" => surface.surface_id,
           "context" => %{"values" => %{"name" => "round-trip"}}
@@ -684,6 +685,8 @@ defmodule AshA2ui.DynamicTest do
       envelope = %{
         "version" => "1.0",
         "action" => %{
+          "sourceComponentId" => "test_component",
+          "timestamp" => "2026-11-12T12:00:00Z",
           "name" => "submit_form",
           # A tampering client claims another surface — it is ignored.
           "surfaceId" => "spoofed_surface",
@@ -702,10 +705,11 @@ defmodule AshA2ui.DynamicTest do
       record = Ash.create!(Minimal, %{name: "keep me"}, authorize?: false)
       surface = resolve!(minimal_spec())
 
-      envelope = %{
-        "name" => "invoke",
-        "context" => %{"action" => "destroy", "recordId" => record.id}
-      }
+      envelope =
+        Messages.action("invoke", surface.surface_id, %{
+          "action" => "destroy",
+          "recordId" => record.id
+        })
 
       assert {:error, [message]} = Dynamic.handle_action(surface, envelope, authorize?: false)
 
@@ -726,10 +730,10 @@ defmodule AshA2ui.DynamicTest do
 
       surface = resolve!(spec)
 
-      envelope = %{
-        "name" => "query",
-        "context" => %{"query" => %{"sort" => "count", "dir" => "asc"}}
-      }
+      envelope =
+        Messages.action("query", surface.surface_id, %{
+          "query" => %{"sort" => "count", "dir" => "asc"}
+        })
 
       assert {:error, [message]} = Dynamic.handle_action(surface, envelope, authorize?: false)
 
@@ -751,10 +755,8 @@ defmodule AshA2ui.DynamicTest do
 
       surface = resolve!(spec)
 
-      envelope = %{
-        "name" => "submit_form",
-        "context" => %{"values" => %{"name" => "sneaky"}}
-      }
+      envelope =
+        Messages.action("submit_form", surface.surface_id, %{"values" => %{"name" => "sneaky"}})
 
       assert {:error, [message]} = Dynamic.handle_action(surface, envelope, [])
 
@@ -782,7 +784,7 @@ defmodule AshA2ui.DynamicTest do
 
       surface = resolve!(spec)
 
-      envelope = %{"name" => "submit_form", "context" => %{"values" => %{}}}
+      envelope = Messages.action("submit_form", surface.surface_id, %{"values" => %{}})
 
       assert {:error, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
@@ -869,10 +871,11 @@ defmodule AshA2ui.DynamicTest do
           via_allowlist: @via_allowlist
         )
 
-      envelope = %{
-        "name" => "invoke",
-        "context" => %{"action" => "check_in", "recordId" => record.id}
-      }
+      envelope =
+        Messages.action("invoke", surface.surface_id, %{
+          "action" => "check_in",
+          "recordId" => record.id
+        })
 
       assert {:ok, messages} = Dynamic.handle_action(surface, envelope, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)

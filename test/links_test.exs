@@ -28,6 +28,7 @@ defmodule AshA2ui.LinksTest do
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.Links.{Note, NotesUI, Participant, Person}
   alias AshA2ui.Test.Surface
+  alias AshA2ui.Test.Messages
 
   setup do
     for resource <- [Participant, Note, Person] do
@@ -587,22 +588,25 @@ defmodule AshA2ui.LinksTest do
       end
     end
 
-    test "on v1.0 an accepted request answers its actionResponse", %{ada: ada} do
-      message = %{
-        "version" => "1.0",
-        "action" => %{
-          "name" => "open_surface",
-          "surfaceId" => "notes",
-          "sourceComponentId" => "record_row_meta_value_person_name_link",
-          "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
-          "actionId" => "a1",
-          "context" => %{"field" => "person_name", "surface" => "person", "recordId" => ada.id}
-        }
-      }
+    test "an accepted ashAction call settles idle and answers last", %{ada: ada} do
+      message =
+        Messages.call(
+          "open_surface",
+          "notes",
+          %{"field" => "person_name", "surface" => "person", "recordId" => ada.id},
+          id: "a1",
+          source: "record_row_meta_value_person_name_link"
+        )
 
-      assert {:ok, [response]} = ActionHandler.handle(NotesUI, message)
-      assert response["actionResponse"] == %{"value" => %{"status" => "ok", "message" => ""}}
-      assert_valid_agent_message(response)
+      assert {:ok, messages} = ActionHandler.handle(NotesUI, message)
+      assert_valid_agent_messages(messages)
+
+      assert [
+               %{"updateDataModel" => %{"path" => "/ui/feedback", "value" => idle}},
+               %{"agentFunctionResponse" => %{"functionCallId" => "a1", "value" => idle}}
+             ] = messages
+
+      assert %{"kind" => "", "functionCallId" => "a1"} = idle
     end
   end
 

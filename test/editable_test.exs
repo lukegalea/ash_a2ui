@@ -3,8 +3,9 @@ defmodule AshA2ui.EditableTest do
   Inline cell editing: `editable` blocks render allowlisted table fields as
   in-row TextField + Save cells committing per cell through the
   `"edit_cell"` client action, with validation errors mirrored into the
-  failing row's reserved `_error_<field>` key and — on v1.0 — the per-cell
-  `actionResponse` handshake. Schema-validated on both v0.9.1 and v1.0.
+  failing row's reserved `_error_<field>` key. A cell's Save called as an
+  `ashAction` function is answered with its feedback. Schema-validated
+  against A2UI 1.0.
   """
 
   use ExUnit.Case, async: true
@@ -19,6 +20,7 @@ defmodule AshA2ui.EditableTest do
   alias AshA2ui.Test.EditableWordsUI
   alias AshA2ui.Test.EditableWordsV1UI
   alias AshA2ui.Test.Surface
+  alias AshA2ui.Test.Messages
 
   defp envelope(name, context, surface \\ "editable_words") do
     %{
@@ -239,57 +241,46 @@ defmodule AshA2ui.EditableTest do
       assert save["action"]["functionCall"]["args"]["name"] == "edit_cell"
     end
 
-    test "a successful commit answers the cell's actionId with an ok actionResponse", %{
+    test "a successful commit called as ashAction is answered with its feedback", %{
       word: word
     } do
-      message = %{
-        "version" => "1.0",
-        "action" => %{
-          "name" => "edit_cell",
-          "surfaceId" => "editable_words_v1",
-          "actionId" => "cell_1",
-          "context" => %{
-            "recordId" => word.id,
-            "field" => "replacement",
-            "value" => "their"
-          }
-        }
-      }
+      message =
+        Messages.call(
+          "edit_cell",
+          "editable_words_v1",
+          %{"recordId" => word.id, "field" => "replacement", "value" => "their"},
+          id: "cell_1"
+        )
 
-      assert {:ok, [response | followups]} =
-               ActionHandler.handle(EditableWordsV1UI, message, authorize?: false)
+      assert {:ok, messages} = ActionHandler.handle(EditableWordsV1UI, message, authorize?: false)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
-      assert response["actionId"] == "cell_1"
-      assert %{"value" => %{"status" => "ok"}} = response["actionResponse"]
-      assert_valid_agent_message(response)
-      Enum.each(followups, &assert_valid_agent_message/1)
+      assert %{"functionCallId" => "cell_1", "value" => %{"kind" => "success"}} =
+               Messages.response(messages)
+
+      assert %{"agentFunctionResponse" => _} = List.last(messages)
     end
 
-    test "a failed commit answers with an error actionResponse and the row mirror", %{
+    test "a failed commit is answered with VALIDATION_FAILED and the row mirror", %{
       word: word
     } do
-      message = %{
-        "version" => "1.0",
-        "action" => %{
-          "name" => "edit_cell",
-          "surfaceId" => "editable_words_v1",
-          "actionId" => "cell_2",
-          "context" => %{
-            "recordId" => word.id,
-            "field" => "replacement",
-            "value" => "NOT LOWERCASE"
-          }
-        }
-      }
+      message =
+        Messages.call(
+          "edit_cell",
+          "editable_words_v1",
+          %{"recordId" => word.id, "field" => "replacement", "value" => "NOT LOWERCASE"},
+          id: "cell_2"
+        )
 
-      assert {:error, [response | followups]} =
+      assert {:error, messages} =
                ActionHandler.handle(EditableWordsV1UI, message, authorize?: false)
 
-      assert response["actionId"] == "cell_2"
+      Enum.each(messages, &assert_valid_agent_message/1)
 
-      assert %{"error" => %{"code" => "VALIDATION_FAILED"}} = response["actionResponse"]
+      assert %{"functionCallId" => "cell_2", "error" => %{"code" => "VALIDATION_FAILED"}} =
+               Messages.response(messages)
 
-      rows = value_at(followups, "/records")
+      rows = value_at(messages, "/records")
       assert [%{"_error_replacement" => error_text}] = rows
       assert error_text =~ "lowercase"
     end
