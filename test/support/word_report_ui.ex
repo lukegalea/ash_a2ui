@@ -117,7 +117,7 @@ defmodule AshA2ui.Test.WordReportPlaceholderUI do
     component :report, :lengths do
       action :length_report
       params [:min_length]
-      param_placeholders(min_length: "Shortest word to list")
+      param_placeholders min_length: "Shortest word to list"
       fields [:word, :length, :state]
     end
   end
