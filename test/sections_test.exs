@@ -19,8 +19,8 @@ defmodule AshA2ui.SectionsTest do
   alias AshA2ui.Test.BucketWord
   alias AshA2ui.Test.BucketWordsUI
   alias AshA2ui.Test.BucketWordsV1UI
-  alias AshA2ui.Test.Surface
   alias AshA2ui.Test.Messages
+  alias AshA2ui.Test.Surface
 
   defp envelope(name, context, version \\ "1.0", surface \\ "bucket_words") do
     %{

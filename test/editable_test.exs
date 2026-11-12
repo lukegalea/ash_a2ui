@@ -19,8 +19,8 @@ defmodule AshA2ui.EditableTest do
   alias AshA2ui.Test.BucketWordsUI
   alias AshA2ui.Test.EditableWordsUI
   alias AshA2ui.Test.EditableWordsV1UI
-  alias AshA2ui.Test.Surface
   alias AshA2ui.Test.Messages
+  alias AshA2ui.Test.Surface
 
   defp envelope(name, context, surface \\ "editable_words") do
     %{

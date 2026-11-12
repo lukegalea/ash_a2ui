@@ -10,6 +10,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
     alias Ash.DataLayer.Ets
     alias AshA2ui.{AsOf, TimeScrubber}
+    alias AshA2ui.Test.Surface
     alias AshA2ui.Test.TimeTravel.Plan
 
     @endpoint AshA2ui.Test.Endpoint
@@ -109,7 +110,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         {:ok, view, _html} = live(conn, "/live-renderer/time-travel?as_of=#{instant}")
         assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
 
-        assert [%{"tier" => "bronze"}] = AshA2ui.Test.Surface.data_model(messages)["records"]
+        assert [%{"tier" => "bronze"}] = Surface.data_model(messages)["records"]
 
         refute Jason.encode!(messages) =~ "change_tier"
 

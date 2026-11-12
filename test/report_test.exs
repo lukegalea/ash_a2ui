@@ -15,8 +15,8 @@ defmodule AshA2ui.ReportTest do
   alias AshA2ui.Experience
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.BucketWord
-  alias AshA2ui.Test.Surface
   alias AshA2ui.Test.Messages
+  alias AshA2ui.Test.Surface
   alias AshA2ui.Test.WordReportUI
   alias AshA2ui.Test.WordReportV1UI
 

@@ -27,8 +27,8 @@ defmodule AshA2ui.LinksTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.ResolvedView
   alias AshA2ui.Test.Links.{Note, NotesUI, Participant, Person}
-  alias AshA2ui.Test.Surface
   alias AshA2ui.Test.Messages
+  alias AshA2ui.Test.Surface
 
   setup do
     for resource <- [Participant, Note, Person] do

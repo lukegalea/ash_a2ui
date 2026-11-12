@@ -12,6 +12,7 @@ defmodule AshA2ui.Board.BoardActionHandlerTest do
   alias AshA2ui.ActionHandler
   alias AshA2ui.Test.BoardTask
   alias AshA2ui.Test.BoardTaskUI
+  alias AshA2ui.Test.Surface
 
   defp envelope(name, context) do
     %{
@@ -48,7 +49,7 @@ defmodule AshA2ui.Board.BoardActionHandlerTest do
     # (gated on :claimed) is not.
     surface = AshA2ui.Info.build_surface(BoardTaskUI, authorize?: false)
 
-    initial = AshA2ui.Test.Surface.data_model(surface)
+    initial = Surface.data_model(surface)
 
     assert [open_row] = initial["records"]["board_open"]
     assert open_row["name"] == "card"
