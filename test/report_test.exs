@@ -4,7 +4,7 @@ defmodule AshA2ui.ReportTest do
   action whose computed row maps render as a table-like section with param
   inputs and a Run button — data under the reserved `/report/<name>` paths,
   the `"report"` client action invoking the allowlisted action actor-scoped.
-  Schema-validated on both v0.9.1 and v1.0.
+  Schema-validated against the vendored A2UI 1.0 schemas.
   """
 
   use ExUnit.Case, async: true
@@ -87,7 +87,7 @@ defmodule AshA2ui.ReportTest do
     end
   end
 
-  describe "encoder (v0.9.1)" do
+  describe "encoder" do
     setup do
       messages = AshA2ui.Info.build_surface(WordReportUI, authorize?: false)
       Enum.each(messages, &assert_valid_agent_message/1)
@@ -231,7 +231,7 @@ defmodule AshA2ui.ReportTest do
     end
   end
 
-  describe "v1.0" do
+  describe "ashAction calls" do
     setup do
       create_word!("abcdef")
       :ok

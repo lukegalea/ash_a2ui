@@ -288,7 +288,7 @@ defmodule AshA2ui.RendererMessagesTest do
     end
 
     test "an undeclared key on callAgentFunction is INVALID_FUNCTION_CALL" do
-      call = call_with(%{"wantResponse" => true})
+      call = call_with(%{"undeclared" => true})
 
       assert invalid_message?(call)
       assert_refused(call, "INVALID_FUNCTION_CALL")

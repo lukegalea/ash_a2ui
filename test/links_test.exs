@@ -473,7 +473,7 @@ defmodule AshA2ui.LinksTest do
       refute link_button(comps, "detail_note_detail_value_title")
     end
 
-    test "the v1.0 surface carries the same link buttons, schema-valid" do
+    test "a link button calls ashAction open_surface, schema-valid" do
       [create] = AshA2ui.Info.build_surface(NotesUI, link_buttons: true)
       assert_valid_agent_message(create)
 

@@ -70,7 +70,7 @@ defmodule AshA2ui.EditableTest do
     end
   end
 
-  describe "encoder (v0.9.1)" do
+  describe "encoder" do
     setup do
       create_word!("teh", replacement: "the")
       messages = AshA2ui.Info.build_surface(EditableWordsUI, authorize?: false)
@@ -222,12 +222,12 @@ defmodule AshA2ui.EditableTest do
     end
   end
 
-  describe "v1.0" do
+  describe "ashAction calls" do
     setup do
       %{word: create_word!("teh", replacement: "the")}
     end
 
-    test "editable cells carry wantResponse on their Save action", %{word: _word} do
+    test "an editable cell's Save button calls ashAction edit_cell", %{word: _word} do
       assert [message] = AshA2ui.Info.build_surface(EditableWordsV1UI, authorize?: false)
       assert_valid_agent_message(message)
 

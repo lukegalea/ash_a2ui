@@ -44,7 +44,7 @@ end
 - Options land inline in the ChoicePicker *and* at the reserved
   `/options/<field>` data-model path (`[{"label": _, "value": _}]`, all
   strings). Code against `/options/<field>`; the inline copy exists because
-  the v0.9.1 basic-catalog ChoicePicker can't bind dynamic options.
+  the basic-catalog ChoicePicker can't bind dynamic options.
 - **Do not raise `option_limit` for large option sets — declare
   `option_search` instead.** Truncation at the limit is deliberate; don't
   ship a 5,000-option dropdown.

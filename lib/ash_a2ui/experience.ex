@@ -155,7 +155,7 @@ defmodule AshA2ui.Experience do
   def admin_catalog_id, do: @admin_catalog_id
 
   @doc """
-  The admin catalog contract version (`"version"` in
+  The admin catalog contract version (`metadata.extensions.version` in
   `priv/a2ui/admin_v1/catalog.json`). Minor versions are additive within the
   unchanged `admin_catalog_id/0` — 1.1 added the column presentation hints
   (format/align/mono/badge/link), `rowClick`, FieldDisplay `link` and the

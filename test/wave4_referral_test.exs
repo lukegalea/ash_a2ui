@@ -386,6 +386,7 @@ defmodule AshA2ui.Wave4ReferralTest do
       assert error["text"] == %{"@path" => "/errors/notes"}
 
       confirm = components["row_action_decline_confirm_button"]
+
       assert Surface.event(confirm) == %{
                "name" => "invoke",
                "sourceComponentId" => "row_action_decline_confirm_button",

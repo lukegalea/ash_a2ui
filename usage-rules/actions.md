@@ -69,8 +69,8 @@ the relationship-picker actions (`ash_a2ui:relationships`), `"edit_cell"`
 the declared update action, with validation errors mirrored into the
 failing row's `_error_<field>` key), `"report"` (`:report` components —
 runs the declared generic action; `ash_a2ui:reports`), `"export"`
-(components with an `export` block — answers with the `downloadFile`
-callFunction; `ash_a2ui:reports`), `"bulk_invoke"` / `"bulk_select"`
+(components with an `export` block — answers with a `callRendererFunction`
+calling `downloadFile`; `ash_a2ui:reports`), `"bulk_invoke"` / `"bulk_select"`
 (tables with `bulk_actions` — see "Bulk actions" below) and `"wizard_next"` /
 `"wizard_back"` (forms declaring `step`s — Next builds the form action's
 changeset over the carried `/form` through the same path `submit_form` writes
@@ -138,18 +138,24 @@ them:
   `start_create`/`cancel_record_task`; populated by `start_edit`.
 - `/errors/<field>` — per-field validation error text; `/errors` is cleared
   to `%{}` on success.
-- `/ui/feedback` — the typed outcome of **every** action:
-  `%{"kind" => "success" | "warning" | "error", "message" => text}`
-  (success text, validation summary, rejection reason, "not authorized").
-  The status Text binds `/ui/feedback/message`; the admin statusBanner binds
-  both keys. On v1.0 surfaces the same outcome is also the structured
-  `/ui/response` object and the `actionResponse` handshake.
+- `/ui/feedback` — the typed outcome of **every** action, always the full
+  map `%{"kind", "message", "code", "functionCallId", "result",
+  "resultText"}`. `kind` is `""` (idle), `"pending"`, `"success"`,
+  `"warning"` or `"error"`; `message` is the success text, validation
+  summary, rejection reason or "not authorized"; `code` is the error code
+  (`VALIDATION_FAILED`, `FORBIDDEN`, `ACTION_FAILED`, `INVALID_ACTION`,
+  `UNKNOWN_ACTION`, `READ_ONLY_AS_OF`). The status Text binds
+  `/ui/feedback/message`; the admin statusBanner binds the map. An
+  `ashAction` call is answered last by an `agentFunctionResponse` carrying
+  the same `functionCallId` (`value` on success, `error {code, message}`
+  on failure).
 - `/ui/intent` and `/ui/panel/*` — the task panel's state (`visible`,
   `mode`, `title`, `primary_label`, `record_id`, the `submit_visible` /
   `form_visible` / `view_visible` sentinels, and `record` — the read-only
   display values of a `view_record`).
-- `/ui/action_result` — the map result of a map-returning generic action
-  (an AshA2ui handler convention, not part of the A2UI spec).
+- `/ui/feedback/result` and `/ui/feedback/resultText` — the map result of
+  a map-returning generic action and its display text (an AshA2ui handler
+  convention, not part of the A2UI spec).
 - `/query` — the authoritative query state on query-enabled surfaces,
   written after `query` actions and query-aware success refreshes
   (multi-table surfaces: `/query/<component_name>` per query-attached
@@ -310,7 +316,7 @@ end
   without a query, Select page marks at most the bulk cap's worth of rows.
 - No `prompt_fields` on bulk actions, no bulk actions on related tables or
   `display :board` tables,
-  and bulk actions are not exposed as AG-UI tools. Full contract in the
+  and bulk actions are not exposed as LLM tools. Full contract in the
   bulk-actions topic.
 
 ## Rules

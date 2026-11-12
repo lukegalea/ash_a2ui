@@ -5,7 +5,7 @@ defmodule AshA2ui.SectionsTest do
   runtime names, scoped `/records/<name>` + `/query/<name>` paths, section
   labels as headings, per-section scoped reads, template-key `refreshes`
   fan-out, and the multi-table `"query"` action against runtime names.
-  Schema-validated on both v0.9.1 and v1.0.
+  Schema-validated against the vendored A2UI 1.0 schemas.
   """
 
   use ExUnit.Case, async: false
@@ -168,7 +168,7 @@ defmodule AshA2ui.SectionsTest do
     end
   end
 
-  describe "encoder (v0.9.1)" do
+  describe "encoder" do
     setup do
       alpha = create_bucket!("Alpha")
       zebra = create_bucket!("Zebra")
@@ -304,7 +304,7 @@ defmodule AshA2ui.SectionsTest do
     end
   end
 
-  describe "v1.0" do
+  describe "ashAction calls" do
     setup do
       alpha = create_bucket!("Alpha")
       apple = bucketed_word!("apple", alpha)

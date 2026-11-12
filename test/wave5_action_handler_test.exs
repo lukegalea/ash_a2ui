@@ -5,7 +5,7 @@ defmodule AshA2ui.Wave5ActionHandlerTest do
   `submit_form`, nested validation-error paths + in-row mirrors, and the
   `start_edit` population of nested rows and select labels, and success
   resets. Every emitted message is validated
-  against the vendored v0.9.1 JSON Schemas.
+  against the vendored A2UI 1.0 JSON Schemas.
   """
 
   use ExUnit.Case, async: false

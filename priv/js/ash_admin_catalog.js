@@ -2982,7 +2982,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
     const tag = TAGS.formSection;
     if (customElements.get(tag)) return;
 
-    // Frozen AshA2ui encoder id conventions (see the v0_9_1 emission):
+    // Frozen AshA2ui encoder id conventions (see AshA2ui.Encoder):
     // inputs are `form_input_<field>` with value bound to `/form/<field>`,
     // errors are `form_error_<field>` Texts bound to `/errors/<field>`, and
     // searchable relationship selects are `form_select_<field>` composites.

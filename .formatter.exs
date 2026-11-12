@@ -140,7 +140,6 @@ spark_locals_without_parens = [
   sort_reset: 1,
   sortable: 1,
   source: 1,
-  spec_version: 1,
   step: 1,
   step: 2,
   subtitle: 1,
