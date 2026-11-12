@@ -322,7 +322,7 @@ defmodule AshA2ui.LinksTest do
     test "admin details render FieldDisplays with link bindings" do
       comps = NotesUI |> AshA2ui.Info.build_surface() |> components_by_id()
 
-      assert %{"component" => "fieldDisplay", "link" => %{"path" => path}} =
+      assert %{"component" => "fieldDisplay", "link" => %{"@path" => path}} =
                comps["detail_note_detail_field_person_name"]
 
       assert path == "/detail/note/_links/person_name"
@@ -333,9 +333,9 @@ defmodule AshA2ui.LinksTest do
     test "the panel's FieldDisplay binds the view record's link" do
       comps = NotesUI |> AshA2ui.Info.build_surface() |> components_by_id()
 
-      # an admin descriptor: a plain path the admin renderer resolves
+      # a binding the renderer resolves like the value
       assert comps["field_display_person_id"]["link"] == %{
-               "path" => "/ui/panel/record/_links/person_id"
+               "@path" => "/ui/panel/record/_links/person_id"
              }
 
       refute Map.has_key?(comps["field_display_title"], "link")

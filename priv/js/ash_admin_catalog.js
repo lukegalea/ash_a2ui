@@ -164,7 +164,7 @@ import {
 const ADMIN_CATALOG_ID = "https://ash-a2ui.dev/catalogs/admin/v1";
 
 /** The admin catalog contract version (additive within the v1 id). */
-export const ADMIN_CATALOG_VERSION = "1.11.0";
+export const ADMIN_CATALOG_VERSION = "1.12.0";
 
 /**
  * The DOM event a reference-link activation raises when the host passed no
@@ -454,8 +454,13 @@ export function buildSchemas(basicCatalog = null) {
           // header's first click sorts in when it is not ascending.
           caption: RecordAny.optional(),
           sortFirst: EnumOf(["desc"]).optional(),
+          // 1.12: where a list-rows renderer draws the column (a row
+          // layout's trailing or expand fields).
+          placement: EnumOf(["trailing", "expand"]).optional(),
         }),
       ),
+      // 1.12: "rows" asks for list rows instead of a grid (display :rows).
+      layout: EnumOf(["rows"]).optional(),
       // Row arrays / a "/rows" binding / a function call — DynamicValue's
       // union covers the literal array, the {path} binding and the
       // {call} envelope, so the whole prop classifies DYNAMIC like the
@@ -557,6 +562,14 @@ export function buildSchemas(basicCatalog = null) {
       format: formatEnum(),
       // 1.1: the field's reference link(s), bound like the value.
       link: DynamicValueSchema.nullable().optional(),
+      // 1.12: a badge field's text, tone and tooltip; the empty placeholder;
+      // whether an empty field draws at all.
+      badge: DynamicStringSchema.nullable().optional(),
+      badgeTone: DynamicStringSchema.nullable().optional(),
+      badgeHelp: DynamicStringSchema.nullable().optional(),
+      note: Str.optional(),
+      emptyText: Str.optional(),
+      hideWhenEmpty: Bool.optional(),
       weight: Num.optional(),
     }),
 
@@ -2897,6 +2910,14 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
             font-size: var(--am-font-size-m);
             overflow-wrap: anywhere;
           }
+          .field-note {
+            font-weight: var(--am-font-weight-regular);
+            text-transform: none;
+            letter-spacing: normal;
+          }
+          .field-value-empty {
+            color: var(--am-text-muted);
+          }
           .field-value-boolean {
             display: inline-flex;
             align-items: center;
@@ -2940,11 +2961,40 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
 
         const isBoolean = props.format === "boolean";
         const links = linkEntries(props.link);
+        const empty = props.value == null || props.value === "";
+
+        // 1.12: an empty field the surface hides draws nothing.
+        this.hidden = Boolean(props.hideWhenEmpty) && empty;
+        if (this.hidden) return nothing;
+
+        if (empty && props.emptyText) {
+          return html`
+            <dl class="field">
+              <dt class="field-label">${str(props.label)}${props.note ? html` <span class="field-note">${str(props.note)}</span>` : nothing}</dt>
+              <dd class="field-value field-value-empty">${str(props.emptyText)}</dd>
+            </dl>
+          `;
+        }
+
+        const badge = str(props.badge);
+        if (badge) {
+          const tone = props.badgeTone ? badgeTone(props.badgeTone) : "neutral";
+          const help = str(props.badgeHelp);
+          return html`
+            <dl class="field">
+              <dt class="field-label">${str(props.label)}${props.note ? html` <span class="field-note">${str(props.note)}</span>` : nothing}</dt>
+              <dd class="field-value">
+                <span class="am-badge" data-tone=${tone} title=${help || nothing}
+                  aria-description=${help || nothing}>${badge}</span>
+              </dd>
+            </dl>
+          `;
+        }
 
         if (links.length > 0) {
           return html`
             <dl class="field">
-              <dt class="field-label">${str(props.label)}</dt>
+              <dt class="field-label">${str(props.label)}${props.note ? html` <span class="field-note">${str(props.note)}</span>` : nothing}</dt>
               <dd class="field-value">${renderLinks(this, links)}</dd>
             </dl>
           `;
@@ -2954,7 +3004,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
           const value = formatDisplayValue(props.value, props.format);
           return html`
             <dl class="field">
-              <dt class="field-label">${str(props.label)}</dt>
+              <dt class="field-label">${str(props.label)}${props.note ? html` <span class="field-note">${str(props.note)}</span>` : nothing}</dt>
               <dd
                 class="field-value field-value-boolean ${value === "Yes" ? "is-true" : "is-false"}"
               >
@@ -2966,7 +3016,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
 
         return html`
           <dl class="field">
-            <dt class="field-label">${str(props.label)}</dt>
+            <dt class="field-label">${str(props.label)}${props.note ? html` <span class="field-note">${str(props.note)}</span>` : nothing}</dt>
             <dd class="field-value">${renderValue(props.value, props.format)}</dd>
           </dl>
         `;
