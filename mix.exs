@@ -142,8 +142,6 @@ defmodule AshA2ui.MixProject do
         ],
         Encoding: [
           AshA2ui.Encoder,
-          AshA2ui.Encoder.V0_9_1,
-          AshA2ui.Encoder.V1_0,
           AshA2ui.TypeMapper
         ],
         Actions: [

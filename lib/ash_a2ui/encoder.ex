@@ -1,12 +1,37 @@
-# The module name mirrors the spec version (v0.9.1) and is part of the frozen
-# cross-track contract, so the PascalCase naming check is disabled here.
-# credo:disable-for-this-file Credo.Check.Readability.ModuleNames
-defmodule AshA2ui.Encoder.V0_9_1 do
+defmodule AshA2ui.Encoder do
   @moduledoc """
-  A2UI v0.9.1 encoder: emits the protocol envelope and basic-catalog component
-  composition. Tables are `List` + `Row` composition (the basic catalog has no
-  Table component); all keys are string camelCase and children are always ID
-  references.
+  The A2UI 1.0 encoder: builds the agent-to-renderer messages of a surface
+  (`encode_surface/3`, `encode_data_model/3`) and the other messages the
+  library sends (`update_data_model/3`, `call_renderer_function/4`,
+  `agent_function_response/2`).
+
+  A surface is one inline `createSurface` message carrying the component
+  tree and the initial data model. Components come from the 1.0 basic
+  catalog (and, for a `catalog: :admin_v1` surface, the admin catalog).
+  Tables are `List` + `Row` composition, since the basic catalog has no
+  Table component. All keys are string camelCase, children are always id
+  references, and data bindings are `{"@path": ...}` objects.
+
+  ## Actions
+
+  Every server-handled interaction is an `ashAction` function call
+  (`ash_action/3`):
+
+      "action": {"functionCall": {
+        "@call": "ashAction",
+        "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1",
+        "args": {"name": "invoke", "sourceComponentId": "row_action_archive_button",
+                 "context": {"action": "archive", "recordId": {"@path": "id"}}}
+      }}
+
+  The renderer resolves the context's bindings and sends the call to the
+  agent as `callAgentFunction`; `AshA2ui.ActionHandler` answers it with an
+  `agentFunctionResponse` once its data-model updates are out. Below, "event
+  `x`" means an `ashAction` call whose `name` is `x`.
+
+  Headings are Markdown `Text` (`"## Title"`), as the 1.0 basic catalog's
+  Text has no heading variants; the levels named below (h1, h2, …) are the
+  number of `#`s.
 
   ## Component tree
 
@@ -34,7 +59,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       (`query_filter_<name>`, bound to `/query/filters/<name>`, with an
       `"All"` option first) and a
       `query_apply_button` (event `query`, context
-      `{"query": {"path": "/query"}, "page": 1}` — the page-1 reset)
+      `{"query": {"@path": "/query"}, "page": 1}` — the page-1 reset)
     * `create_button` — only when the view declares a create action and
       the table reads the surface's own resource: a primary `Button`
       dispatching `start_create`, labelled `"Create <Resource>"`
@@ -53,14 +78,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       `_links/<field>` — card rows and details do the same) —
       one `Button` per row action
       (`row_action_<action>_button`: event `invoke`, context
-      `{"action": "<name>", "recordId": {"path": "id"}}`), a
+      `{"action": "<name>", "recordId": {"@path": "id"}}`), a
       `row_context_button` ("Select <context>", event `context_select`) on
       tables declaring `select_context`, and the task controls — only on
       surfaces with a `:form` component and only on tables over the
       surface's own resource (related tables are read-only): `view_button`
       (event `view_record`) and, with a declared `update_action`,
       `edit_button` (event `start_edit`), both with context
-      `{"recordId": {"path": "id"}, "component": "<table>"}`. Tables
+      `{"recordId": {"@path": "id"}, "component": "<table>"}`. Tables
       declaring a `row_layout` swap the card's content for a header +
       metadata-grid structure — see the Layout topic and
       `card_row_components/5`
@@ -74,7 +99,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   `Modal` (`row_action_<action>_modal`) instead of a bare button: the row
   slot holds the Modal, whose `trigger` is the usual
   `row_action_<action>_button` — now dispatching event `prompt` with context
-  `{"action": "<name>", "recordId": {"path": "id"}, "component": "<table>"}`
+  `{"action": "<name>", "recordId": {"@path": "id"}, "component": "<table>"}`
   so the server pre-fills `/prompt/values/<action>` — and whose `content` is
   `row_action_<action>_prompt`, a `Column` of a title `Text`, one input
   per prompt field (`row_action_<action>_prompt_input_<field>`, bound to
@@ -82,9 +107,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   paths cannot reach the shared prompt state), a per-field error `Text`
   (bound to `/errors/<field>`) and a confirm `Button`
   (`row_action_<action>_confirm_button`: event `invoke`, context carrying
-  `"values": {"path": "/prompt/values/<action>"}` alongside the usual
+  `"values": {"@path": "/prompt/values/<action>"}` alongside the usual
   `"action"`/`"recordId"`/`"component"`). Modal open/close is client-side
-  (the v0.9.1 protocol has no server-controlled open state); the server
+  (the protocol has no server-controlled open state); the server
   contract is only the `prompt` pre-fill and the `invoke` values.
 
   Each prompt input is the widget a form field of the same type gets
@@ -105,7 +130,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   writes the row's options there, read as the actor through the scope's
   read action), the search controls appear only with `option_search`, and
   its `option_select` (and `option_search`) context also carries
-  `"recordId": {"path": "/prompt/record/<action>"}` — the row the prompt
+  `"recordId": {"@path": "/prompt/record/<action>"}` — the row the prompt
   is open on, which the server re-reads before evaluating the scope.
 
   The prompt Modal closes on its own after a successful confirm under the
@@ -137,9 +162,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       `/query/_range_text`) / `query_next_slot`; each slot is a zero-or-one
       `List` over `/query/_previous_visible` / `/query/_next_visible`
       holding `query_prev_button` / `query_next_button`, which carry event
-      `query` with context `{"query": {"path": "/query"}, "pageDelta": -1 | 1}`
+      `query` with context `{"query": {"@path": "/query"}, "pageDelta": -1 | 1}`
     * `action_result_panel` — `Column` wrapping `action_result_text`, a
-      `Text` bound to `/ui/action_result_text` (the display text of
+      `Text` bound to `/ui/feedback/resultText` (the display text of
       map-returning generic action results; empty until an action produces
       one)
 
@@ -159,10 +184,10 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   `ChoicePicker` / `DateTimeInput`), bind `value` to `/form/<field>`, and
   errors are `Text` (caption) bound to `/errors/<field>`. Relationship
   selects render as `ChoicePicker`s whose loaded options are emitted inline
-  (the v0.9.1 basic catalog requires a literal options array) and mirrored
+  (the basic catalog's ChoicePicker takes a literal options array) and mirrored
   at `/options/<field>` in the data model. `form_submit_button` sends
   `submit_form` with context
-  `{"values": {"path": "/form"}, "recordId": {"path": "/form/id"}}`; its
+  `{"values": {"@path": "/form"}, "recordId": {"@path": "/form/id"}}`; its
   label binds `/ui/panel/primary_label` ("Create <Resource>" /
   "Save changes"). The panel's modes and actions are documented on
   `AshA2ui.Experience`.
@@ -174,7 +199,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   as the first child of its row (the card header under a `row_layout`), and
   a toolbar Row `bulk<sfx>_toolbar` right above `records_list<sfx>`: one
   `bulk<sfx>_<action>_button` per bulk action (event `bulk_invoke`, context
-  `{"action", "component", "records": {"path": <records path>}}` plus the
+  `{"action", "component", "records": {"@path": <records path>}}` plus the
   usual query/contexts bindings), then `bulk<sfx>_select_page_button` and
   `bulk<sfx>_clear_button` (event `bulk_select` with `"selected"` true /
   false). Its rows carry `"_selected": false` and the data model a
@@ -192,11 +217,10 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "errors" => %{},
         "options" => %{"<field>" => [%{"label" => ..., "value" => ...}]},
         "ui" => %{
-          "action_result" => %{},
-          "action_result_text" => "",
           "intent" => "browse",
           "panel" => %{"visible" => [], "mode" => nil, ...},
-          "feedback" => %{"kind" => nil, "message" => ""}
+          "feedback" => %{"kind" => "", "message" => "", "code" => "",
+                          "functionCallId" => "", "result" => %{}, "resultText" => ""}
         },
         "_empty_visible" => [%{"id" => "on"}],
         "_empty_message" => "No <resource> records yet."
@@ -224,8 +248,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   Query-enabled surfaces additionally carry `"query"` — the `/query` state
   shape documented on `AshA2ui.QueryRunner` — and their `submit_form`/`invoke`
-  contexts include `"query": {"path": "/query"}` so success refreshes respect
-  the client's active search/filters/sort/page.
+  contexts include `"query": {"@path": "/query"}` so success refreshes respect
+  the renderer's active search/filters/sort/page.
 
   Record values are JSON-safe: dates/datetimes via `to_iso8601`, decimals and
   atoms via `to_string`; enum values in table rows read as their labels.
@@ -237,43 +261,75 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   `AshA2ui.Wizard`. Forms without steps are unchanged.
   """
 
-  @behaviour AshA2ui.Encoder
-
   alias Ash.Resource.Info, as: ResourceInfo
   import AshA2ui.Gettext, only: [msg: 1]
 
+  alias AshA2ui.Experience
   alias AshA2ui.L10n
   alias AshA2ui.Label
   alias AshA2ui.ResolvedView
 
-  @version "v0.9.1"
-  @catalog_id "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
+  @version "1.0"
+  @basic_catalog_id "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+  @ash_catalog_id "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+
+  # The admin catalog's own components (priv/a2ui/admin_v1/catalog.json).
+  # Every other component the encoder emits is a basic-catalog component.
+  @admin_components ~w(actionBar calendarView confirmDialog dataGrid emptyState entityPage
+                       fieldDisplay filterPicker formSection liveDiagram pagination recordPanel
+                       statusBanner)
 
   @numeric_types [Ash.Type.Integer, Ash.Type.Decimal, Ash.Type.Float]
 
-  @impl true
+  ## The wire contract
+
+  @doc ~S(The A2UI protocol version every message carries: `"1.0"`.)
+  @spec version() :: String.t()
+  def version, do: @version
+
+  @doc "The catalog id of the A2UI 1.0 basic catalog."
+  @spec basic_catalog_id() :: String.t()
+  def basic_catalog_id, do: @basic_catalog_id
+
+  @doc """
+  The catalog id of ash_a2ui's own function catalog
+  (`priv/a2ui/v1_0/catalogs/ash_a2ui/catalog.json`): `ashAction`, which a
+  renderer sends to the agent as `callAgentFunction`, and `downloadFile`,
+  which the agent asks the renderer to run with `callRendererFunction`.
+  """
+  @spec ash_catalog_id() :: String.t()
+  def ash_catalog_id, do: @ash_catalog_id
+
+  @doc """
+  Encodes the surface: one inline `createSurface` message carrying the
+  component tree and the initial data model, so the surface paints once.
+
+  The surface's `catalogId` is the basic catalog, or the admin catalog for
+  a surface built with `catalog: :admin_v1`. Components from the other
+  catalog carry `@catalogId` (see `with_catalog/2`).
+  """
+  @spec encode_surface(ResolvedView.t(), [map] | map, keyword) :: [map]
   def encode_surface(resolved_view, records, opts) do
+    catalog_id = surface_catalog_id(resolved_view)
+
+    components =
+      resolved_view
+      |> with_openable_links(opts)
+      |> with_diagram_sources(opts)
+      |> components(select_options(resolved_view, opts))
+      |> without_header(opts)
+      |> Enum.map(&with_catalog(&1, catalog_id))
+
     [
       %{
         "version" => @version,
         "createSurface" => %{
           "surfaceId" => resolved_view.surface_id,
-          "catalogId" => catalog_id(resolved_view)
+          "catalogId" => catalog_id,
+          "components" => components,
+          "dataModel" => data_model(resolved_view, records, opts)
         }
-      },
-      %{
-        "version" => @version,
-        "updateComponents" => %{
-          "surfaceId" => resolved_view.surface_id,
-          "components" =>
-            resolved_view
-            |> with_openable_links(opts)
-            |> with_diagram_sources(opts)
-            |> components(select_options(resolved_view, opts))
-            |> without_header(opts)
-        }
-      },
-      encode_data_model(resolved_view, records, opts)
+      }
     ]
   end
 
@@ -303,62 +359,223 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   # The admin catalog (`catalog: :admin_v1`) surfaces declare their own
-  # catalog id; everything else stays the basic catalog.
-  defp catalog_id(view) do
-    if AshA2ui.Experience.admin?(view),
-      do: AshA2ui.Experience.admin_catalog_id(),
-      else: @catalog_id
+  # catalog id; everything else is the basic catalog.
+  defp surface_catalog_id(view) do
+    if Experience.admin?(view), do: Experience.admin_catalog_id(), else: @basic_catalog_id
   end
 
   @doc """
-  Encodes a data-only refresh (`updateDataModel`), usable for PubSub-driven
-  refresh pushes.
+  Encodes a data-only refresh: one `updateDataModel` message, usable for
+  PubSub-driven refresh pushes.
 
-  By default replaces the entire data model (`path: "/"`) with the full
-  reserved-path value shape, resetting `form`/`errors`/`ui`. Pass
-  `scope: :records` to replace only `/records`, preserving in-flight form
-  state on the client.
+  By default it replaces the whole data model (`path: "/"`) with the full
+  reserved-path value shape, resetting `form`, `errors` and `ui`. Pass
+  `scope: :records` to replace only `/records`, which keeps in-flight form
+  state on the renderer.
   """
-  @impl true
+  @spec encode_data_model(ResolvedView.t(), [map] | map, keyword) :: map
   def encode_data_model(resolved_view, records, opts) do
-    serialized = records_value(resolved_view, records, opts)
+    case Keyword.get(opts, :scope, :full) do
+      :records ->
+        update_data_model(
+          resolved_view.surface_id,
+          "/records",
+          records_value(resolved_view, records, opts)
+        )
 
-    {path, value} =
-      case Keyword.get(opts, :scope, :full) do
-        :records ->
-          {"/records", serialized}
+      :full ->
+        update_data_model(resolved_view.surface_id, "/", data_model(resolved_view, records, opts))
+    end
+  end
 
-        :full ->
-          {"/",
-           %{
-             "records" => serialized,
-             "form" => ResolvedView.initial_form(resolved_view),
-             "errors" => %{},
-             "options" => options_data(resolved_view, opts),
-             "ui" => %{"action_result" => %{}, "action_result_text" => ""}
-           }
-           |> put_query_state(resolved_view, opts)
-           |> put_prompt_state(resolved_view)
-           |> put_select_state(resolved_view)
-           |> put_context_data(resolved_view, opts)
-           |> put_report_state(resolved_view)
-           |> put_export_state(resolved_view)
-           |> put_bulk_state(resolved_view)
-           |> put_experience_state(resolved_view)
-           |> put_lane_totals(resolved_view)
-           |> put_matrix_data(resolved_view)
-           |> put_wizard_state(resolved_view)
-           |> put_diagram_state(resolved_view, opts)}
-      end
-
+  @doc """
+  One `updateDataModel` message writing `value` at `path` (a JSON Pointer;
+  `"/"` is the whole data model). `value` is always sent: `nil` deletes the
+  key at `path`.
+  """
+  @spec update_data_model(String.t(), String.t(), term) :: map
+  def update_data_model(surface_id, path, value) when is_binary(surface_id) and is_binary(path) do
     %{
       "version" => @version,
-      "updateDataModel" => %{
-        "surfaceId" => resolved_view.surface_id,
-        "path" => path,
-        "value" => value
+      "updateDataModel" => %{"surfaceId" => surface_id, "path" => path, "value" => value}
+    }
+  end
+
+  @doc """
+  A `callRendererFunction` message asking the renderer to run the catalog
+  function `name` with `args` against `surface_id`'s data model, under a
+  fresh `functionCallId`. The renderer answers with a
+  `rendererFunctionResponse` carrying the same id.
+
+  Options:
+
+    * `:catalog_id` — the catalog declaring the function. Defaults to
+      `ash_catalog_id/0` (`downloadFile`).
+    * `:function_call_id` — overrides the generated id.
+
+  Only a function its catalog lets the agent call (`allowedCallers`
+  `agentOnly` or `rendererOrAgent`) may be sent this way. Anything that can
+  be said as data (status, errors, selection) belongs in `updateDataModel`
+  instead: a function call is imperative and invisible to the data model.
+  """
+  @spec call_renderer_function(String.t(), String.t(), map, keyword) :: map
+  def call_renderer_function(surface_id, name, args, opts \\ [])
+      when is_binary(surface_id) and is_binary(name) and is_map(args) do
+    %{
+      "version" => @version,
+      "callRendererFunction" => %{
+        "surfaceId" => surface_id,
+        "functionCallId" => Keyword.get_lazy(opts, :function_call_id, &function_call_id/0),
+        "callFunction" => %{
+          "@call" => name,
+          "catalogId" => Keyword.get(opts, :catalog_id, @ash_catalog_id),
+          "args" => args
+        }
       }
     }
+  end
+
+  defp function_call_id do
+    "fc_" <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
+  end
+
+  @doc """
+  An `agentFunctionResponse` answering the renderer's `callAgentFunction`
+  `function_call_id`: `{:ok, value}` returns `value`, `{:error, code,
+  message}` the error object.
+  """
+  @spec agent_function_response(String.t(), {:ok, term} | {:error, String.t(), String.t()}) ::
+          map
+  def agent_function_response(function_call_id, {:ok, value}) when is_binary(function_call_id) do
+    %{
+      "version" => @version,
+      "agentFunctionResponse" => %{"functionCallId" => function_call_id, "value" => value}
+    }
+  end
+
+  def agent_function_response(function_call_id, {:error, code, message})
+      when is_binary(function_call_id) and is_binary(code) and is_binary(message) do
+    %{
+      "version" => @version,
+      "agentFunctionResponse" => %{
+        "functionCallId" => function_call_id,
+        "error" => %{"code" => code, "message" => message}
+      }
+    }
+  end
+
+  @doc """
+  The `Action` of every server-handled interaction: a function call to
+  `ashAction` in the ash_a2ui catalog. The renderer sends it to the agent as
+  `callAgentFunction`, and `AshA2ui.ActionHandler` answers it with an
+  `agentFunctionResponse` after its data-model updates.
+
+  `name` and `context` are the action name and its context (literals and
+  `{"@path" => ...}` bindings the renderer resolves before sending);
+  `source_component_id` is the id of the component the action sits on.
+  """
+  @spec ash_action(String.t(), map, String.t()) :: map
+  def ash_action(name, context, source_component_id)
+      when is_binary(name) and is_map(context) and is_binary(source_component_id) do
+    %{
+      "functionCall" => %{
+        "@call" => "ashAction",
+        "catalogId" => @ash_catalog_id,
+        "args" => %{
+          "name" => name,
+          "sourceComponentId" => source_component_id,
+          "context" => context
+        }
+      }
+    }
+  end
+
+  @doc """
+  Qualifies `component` for a surface whose default catalog is
+  `surface_catalog_id`. A component's catalog is the `@catalogId` it already
+  names, else the catalog declaring its kind: the admin catalog for the admin
+  components, the basic catalog for everything else. A component from
+  another catalog (a basic component on an admin surface) gets `@catalogId`,
+  and the function calls inside it that name no catalog get its catalog too,
+  because an unqualified call resolves against the surface's default. A
+  component from the surface's own catalog carries no `@catalogId`.
+  """
+  @spec with_catalog(map, String.t()) :: map
+  def with_catalog(%{"component" => kind} = component, surface_catalog_id) do
+    case component["@catalogId"] || component_catalog_id(kind) do
+      ^surface_catalog_id ->
+        Map.delete(component, "@catalogId")
+
+      catalog_id ->
+        component
+        |> Map.new(fn {key, value} -> {key, qualify_calls(value, catalog_id)} end)
+        |> Map.put("@catalogId", catalog_id)
+    end
+  end
+
+  defp component_catalog_id(kind) when kind in @admin_components,
+    do: Experience.admin_catalog_id()
+
+  defp component_catalog_id(_kind), do: @basic_catalog_id
+
+  # System functions (`@index`) belong to no catalog.
+  defp qualify_calls(%{"@call" => "@" <> _} = call, _catalog_id), do: call
+
+  defp qualify_calls(%{"@call" => _} = call, catalog_id) do
+    call
+    |> Map.new(fn {key, value} -> {key, qualify_calls(value, catalog_id)} end)
+    |> Map.put_new("catalogId", catalog_id)
+  end
+
+  defp qualify_calls(%{} = map, catalog_id),
+    do: Map.new(map, fn {key, value} -> {key, qualify_calls(value, catalog_id)} end)
+
+  defp qualify_calls(list, catalog_id) when is_list(list),
+    do: Enum.map(list, &qualify_calls(&1, catalog_id))
+
+  defp qualify_calls(other, _catalog_id), do: other
+
+  @doc """
+  The `text` of a level-`level` heading `Text`: the 1.0 basic catalog's
+  Text has no heading variants and renders its text as Markdown, so a
+  literal heading is `"## Title"` and a bound one interpolates its path
+  through `formatString` (`"## ${/path}"`). A function-call text (a
+  formatted date) stays as it is.
+  """
+  @spec heading(1..6, String.t() | map) :: String.t() | map
+  def heading(level, text) when is_binary(text),
+    do: String.duplicate("#", level) <> " " <> text
+
+  def heading(_level, %{"@call" => _} = call), do: call
+
+  def heading(level, %{"@path" => path}) do
+    %{
+      "@call" => "formatString",
+      "args" => %{"value" => String.duplicate("#", level) <> " ${" <> path <> "}"}
+    }
+  end
+
+  # The full data model: the reserved-path value shape.
+  defp data_model(view, records, opts) do
+    %{
+      "records" => records_value(view, records, opts),
+      "form" => ResolvedView.initial_form(view),
+      "errors" => %{},
+      "options" => options_data(view, opts),
+      "ui" => %{}
+    }
+    |> put_query_state(view, opts)
+    |> put_prompt_state(view)
+    |> put_select_state(view)
+    |> put_context_data(view, opts)
+    |> put_report_state(view)
+    |> put_export_state(view)
+    |> put_bulk_state(view)
+    |> put_experience_state(view)
+    |> put_lane_totals(view)
+    |> put_matrix_data(view)
+    |> put_wizard_state(view)
+    |> put_diagram_state(view, opts)
   end
 
   # The value at "/records": on single-table surfaces the serialized row
@@ -482,7 +699,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   # Relationship prompt fields render their loaded option list inline (the
-  # v0.9.1 ChoicePicker takes literal options only), so the component pass
+  # basic ChoicePicker takes literal options only), so the component pass
   # carries each one's list on the prompt field.
   defp put_prompt_options(view, options) do
     prompts =
@@ -610,7 +827,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp components(view, options) do
     view = put_prompt_options(view, options)
 
-    if AshA2ui.Experience.admin?(view) do
+    if Experience.admin?(view) do
       admin_components(view, options)
     else
       basic_components(view, options)
@@ -654,7 +871,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     status = %{
       "id" => "status_text",
       "component" => "Text",
-      "text" => %{"path" => "/ui/feedback/message"}
+      "text" => %{"@path" => "/ui/feedback/message"}
     }
 
     [
@@ -679,8 +896,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         %{
           "id" => "surface_title",
           "component" => "Text",
-          "text" => view.title,
-          "variant" => "h1"
+          "text" => heading(1, view.title)
         }
       ]
     else
@@ -730,7 +946,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     root = %{
       "id" => "root",
       "component" => "entityPage",
-      "title" => AshA2ui.Experience.surface_title(view),
+      "title" => Experience.surface_title(view),
       # Record-task panel first (zero jank: an open task is
       # front-and-center), the typed-feedback banner right below it (the
       # near-action outcome home), then context pickers, tables, details.
@@ -812,8 +1028,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     %{
       "id" => "status_banner",
       "component" => "statusBanner",
-      "kind" => %{"path" => "/ui/feedback/kind"},
-      "message" => %{"path" => "/ui/feedback/message"}
+      "kind" => %{"@path" => "/ui/feedback/kind"},
+      "message" => %{"@path" => "/ui/feedback/message"}
     }
   end
 
@@ -826,9 +1042,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "data_grid#{sfx}",
         "component" => "dataGrid",
         "columns" => admin_columns(view, table),
-        "rows" => %{"path" => table.records_path},
+        "rows" => %{"@path" => table.records_path},
         "rowId" => "id",
-        "label" => AshA2ui.Experience.collection_label(view, table),
+        "label" => Experience.collection_label(view, table),
         "rowActions" => admin_row_actions(view, table, sfx),
         "children" => ["empty_state#{sfx}" | pagination_children] ++ prompt_ids
       }
@@ -1019,13 +1235,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     action = %{
       "name" => "query",
       "context" =>
-        %{"query" => %{"path" => table.query_path}, "page" => 1}
+        %{"query" => %{"@path" => table.query_path}, "page" => 1}
         |> Map.put("component", to_string(table.name))
         |> put_contexts_binding(view)
     }
 
     sort =
-      %{"path" => "#{table.query_path}/sort", "action" => action}
+      %{"@path" => "#{table.query_path}/sort", "action" => action}
       |> maybe_put("reset", if(Map.get(table.query, :sort_reset, false), do: true))
 
     Map.put(grid, "sort", sort)
@@ -1044,7 +1260,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     name = cells.name
 
     column
-    |> maybe_put("subtitle", cells.subtitle && %{"path" => to_string(cells.subtitle)})
+    |> maybe_put("subtitle", cells.subtitle && %{"@path" => to_string(cells.subtitle)})
     |> maybe_put("icon", cells.icon && icon_binding(name, cells))
     |> maybe_put("more", cells.more && more_binding(name, cells))
     |> maybe_put("detail", cells.detail && detail_binding(name, cells))
@@ -1057,7 +1273,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp more_binding(name, cells) do
     values? = not is_nil(Map.get(cells, :more_values))
 
-    %{"path" => to_string(cells.more), "textPath" => "_more_text_#{name}"}
+    %{"@path" => to_string(cells.more), "textPath" => "_more_text_#{name}"}
     |> maybe_put("valuesPath", if(values?, do: "_more_values_#{name}"))
     |> maybe_put("captionPath", if(values?, do: "_more_caption_#{name}"))
     |> maybe_put("labelPath", if(values?, do: "_more_label_#{name}"))
@@ -1066,19 +1282,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # The third line: the caption field, read off the row, and the column's
   # words for it (`{date}` / `{value}` filled by the renderer).
   defp caption_binding(cells, l10n) do
-    %{"path" => to_string(cells.caption)}
+    %{"@path" => to_string(cells.caption)}
     |> maybe_put("text", translate_declared(l10n, Map.get(cells, :caption_text)))
   end
 
   defp icon_binding(name, cells) do
-    %{"path" => "_icon_#{name}", "labelPath" => "_icon_label_#{name}"}
+    %{"@path" => "_icon_#{name}", "labelPath" => "_icon_label_#{name}"}
     |> maybe_put("tonePath", if(cells.icon_tones != [], do: "_icon_tone_#{name}"))
   end
 
   defp detail_binding(name, cells) do
     icons? = cells.detail_icon_names != []
 
-    %{"path" => "_detail_#{name}"}
+    %{"@path" => "_detail_#{name}"}
     |> maybe_put("datePath", cells.detail_date && to_string(cells.detail_date))
     |> maybe_put("iconPath", if(icons?, do: "_detail_icon_#{name}"))
     |> maybe_put("iconTonePath", if(icons?, do: "_detail_icon_tone_#{name}"))
@@ -1109,7 +1325,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # tooltip the `_badge_help_<field>` key when `badge_help` is.
   defp put_column_badge(column, %{badge: field} = layout, field) do
     badge =
-      %{"path" => "_badge_#{field}"}
+      %{"@path" => "_badge_#{field}"}
       |> maybe_put("tonePath", if(layout.badge_tones != [], do: "_badge_tone_#{field}"))
       |> maybe_put(
         "helpPath",
@@ -1125,7 +1341,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # absolute for detail/panel field displays).
   defp put_link_binding(component, view, field, path) do
     if AshA2ui.Links.link_field?(view.fields[field]),
-      do: Map.put(component, "link", %{"path" => path}),
+      do: Map.put(component, "link", %{"@path" => path}),
       else: component
   end
 
@@ -1161,7 +1377,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         context =
           %{
             "action" => to_string(action),
-            "recordId" => %{"path" => "id"},
+            "recordId" => %{"@path" => "id"},
             "component" => to_string(table.name)
           }
           |> put_query_binding(view)
@@ -1199,7 +1415,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "context" =>
           %{
             "context" => to_string(name),
-            "value" => %{"path" => "id"},
+            "value" => %{"@path" => "id"},
             "component" => to_string(table.name)
           }
           |> put_query_binding(view)
@@ -1213,14 +1429,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "label" => label,
       "action" => action,
       "context" => %{
-        "recordId" => %{"path" => "id"},
+        "recordId" => %{"@path" => "id"},
         "component" => to_string(table.name)
       }
     }
   end
 
   defp put_admin_prompt_values(context, %{prompt_fields: [_ | _], name: name}) do
-    Map.put(context, "values", %{"path" => "/prompt/values/#{name}"})
+    Map.put(context, "values", %{"@path" => "/prompt/values/#{name}"})
   end
 
   defp put_admin_prompt_values(context, _setting), do: context
@@ -1246,7 +1462,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "action" => "prompt",
         "context" => %{
           "action" => to_string(action),
-          "recordId" => %{"path" => "id"},
+          "recordId" => %{"@path" => "id"},
           "component" => to_string(table.name)
         }
       }
@@ -1266,7 +1482,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     %{
       "id" => "empty_state#{sfx}",
       "component" => "emptyState",
-      "message" => %{"path" => "_empty_message#{sfx}"},
+      "message" => %{"@path" => "_empty_message#{sfx}"},
       "children" => []
     }
     |> put_declared_empty_state(view, table)
@@ -1283,9 +1499,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     component
     |> Map.merge(%{
-      "title" => %{"path" => "#{base}/title"},
-      "message" => %{"path" => "#{base}/message"},
-      "icon" => %{"path" => "#{base}/icon"}
+      "title" => %{"@path" => "#{base}/title"},
+      "message" => %{"@path" => "#{base}/message"},
+      "icon" => %{"@path" => "#{base}/icon"}
     })
     |> maybe_put(
       "clearAction",
@@ -1296,7 +1512,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
             "action" => %{
               "name" => "query",
               "context" =>
-                %{"query" => %{"path" => table.query_path}, "page" => 1}
+                %{"query" => %{"@path" => table.query_path}, "page" => 1}
                 |> Map.put("component", to_string(table.name))
                 |> put_contexts_binding(view)
             }
@@ -1308,7 +1524,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     )
     |> then(fn component ->
       if Map.has_key?(component, "clearAction"),
-        do: Map.put(component, "clearVisible", %{"path" => "#{base}/clear"}),
+        do: Map.put(component, "clearVisible", %{"@path" => "#{base}/clear"}),
         else: component
     end)
   end
@@ -1328,14 +1544,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "pagination#{sfx}",
         "component" => "pagination",
-        "page" => %{"path" => "#{query_path}/page"},
-        "pageSize" => %{"path" => "#{query_path}/pageSize"},
-        "total" => %{"path" => "#{query_path}/totalCount"},
-        "hasNext" => %{"path" => "#{query_path}/hasMore"},
-        "visible" => %{"path" => "#{query_path}/paginationVisible"},
-        "previousVisible" => %{"path" => "#{query_path}/previousVisible"},
-        "nextVisible" => %{"path" => "#{query_path}/nextVisible"},
-        "rangeText" => %{"path" => "#{query_path}/_range_text"},
+        "page" => %{"@path" => "#{query_path}/page"},
+        "pageSize" => %{"@path" => "#{query_path}/pageSize"},
+        "total" => %{"@path" => "#{query_path}/totalCount"},
+        "hasNext" => %{"@path" => "#{query_path}/hasMore"},
+        "visible" => %{"@path" => "#{query_path}/paginationVisible"},
+        "previousVisible" => %{"@path" => "#{query_path}/previousVisible"},
+        "nextVisible" => %{"@path" => "#{query_path}/nextVisible"},
+        "rangeText" => %{"@path" => "#{query_path}/_range_text"},
         "previousAction" => admin_page_action(table, -1, view),
         "nextAction" => admin_page_action(table, 1, view)
       }
@@ -1355,7 +1571,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "pageSizeAction" => %{
         "name" => "query",
         "context" =>
-          %{"query" => %{"path" => table.query_path}, "page" => 1}
+          %{"query" => %{"@path" => table.query_path}, "page" => 1}
           |> Map.put("component", to_string(table.name))
           |> put_contexts_binding(view)
       }
@@ -1366,7 +1582,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     %{
       "name" => "query",
       "context" =>
-        %{"query" => %{"path" => table.query_path}, "pageDelta" => page_delta}
+        %{"query" => %{"@path" => table.query_path}, "pageDelta" => page_delta}
         |> Map.put("component", to_string(table.name))
         |> put_contexts_binding(view)
     }
@@ -1376,9 +1592,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     %{
       "id" => "record_panel",
       "component" => "recordPanel",
-      "mode" => %{"path" => "/ui/panel/mode"},
-      "title" => %{"path" => "/ui/panel/title"},
-      "recordId" => %{"path" => "/ui/panel/record_id"},
+      "mode" => %{"@path" => "/ui/panel/mode"},
+      "title" => %{"@path" => "/ui/panel/title"},
+      "recordId" => %{"@path" => "/ui/panel/record_id"},
       "children" =>
         Enum.map(form.fields, &"field_display_#{&1}") ++ ["form_section", "action_bar"]
     }
@@ -1407,9 +1623,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     action_bar = %{
       "id" => "action_bar",
       "component" => "actionBar",
-      "primaryLabel" => %{"path" => "/ui/panel/primary_label"},
+      "primaryLabel" => %{"@path" => "/ui/panel/primary_label"},
       "busy" => false,
-      "action" => %{"event" => submit_event(view)},
+      "action" => submit_action(view, "action_bar"),
       "children" => ["form_cancel_button"]
     }
 
@@ -1425,7 +1641,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "label" => view.fields[field].label,
       # the view task's read-only display values (view_record writes them;
       # /form is the edit buffer and stays untouched in view mode)
-      "value" => %{"path" => "/ui/panel/record/#{field}"}
+      "value" => %{"@path" => "/ui/panel/record/#{field}"}
     }
 
     display
@@ -1483,7 +1699,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "id" => "#{base}_field_#{field}",
           "component" => "fieldDisplay",
           "label" => detail_field_label(view, field),
-          "value" => %{"path" => "/detail/#{detail.context}/#{field}"}
+          "value" => %{"@path" => "/detail/#{detail.context}/#{field}"}
         }
         |> maybe_put("format", display_format(view, resource, field))
         |> put_link_binding(view, field, "/detail/#{detail.context}/_links/#{field}")
@@ -1499,8 +1715,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => Label.resolve(view.l10n, nil, detail.name),
-        "variant" => "h3"
+        "text" => heading(3, Label.resolve(view.l10n, nil, detail.name))
       }
       | fields
     ]
@@ -1586,7 +1801,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp child_if(_present, id), do: [id]
 
   # The result panel displays map-returning generic action results: a Column
-  # wrapping a Text bound to the reserved /ui/action_result_text path (see
+  # wrapping a Text bound to /ui/feedback/resultText (see
   # topics/data-model-conventions). Empty text renders nothing.
   defp action_result_components do
     [
@@ -1598,7 +1813,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "action_result_text",
         "component" => "Text",
-        "text" => %{"path" => "/ui/action_result_text"}
+        "text" => %{"@path" => "/ui/feedback/resultText"}
       }
     ]
   end
@@ -1621,12 +1836,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "component" => "Button",
           "variant" => "primary",
           "child" => "create#{sfx}_text",
-          "action" => %{"event" => %{"name" => "start_create", "context" => %{}}}
+          "action" => ash_action("start_create", %{}, "create#{sfx}_button")
         },
         %{
           "id" => "create#{sfx}_text",
           "component" => "Text",
-          "text" => AshA2ui.Experience.create_label(view)
+          "text" => Experience.create_label(view)
         }
       ]
     else
@@ -1655,13 +1870,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "component" => "List",
         "children" => %{
           "componentId" => "empty_state#{sfx}_text",
-          "path" => AshA2ui.Experience.empty_visible_path(view, table)
+          "path" => Experience.empty_visible_path(view, table)
         }
       },
       %{
         "id" => "empty_state#{sfx}_text",
         "component" => "Text",
-        "text" => %{"path" => "_empty_message#{sfx}"}
+        "text" => %{"@path" => "_empty_message#{sfx}"}
       }
     ]
   end
@@ -1686,8 +1901,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "table_heading#{sfx}",
         "component" => "Text",
-        "text" => heading,
-        "variant" => "h2"
+        "text" => heading(2, heading)
       }
       | collection_components(table, sfx)
     ] ++ bulk_toolbar_components(view, table, sfx)
@@ -1764,7 +1978,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "lane#{sfx}_total",
             "component" => "Text",
-            "text" => %{"path" => AshA2ui.Board.total_path(table)},
+            "text" => %{"@path" => AshA2ui.Board.total_path(table)},
             "variant" => "caption"
           },
           %{
@@ -1810,8 +2024,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "table_heading#{sfx}",
         "component" => "Text",
-        "text" => table.section.label,
-        "variant" => "h3"
+        "text" => heading(3, table.section.label)
       }
     ]
   end
@@ -1842,8 +2055,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "#{board}_heading",
             "component" => "Text",
-            "text" => Label.resolve(view.l10n, nil, template),
-            "variant" => "h2"
+            "text" => heading(2, Label.resolve(view.l10n, nil, template))
           },
           %{
             "id" => "#{board}_lanes",
@@ -1888,8 +2100,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{board}_heading",
         "component" => "Text",
-        "text" => Label.resolve(view.l10n, nil, template),
-        "variant" => "h2"
+        "text" => heading(2, Label.resolve(view.l10n, nil, template))
       },
       %{
         "id" => "#{board}_lanes",
@@ -1933,13 +2144,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "stage_#{lane}_heading",
         "component" => "Text",
-        "text" => cell.section.label,
-        "variant" => "h3"
+        "text" => heading(3, cell.section.label)
       },
       %{
         "id" => "stage_#{lane}_total",
         "component" => "Text",
-        "text" => %{"path" => AshA2ui.Board.stage_total_path(lane)},
+        "text" => %{"@path" => AshA2ui.Board.stage_total_path(lane)},
         "variant" => "caption"
       }
     ]
@@ -1963,13 +2173,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{id}_heading",
         "component" => "Text",
-        "text" => swimlane.label,
-        "variant" => "h3"
+        "text" => heading(3, swimlane.label)
       },
       %{
         "id" => "#{id}_total",
         "component" => "Text",
-        "text" => %{"path" => AshA2ui.Board.swimlane_total_path(name)},
+        "text" => %{"@path" => AshA2ui.Board.swimlane_total_path(name)},
         "variant" => "caption"
       },
       %{
@@ -2049,8 +2258,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_label",
         "component" => "Text",
-        "text" => %{"path" => "#{window_path}/label"},
-        "variant" => "h3"
+        "text" => heading(3, %{"@path" => "#{window_path}/label"})
       }
     ]
 
@@ -2095,8 +2303,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "#{base}_scope_label",
             "component" => "Text",
-            "text" => %{"path" => "#{window_path}/scopeLabel"},
-            "variant" => "h4"
+            "text" => heading(4, %{"@path" => "#{window_path}/scopeLabel"})
           }
         ] ++
           day_button(base, table, view) ++
@@ -2142,8 +2349,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # A day of the window, templated over its mark (`date`, `label`).
   defp day_button(base, table, view) do
     [
-      query_button("#{base}_day", table, %{"date" => %{"path" => "date"}}, view),
-      %{"id" => "#{base}_day_text", "component" => "Text", "text" => %{"path" => "label"}}
+      query_button("#{base}_day", table, %{"date" => %{"@path" => "date"}}, view),
+      %{"id" => "#{base}_day_text", "component" => "Text", "text" => %{"@path" => "label"}}
     ]
   end
 
@@ -2176,7 +2383,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       text = %{
         "id" => when_id,
         "component" => "Text",
-        "text" => %{"path" => when_path},
+        "text" => %{"@path" => when_path},
         "variant" => "caption"
       }
 
@@ -2210,13 +2417,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         %{
           "id" => "calendar#{sfx}",
           "component" => "calendarView",
-          "label" => AshA2ui.Experience.collection_label(view, table),
+          "label" => Experience.collection_label(view, table),
           "granularity" => to_string(table.calendar.granularity),
-          "window" => %{"path" => "#{table.query_path}/window"},
+          "window" => %{"@path" => "#{table.query_path}/window"},
           "windowAction" => %{
             "name" => "query",
             "context" =>
-              %{"query" => %{"path" => table.query_path}, "component" => to_string(table.name)}
+              %{"query" => %{"@path" => table.query_path}, "component" => to_string(table.name)}
               |> put_contexts_binding(view)
           },
           "children" => ["data_grid#{sfx}"]
@@ -2255,9 +2462,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "component" => "liveDiagram",
       "label" => AshA2ui.Diagram.label(diagram, view.l10n),
       "source" => diagram.rendered_source,
-      "markers" => %{"path" => "#{path}/markers"},
-      "nodes" => %{"path" => "#{path}/nodes"},
-      "error" => %{"path" => "#{path}/error"}
+      "markers" => %{"@path" => "#{path}/markers"},
+      "nodes" => %{"@path" => "#{path}/nodes"},
+      "error" => %{"@path" => "#{path}/error"}
     }
     |> maybe_put("description", translate_declared(view.l10n, diagram.description))
   end
@@ -2283,10 +2490,9 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => AshA2ui.Diagram.label(diagram, view.l10n),
-        "variant" => "h2"
+        "text" => heading(2, AshA2ui.Diagram.label(diagram, view.l10n))
       },
-      %{"id" => "#{base}_error", "component" => "Text", "text" => %{"path" => "#{path}/error"}},
+      %{"id" => "#{base}_error", "component" => "Text", "text" => %{"@path" => "#{path}/error"}},
       %{
         "id" => "#{base}_nodes",
         "component" => "List",
@@ -2301,8 +2507,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_node_label",
         "component" => "Text",
-        "text" => %{"path" => "label"},
-        "variant" => "h4"
+        "text" => heading(4, %{"@path" => "label"})
       },
       %{
         "id" => "#{base}_node_markers",
@@ -2338,14 +2543,14 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_marker_initials",
         "component" => "Text",
-        "text" => %{"path" => "initials"},
+        "text" => %{"@path" => "initials"},
         "variant" => "caption"
       },
-      %{"id" => label_id, "component" => "Text", "text" => %{"path" => "label"}},
+      %{"id" => label_id, "component" => "Text", "text" => %{"@path" => "label"}},
       %{
         "id" => "#{base}_marker_status",
         "component" => "Text",
-        "text" => %{"path" => "statusLabel"},
+        "text" => %{"@path" => "statusLabel"},
         "variant" => "caption"
       }
     ] ++ marker_link_button(view, diagram, label_id)
@@ -2360,20 +2565,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "component" => "Button",
         "variant" => "borderless",
         "child" => label_id,
-        "action" => %{
-          "event" => %{
-            "name" => "open_surface",
-            "context" =>
-              put_contexts_binding(
-                %{
-                  "diagram" => to_string(diagram.name),
-                  "surface" => %{"path" => "link/surface"},
-                  "recordId" => %{"path" => "link/recordId"}
-                },
-                view
-              )
-          }
-        }
+        "action" =>
+          ash_action(
+            "open_surface",
+            put_contexts_binding(
+              %{
+                "diagram" => to_string(diagram.name),
+                "surface" => %{"@path" => "link/surface"},
+                "recordId" => %{"@path" => "link/recordId"}
+              },
+              view
+            ),
+            "#{label_id}_link"
+          )
       }
     ]
   end
@@ -2381,7 +2585,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # --- query controls (search / filters / pagination) ---
 
   # The `"query"` action wire contract: every control sends
-  # `{"query": {"path": <the table's query path>}}` — the current query
+  # `{"query": {"@path": <the table's query path>}}` — the current query
   # state — plus the source `"component"` and either a literal page reset
   # (`"page" => 1`, Apply) or a relative page change (`"pageDelta" => -1 | 1`,
   # prev/next). The server validates everything against the declared
@@ -2443,11 +2647,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "id" => "query#{sfx}_search_input",
       "component" => "TextField",
       "label" => t(view, msg("Search")),
-      "value" => %{"path" => "#{table.query_path}/search"}
+      "value" => %{"@path" => "#{table.query_path}/search"}
     }
     |> maybe_put(
       "placeholder",
-      if(AshA2ui.Experience.admin?(view),
+      if(Experience.admin?(view),
         do: translate_declared(view.l10n, table.query.search_placeholder)
       )
     )
@@ -2480,7 +2684,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "component" => "ChoicePicker",
       "label" => t(view, msg("View")),
       "variant" => "mutuallyExclusive",
-      "value" => %{"path" => "#{table.query_path}/preset"},
+      "value" => %{"@path" => "#{table.query_path}/preset"},
       "options" => options
     }
   end
@@ -2497,7 +2701,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # flatten to their leaves and path filters get no picker.
   defp filter_picker(view, table, name, sfx) do
     query = table.query
-    admin? = AshA2ui.Experience.admin?(view)
+    admin? = Experience.admin?(view)
     path? = AshA2ui.Query.path_filter?(query, name)
     multi? = AshA2ui.Query.multi_select?(query, name)
 
@@ -2513,7 +2717,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "component" => "ChoicePicker",
           "label" => filter_label(view, query, name),
           "variant" => if(multi?, do: "multipleSelection", else: "mutuallyExclusive"),
-          "value" => %{"path" => "#{table.query_path}/filters/#{name}"},
+          "value" => %{"@path" => "#{table.query_path}/filters/#{name}"},
           "options" => all ++ options
         }
         |> put_admin_filter_hints(admin?, view, table, name)
@@ -2523,21 +2727,26 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   defp put_admin_filter_hints(picker, false, _view, _table, _name), do: picker
 
+  # Under the admin catalog a filter picker is the admin catalog's
+  # filterPicker: a ChoicePicker with a hint, facet counts, dynamic options
+  # and grouped options. It has its own name because two catalogs declaring
+  # one component name make a mixed surface ambiguous.
   defp put_admin_filter_hints(picker, true, view, table, name) do
     query = table.query
 
     picker
+    |> Map.put("component", "filterPicker")
     |> maybe_put("hint", filter_hint(view, query, name))
     |> maybe_put(
       "counts",
       if(name in AshA2ui.Query.faceted_filters(query),
-        do: %{"path" => "#{table.query_path}/facets/#{name}"}
+        do: %{"@path" => "#{table.query_path}/facets/#{name}"}
       )
     )
     |> maybe_put(
       "dynamicOptions",
       if(AshA2ui.Query.path_filter?(query, name),
-        do: %{"path" => "#{table.query_path}/options/#{name}"}
+        do: %{"@path" => "#{table.query_path}/options/#{name}"}
       )
     )
   end
@@ -2653,7 +2862,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "query#{sfx}_range_#{field}_#{side}",
         "component" => "TextField",
         "label" => t(view, template, field: label),
-        "value" => %{"path" => "#{table.query_path}/ranges/#{field}/#{side}"}
+        "value" => %{"@path" => "#{table.query_path}/ranges/#{field}/#{side}"}
       }
     end)
   end
@@ -2712,7 +2921,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "query#{sfx}_page_text",
         "component" => "Text",
-        "text" => %{"path" => "#{query_path}/_range_text"}
+        "text" => %{"@path" => "#{query_path}/_range_text"}
       },
       %{
         "id" => "query#{sfx}_next_slot",
@@ -2730,7 +2939,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp query_button(id_prefix, table, context, view) do
     context =
       context
-      |> Map.put("query", %{"path" => table.query_path})
+      |> Map.put("query", %{"@path" => table.query_path})
       |> Map.put("component", to_string(table.name))
       |> put_contexts_binding(view)
 
@@ -2738,7 +2947,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "id" => "#{id_prefix}_button",
       "component" => "Button",
       "child" => "#{id_prefix}_text",
-      "action" => %{"event" => %{"name" => "query", "context" => context}}
+      "action" => ash_action("query", context, "#{id_prefix}_button")
     }
   end
 
@@ -2747,7 +2956,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # client's active search/filters/sort/page.
   defp put_query_binding(context, view) do
     if Enum.any?(view.tables, & &1.query) do
-      Map.put(context, "query", %{"path" => "/query"})
+      Map.put(context, "query", %{"@path" => "/query"})
     else
       context
     end
@@ -2759,7 +2968,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # contract).
   defp put_contexts_binding(context, view) do
     if ResolvedView.contexts?(view) do
-      Map.put(context, "contexts", %{"path" => "/context"})
+      Map.put(context, "contexts", %{"@path" => "/context"})
     else
       context
     end
@@ -2847,15 +3056,15 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => id,
         "component" => "Button",
         "child" => "#{id}_text",
-        "action" => %{
-          "event" => %{
-            "name" => event,
-            "context" => %{
-              "recordId" => %{"path" => "id"},
+        "action" =>
+          ash_action(
+            event,
+            %{
+              "recordId" => %{"@path" => "id"},
               "component" => to_string(table.name)
-            }
-          }
-        }
+            },
+            id
+          )
       },
       %{"id" => "#{id}_text", "component" => "Text", "text" => label}
     ]
@@ -2899,7 +3108,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "#{base}_badge",
             "component" => "Text",
-            "text" => %{"path" => "_badge_#{layout.badge}"},
+            "text" => %{"@path" => "_badge_#{layout.badge}"},
             "variant" => "caption"
           }
         ]
@@ -2940,8 +3149,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         %{
           "id" => "#{base}_title",
           "component" => "Text",
-          "text" => cell_text(view.fields[layout.title]),
-          "variant" => "h4",
+          "text" => heading(4, cell_text(view.fields[layout.title])),
           "weight" => 1
         },
         ""
@@ -3041,18 +3249,17 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => base,
         "component" => "Button",
         "child" => "row_context#{sfx}_text",
-        "action" => %{
-          "event" => %{
-            "name" => "context_select",
-            "context" =>
-              %{
-                "context" => to_string(name),
-                "value" => %{"path" => "id"}
-              }
-              |> put_query_binding(view)
-              |> put_contexts_binding(view)
-          }
-        }
+        "action" =>
+          ash_action(
+            "context_select",
+            %{
+              "context" => to_string(name),
+              "value" => %{"@path" => "id"}
+            }
+            |> put_query_binding(view)
+            |> put_contexts_binding(view),
+            base
+          )
       },
       %{
         "id" => "row_context#{sfx}_text",
@@ -3135,16 +3342,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "component" => "Button",
           "variant" => "borderless",
           "child" => value_id,
-          "action" => %{
-            "event" => %{
-              "name" => "open_surface",
-              "context" => %{
+          "action" =>
+            ash_action(
+              "open_surface",
+              %{
                 "field" => to_string(field),
-                "surface" => %{"path" => "#{links_prefix}_links/#{field}/surface"},
-                "recordId" => %{"path" => "#{links_prefix}_links/#{field}/recordId"}
-              }
-            }
-          }
+                "surface" => %{"@path" => "#{links_prefix}_links/#{field}/surface"},
+                "recordId" => %{"@path" => "#{links_prefix}_links/#{field}/recordId"}
+              },
+              "#{value_id}_link"
+            )
         }
         |> maybe_put("weight", weight)
 
@@ -3166,8 +3373,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # committed — a Save Button dispatching `edit_cell` with the row's id and
   # this field's current value, and an error Text bound to the row's
   # reserved `_error_<field>` mirror (written by the handler when the
-  # commit's validation fails; empty otherwise). On v1.0 surfaces the
-  # Save button's actionResponse handshake drives per-cell pending→settled
+  # commit's validation fails; empty otherwise). The Save button's
+  # ashAction call (answered by agentFunctionResponse) drives per-cell pending→settled
   # feedback.
   defp editable_cell(view, table, field_name, sfx) do
     field = view.fields[field_name]
@@ -3184,32 +3391,31 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_input",
         "component" => "TextField",
         "label" => field.label,
-        "value" => %{"path" => to_string(field_name)}
+        "value" => %{"@path" => to_string(field_name)}
       },
       %{
         "id" => "#{base}_save_button",
         "component" => "Button",
         "child" => "#{base}_save_text",
-        "action" => %{
-          "event" => %{
-            "name" => "edit_cell",
-            "context" =>
-              %{
-                "recordId" => %{"path" => "id"},
-                "component" => to_string(table.name),
-                "field" => to_string(field_name),
-                "value" => %{"path" => to_string(field_name)}
-              }
-              |> put_query_binding(view)
-              |> put_contexts_binding(view)
-          }
-        }
+        "action" =>
+          ash_action(
+            "edit_cell",
+            %{
+              "recordId" => %{"@path" => "id"},
+              "component" => to_string(table.name),
+              "field" => to_string(field_name),
+              "value" => %{"@path" => to_string(field_name)}
+            }
+            |> put_query_binding(view)
+            |> put_contexts_binding(view),
+            "#{base}_save_button"
+          )
       },
       %{"id" => "#{base}_save_text", "component" => "Text", "text" => t(view, msg("Save"))},
       %{
         "id" => "#{base}_error",
         "component" => "Text",
-        "text" => %{"path" => "_error_#{field_name}"},
+        "text" => %{"@path" => "_error_#{field_name}"},
         "variant" => "caption"
       }
     ]
@@ -3219,16 +3425,15 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # against the item object, so plain "<field>" (no leading /).
   defp cell_text(%{format: :date} = field) do
     %{
-      "call" => "formatDate",
+      "@call" => "formatDate",
       "args" => %{
-        "value" => %{"path" => to_string(field.name)},
+        "value" => %{"@path" => to_string(field.name)},
         "format" => "MMM d, yyyy"
-      },
-      "returnType" => "string"
+      }
     }
   end
 
-  defp cell_text(field), do: %{"path" => to_string(field.name)}
+  defp cell_text(field), do: %{"@path" => to_string(field.name)}
 
   # One row action's components plus the id placed in the row's children:
   # a plain invoke Button by default; a Modal (trigger button + prompt
@@ -3263,19 +3468,18 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_button",
         "component" => "Button",
         "child" => "#{base}_text",
-        "action" => %{
-          "event" => %{
-            "name" => "invoke",
-            "context" =>
-              %{
-                "action" => to_string(action),
-                "recordId" => %{"path" => "id"},
-                "component" => to_string(table.name)
-              }
-              |> put_query_binding(view)
-              |> put_contexts_binding(view)
-          }
-        }
+        "action" =>
+          ash_action(
+            "invoke",
+            %{
+              "action" => to_string(action),
+              "recordId" => %{"@path" => "id"},
+              "component" => to_string(table.name)
+            }
+            |> put_query_binding(view)
+            |> put_contexts_binding(view),
+            "#{base}_button"
+          )
       },
       %{
         "id" => "#{base}_text",
@@ -3294,16 +3498,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_button",
         "component" => "Button",
         "child" => "#{base}_text",
-        "action" => %{
-          "event" => %{
-            "name" => "prompt",
-            "context" => %{
+        "action" =>
+          ash_action(
+            "prompt",
+            %{
               "action" => to_string(action),
-              "recordId" => %{"path" => "id"},
+              "recordId" => %{"@path" => "id"},
               "component" => to_string(table.name)
-            }
-          }
-        }
+            },
+            "#{base}_button"
+          )
       },
       %{
         "id" => "#{base}_text",
@@ -3336,8 +3540,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_prompt_title",
         "component" => "Text",
-        "text" => title,
-        "variant" => "h3"
+        "text" => heading(3, title)
       }
     ] ++
       field_components ++
@@ -3347,20 +3550,19 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "component" => "Button",
           "variant" => "primary",
           "child" => "#{base}_confirm_text",
-          "action" => %{
-            "event" => %{
-              "name" => "invoke",
-              "context" =>
-                %{
-                  "action" => to_string(action),
-                  "recordId" => %{"path" => "id"},
-                  "component" => to_string(table.name),
-                  "values" => %{"path" => "/prompt/values/#{action}"}
-                }
-                |> put_query_binding(view)
-                |> put_contexts_binding(view)
-            }
-          }
+          "action" =>
+            ash_action(
+              "invoke",
+              %{
+                "action" => to_string(action),
+                "recordId" => %{"@path" => "id"},
+                "component" => to_string(table.name),
+                "values" => %{"@path" => "/prompt/values/#{action}"}
+              }
+              |> put_query_binding(view)
+              |> put_contexts_binding(view),
+              "#{base}_confirm_button"
+            )
         },
         %{
           "id" => "#{base}_confirm_text",
@@ -3386,7 +3588,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
             %{
               "id" => "#{base}_prompt_error_#{field.name}",
               "component" => "Text",
-              "text" => %{"path" => "/errors/#{field.name}"},
+              "text" => %{"@path" => "/errors/#{field.name}"},
               "variant" => "caption"
             }
           ]
@@ -3405,7 +3607,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     props = %{
       "id" => "#{base}_prompt_input_#{field.name}",
       "label" => field.label,
-      "value" => %{"path" => "/prompt/values/#{action}/#{field.name}"}
+      "value" => %{"@path" => "/prompt/values/#{action}/#{field.name}"}
     }
 
     case field.widget do
@@ -3469,8 +3671,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "component" => "Column",
         "children" => ["#{id}_label", "#{id}_selected", "#{id}_controls", "#{id}_options"]
       },
-      %{"id" => "#{id}_label", "component" => "Text", "text" => field.label, "variant" => "h4"},
-      %{"id" => "#{id}_selected", "component" => "Text", "text" => %{"path" => "#{state}/label"}},
+      %{"id" => "#{id}_label", "component" => "Text", "text" => heading(4, field.label)},
+      %{
+        "id" => "#{id}_selected",
+        "component" => "Text",
+        "text" => %{"@path" => "#{state}/label"}
+      },
       %{
         "id" => "#{id}_controls",
         "component" => "Row",
@@ -3482,7 +3688,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "name" => "option_select",
         "context" => %{
           "field" => to_string(field.name),
-          "value" => %{"path" => "value"},
+          "value" => %{"@path" => "value"},
           "prompt" => to_string(action)
         }
       })
@@ -3491,7 +3697,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # A relationship prompt field scoped per row (the action's
   # `prompt_options`): the option-list composite over the prompt's own
   # options, `/prompt/options/<action>/<field>`, which the `prompt` pre-fill
-  # writes for the row it opens on (a v0.9.1 ChoicePicker takes literal
+  # writes for the row it opens on (a basic ChoicePicker takes literal
   # options only, and inlining them would list every row's options). Its
   # option_select — and, when searchable, its option_search — carries the
   # row the prompt is open on (`/prompt/record/<action>`, written by the
@@ -3499,7 +3705,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   defp scoped_prompt_select_components(view, action, base, field) do
     id = "#{base}_prompt_select_#{field.name}"
     state = "/prompt/select/#{action}/#{field.name}"
-    record = %{"path" => "/prompt/record/#{action}"}
+    record = %{"@path" => "/prompt/record/#{action}"}
     searchable? = searchable_prompt_field?(field)
 
     controls =
@@ -3524,15 +3730,15 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     [
       %{"id" => id, "component" => "Column", "children" => children},
-      %{"id" => "#{id}_label", "component" => "Text", "text" => field.label, "variant" => "h4"},
-      %{"id" => "#{id}_selected", "component" => "Text", "text" => %{"path" => "#{state}/label"}}
+      %{"id" => "#{id}_label", "component" => "Text", "text" => heading(4, field.label)},
+      %{"id" => "#{id}_selected", "component" => "Text", "text" => %{"@path" => "#{state}/label"}}
     ] ++
       controls ++
       option_list(id, "/prompt/options/#{action}/#{field.name}", %{
         "name" => "option_select",
         "context" => %{
           "field" => to_string(field.name),
-          "value" => %{"path" => "value"},
+          "value" => %{"@path" => "value"},
           "prompt" => to_string(action),
           "recordId" => record
         }
@@ -3540,7 +3746,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   end
 
   defp scope_search_event(%{"id" => id} = component, id, action, record) do
-    update_in(component, ["action", "event", "context"], fn context ->
+    update_in(component, ["action", "functionCall", "args", "context"], fn context ->
       context
       |> Map.put("prompt", to_string(action))
       |> Map.put("recordId", record)
@@ -3660,7 +3866,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "panel_view_#{field}_value",
             "component" => "Text",
-            "text" => %{"path" => "/ui/panel/record/#{field}"}
+            "text" => %{"@path" => "/ui/panel/record/#{field}"}
           }
         ]
       end)
@@ -3736,8 +3942,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => group.label,
-        "variant" => "h3"
+        "text" => heading(3, group.label)
       }
     ] ++ grid_components
   end
@@ -3793,8 +3998,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "form_title",
         "component" => "Text",
-        "text" => %{"path" => "/ui/panel/title"},
-        "variant" => "h3"
+        "text" => heading(3, %{"@path" => "/ui/panel/title"})
       },
       %{
         "id" => "form_submit_slot",
@@ -3805,7 +4009,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         }
       }
     ] ++
-      submit_button(view, %{"path" => "/ui/panel/primary_label"}) ++
+      submit_button(view, %{"@path" => "/ui/panel/primary_label"}) ++
       cancel_components(view)
   end
 
@@ -3817,7 +4021,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "form_cancel_button",
         "component" => "Button",
         "child" => "form_cancel_text",
-        "action" => %{"event" => %{"name" => "cancel_record_task", "context" => %{}}}
+        "action" => ash_action("cancel_record_task", %{}, "form_cancel_button")
       },
       %{"id" => "form_cancel_text", "component" => "Text", "text" => t(view, msg("Cancel"))}
     ]
@@ -3830,25 +4034,24 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "component" => "Button",
         "variant" => "primary",
         "child" => "form_submit_text",
-        "action" => %{"event" => submit_event(view)}
+        "action" => submit_action(view, "form_submit_button")
       },
       %{"id" => "form_submit_text", "component" => "Text", "text" => label}
     ]
   end
 
-  # The frozen submit_form event envelope, shared by the basic submit
-  # button and the admin ActionBar's primary action.
-  defp submit_event(view) do
-    %{
-      "name" => "submit_form",
-      "context" =>
-        %{
-          "values" => %{"path" => "/form"},
-          "recordId" => %{"path" => "/form/id"}
-        }
-        |> put_query_binding(view)
-        |> put_contexts_binding(view)
-    }
+  # The submit_form action, shared by the basic submit button and the admin
+  # ActionBar's primary action.
+  defp submit_action(view, source_component_id) do
+    context =
+      %{
+        "values" => %{"@path" => "/form"},
+        "recordId" => %{"@path" => "/form/id"}
+      }
+      |> put_query_binding(view)
+      |> put_contexts_binding(view)
+
+    ash_action("submit_form", context, source_component_id)
   end
 
   # --- searchable selects ---
@@ -3877,11 +4080,11 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "#{base}_options"
         ]
       },
-      %{"id" => "#{base}_label", "component" => "Text", "text" => field.label, "variant" => "h4"},
+      %{"id" => "#{base}_label", "component" => "Text", "text" => heading(4, field.label)},
       %{
         "id" => "#{base}_selected",
         "component" => "Text",
-        "text" => %{"path" => "/select/#{field_name}/label"}
+        "text" => %{"@path" => "/select/#{field_name}/label"}
       },
       %{
         "id" => "#{base}_controls",
@@ -3894,7 +4097,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "name" => "option_select",
         "context" => %{
           "field" => to_string(field_name),
-          "value" => %{"path" => "value"}
+          "value" => %{"@path" => "value"}
         }
       })
   end
@@ -3910,21 +4113,21 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_search_input",
         "component" => "TextField",
         "label" => t(view, msg("Search")),
-        "value" => %{"path" => search_path}
+        "value" => %{"@path" => search_path}
       },
       %{
         "id" => "#{base}_search_button",
         "component" => "Button",
         "child" => "#{base}_search_text",
-        "action" => %{
-          "event" => %{
-            "name" => "option_search",
-            "context" => %{
+        "action" =>
+          ash_action(
+            "option_search",
+            %{
               "field" => name,
-              "search" => %{"path" => search_path}
-            }
-          }
-        }
+              "search" => %{"@path" => search_path}
+            },
+            "#{base}_search_button"
+          )
       },
       %{"id" => "#{base}_search_text", "component" => "Text", "text" => t(view, msg("Search"))}
     ]
@@ -3945,12 +4148,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "component" => "Button",
         "variant" => "borderless",
         "child" => "#{base}_option_text",
-        "action" => %{"event" => event}
+        "action" => ash_action(event["name"], event["context"], "#{base}_option_button")
       },
       %{
         "id" => "#{base}_option_text",
         "component" => "Text",
-        "text" => %{"path" => "label"}
+        "text" => %{"@path" => "label"}
       }
     ]
   end
@@ -4000,8 +4203,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_label",
         "component" => "Text",
-        "text" => context.label,
-        "variant" => "h3"
+        "text" => heading(3, context.label)
       },
       %{
         "id" => "#{base}_selected_row",
@@ -4011,22 +4213,21 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_selected",
         "component" => "Text",
-        "text" => %{"path" => "/context/#{name}/label"}
+        "text" => %{"@path" => "/context/#{name}/label"}
       },
       %{
         "id" => "#{base}_clear_button",
         "component" => "Button",
         "variant" => "borderless",
         "child" => "#{base}_clear_text",
-        "action" => %{
-          "event" => %{
-            "name" => "context_clear",
-            "context" =>
-              %{"context" => name}
-              |> put_query_binding(view)
-              |> put_contexts_binding(view)
-          }
-        }
+        "action" =>
+          ash_action(
+            "context_clear",
+            %{"context" => name}
+            |> put_query_binding(view)
+            |> put_contexts_binding(view),
+            "#{base}_clear_button"
+          )
       },
       %{"id" => "#{base}_clear_text", "component" => "Text", "text" => t(view, msg("Clear"))}
     ]
@@ -4043,23 +4244,22 @@ defmodule AshA2ui.Encoder.V0_9_1 do
             "id" => "#{base}_search_input",
             "component" => "TextField",
             "label" => t(view, msg("Search")),
-            "value" => %{"path" => "/context/#{name}/search"}
+            "value" => %{"@path" => "/context/#{name}/search"}
           },
           %{
             "id" => "#{base}_search_button",
             "component" => "Button",
             "child" => "#{base}_search_text",
-            "action" => %{
-              "event" => %{
-                "name" => "context_search",
-                "context" =>
-                  %{
-                    "context" => name,
-                    "search" => %{"path" => "/context/#{name}/search"}
-                  }
-                  |> put_contexts_binding(view)
-              }
-            }
+            "action" =>
+              ash_action(
+                "context_search",
+                %{
+                  "context" => name,
+                  "search" => %{"@path" => "/context/#{name}/search"}
+                }
+                |> put_contexts_binding(view),
+                "#{base}_search_button"
+              )
           },
           %{
             "id" => "#{base}_search_text",
@@ -4077,7 +4277,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "context" =>
           %{
             "context" => name,
-            "value" => %{"path" => "value"}
+            "value" => %{"@path" => "value"}
           }
           |> put_query_binding(view)
           |> put_contexts_binding(view)
@@ -4102,7 +4302,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
             %{
               "id" => "#{base}_value_#{field}",
               "component" => "Text",
-              "text" => %{"path" => "/detail/#{detail.context}/#{field}"}
+              "text" => %{"@path" => "/detail/#{detail.context}/#{field}"}
             },
             "/detail/#{detail.context}/"
           )
@@ -4116,8 +4316,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "#{base}_label_#{field}",
             "component" => "Text",
-            "text" => detail_field_label(view, field),
-            "variant" => "h5"
+            "text" => heading(5, detail_field_label(view, field))
           }
           | value_components
         ]
@@ -4137,8 +4336,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => Label.resolve(view.l10n, nil, detail.name),
-        "variant" => "h3"
+        "text" => heading(3, Label.resolve(view.l10n, nil, detail.name))
       }
       | field_rows
     ]
@@ -4168,7 +4366,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "id" => "#{base}_param_#{param}",
           "component" => "TextField",
           "label" => report_field_label(view, param),
-          "value" => %{"path" => "#{report.path}/params/#{param}"}
+          "value" => %{"@path" => "#{report.path}/params/#{param}"}
         }
       end)
 
@@ -4191,7 +4389,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           %{
             "id" => "#{cell_base}_value",
             "component" => "Text",
-            "text" => %{"path" => to_string(field)}
+            "text" => %{"@path" => to_string(field)}
           }
         ]
       end)
@@ -4200,7 +4398,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       if report.export do
         export_components(view, report, "#{base}_export", %{
           "component" => to_string(report.name),
-          "params" => %{"path" => "#{report.path}/params"}
+          "params" => %{"@path" => "#{report.path}/params"}
         })
       else
         []
@@ -4220,22 +4418,21 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => Label.resolve(view.l10n, nil, report.name),
-        "variant" => "h3"
+        "text" => heading(3, Label.resolve(view.l10n, nil, report.name))
       },
       %{
         "id" => "#{base}_run_button",
         "component" => "Button",
         "child" => "#{base}_run_text",
-        "action" => %{
-          "event" => %{
-            "name" => "report",
-            "context" => %{
+        "action" =>
+          ash_action(
+            "report",
+            %{
               "component" => to_string(report.name),
-              "params" => %{"path" => "#{report.path}/params"}
-            }
-          }
-        }
+              "params" => %{"@path" => "#{report.path}/params"}
+            },
+            "#{base}_run_button"
+          )
       },
       %{"id" => "#{base}_run_text", "component" => "Text", "text" => t(view, msg("Run"))},
       %{
@@ -4263,7 +4460,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     end
   end
 
-  # --- CSV export (v1.0-only; see AshA2ui.Export) ---
+  # --- CSV export (see AshA2ui.Export) ---
 
   # A table's export controls: the section-level Row referenced from the
   # root children ("export<sfx>_controls"). The action context carries the
@@ -4284,7 +4481,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # exportable column (bound to the reserved /export/<name>/columns/<field>
   # paths — the frozen column-selection state) and the Export CSV Button
   # dispatching the "export" client action. A successful export answers
-  # with the frozen `downloadFile` callFunction (see AshA2ui.Export).
+  # with the `downloadFile` callRendererFunction (see AshA2ui.Export).
   defp export_components(view, component, base, context) do
     export = component.export
 
@@ -4295,7 +4492,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
             "id" => "#{base}_column_#{column}",
             "component" => "CheckBox",
             "label" => report_field_label(view, column),
-            "value" => %{"path" => "/export/#{component.name}/columns/#{column}"}
+            "value" => %{"@path" => "/export/#{component.name}/columns/#{column}"}
           }
         end)
       else
@@ -4304,7 +4501,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
     context =
       if export.column_select do
-        Map.put(context, "columns", %{"path" => "/export/#{component.name}/columns"})
+        Map.put(context, "columns", %{"@path" => "/export/#{component.name}/columns"})
       else
         context
       end
@@ -4320,7 +4517,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_button",
         "component" => "Button",
         "child" => "#{base}_button_text",
-        "action" => %{"event" => %{"name" => "export", "context" => context}}
+        "action" => ash_action("export", context, "#{base}_button")
       },
       %{
         "id" => "#{base}_button_text",
@@ -4337,7 +4534,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # server-generated "_row" key the remove button's context binds), and the
   # mode-specific add mechanism. All row mutations round-trip through the
   # stateless `nested_add` / `nested_remove` actions, whose contexts carry
-  # the current rows via a {"path": "/form/<argument>"} binding; the server
+  # the current rows via a {"@path": "/form/<argument>"} binding; the server
   # rewrites the array wholesale.
   defp nested_form_components(view, nested, options) do
     base = "nested_#{nested.argument}"
@@ -4346,8 +4543,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       %{
         "id" => "#{base}_heading",
         "component" => "Text",
-        "text" => nested.label,
-        "variant" => "h3"
+        "text" => heading(3, nested.label)
       }
     ]
 
@@ -4358,7 +4554,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           nested_rows(view, base, nested, create_inline_row(view, nested, base)) ++
           nested_add_button(view, base, nested, %{
             "argument" => to_string(nested.argument),
-            "rows" => %{"path" => "/form/#{nested.argument}"}
+            "rows" => %{"@path" => "/form/#{nested.argument}"}
           })
 
       :pick_existing ->
@@ -4401,7 +4597,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         %{
           "id" => "#{base}_row_error_#{field}",
           "component" => "Text",
-          "text" => %{"path" => "_error_#{field}"},
+          "text" => %{"@path" => "_error_#{field}"},
           "variant" => "caption"
         }
       end)
@@ -4416,7 +4612,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         %{
           "id" => "#{base}_row_label",
           "component" => "Text",
-          "text" => %{"path" => "label"}
+          "text" => %{"@path" => "label"}
         }
       ]
     }
@@ -4425,7 +4621,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # The pick_existing add mechanism: with option_search a search input +
   # result List whose option Buttons dispatch `nested_add` directly with the
   # template-relative option "value"; without one a ChoicePicker of the
-  # loaded options (inline, limit-capped — the v0.9.1 constraint) bound to
+  # loaded options (inline, limit-capped — the basic catalog constraint) bound to
   # /select/<argument>/picked plus an Add button carrying that binding.
   defp pick_existing_picker(view, %{search_fields: [_ | _]} = nested, base, _options) do
     name = to_string(nested.argument)
@@ -4445,8 +4641,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
             "name" => "nested_add",
             "context" => %{
               "argument" => name,
-              "value" => %{"path" => "value"},
-              "rows" => %{"path" => "/form/#{nested.argument}"}
+              "value" => %{"@path" => "value"},
+              "rows" => %{"@path" => "/form/#{nested.argument}"}
             }
           })
     }
@@ -4458,7 +4654,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       "component" => "ChoicePicker",
       "label" => t(view, msg("Add")),
       "variant" => "mutuallyExclusive",
-      "value" => %{"path" => "/select/#{nested.argument}/picked"},
+      "value" => %{"@path" => "/select/#{nested.argument}/picked"},
       "options" => Map.fetch!(options, nested.argument)
     }
 
@@ -4468,8 +4664,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         [picker] ++
           nested_add_button(view, base, nested, %{
             "argument" => to_string(nested.argument),
-            "value" => %{"path" => "/select/#{nested.argument}/picked"},
-            "rows" => %{"path" => "/form/#{nested.argument}"}
+            "value" => %{"@path" => "/select/#{nested.argument}/picked"},
+            "rows" => %{"@path" => "/form/#{nested.argument}"}
           })
     }
   end
@@ -4480,7 +4676,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_add_button",
         "component" => "Button",
         "child" => "#{base}_add_text",
-        "action" => %{"event" => %{"name" => "nested_add", "context" => context}}
+        "action" => ash_action("nested_add", context, "#{base}_add_button")
       },
       %{"id" => "#{base}_add_text", "component" => "Text", "text" => t(view, msg("Add"))}
     ]
@@ -4492,16 +4688,16 @@ defmodule AshA2ui.Encoder.V0_9_1 do
         "id" => "#{base}_remove_button",
         "component" => "Button",
         "child" => "#{base}_remove_text",
-        "action" => %{
-          "event" => %{
-            "name" => "nested_remove",
-            "context" => %{
+        "action" =>
+          ash_action(
+            "nested_remove",
+            %{
               "argument" => to_string(nested.argument),
-              "row" => %{"path" => "_row"},
-              "rows" => %{"path" => "/form/#{nested.argument}"}
-            }
-          }
-        }
+              "row" => %{"@path" => "_row"},
+              "rows" => %{"@path" => "/form/#{nested.argument}"}
+            },
+            "#{base}_remove_button"
+          )
       },
       %{"id" => "#{base}_remove_text", "component" => "Text", "text" => t(view, msg("Remove"))}
     ]
@@ -4510,7 +4706,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # Nested inputs widget-map against the *destination* resource's attribute
   # types (the parent surface's field entities don't apply inside rows).
   defp nested_input(view, nested, base, field) do
-    binding = %{"path" => to_string(field)}
+    binding = %{"@path" => to_string(field)}
     label = Label.resolve(view.l10n, nil, field)
     id = "#{base}_input_#{field}"
     base_props = %{"id" => id, "label" => label, "value" => binding}
@@ -4547,7 +4743,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
 
   defp form_input(view, field_name, options) do
     field = view.fields[field_name]
-    binding = %{"path" => "/form/#{field_name}"}
+    binding = %{"@path" => "/form/#{field_name}"}
 
     base = %{"id" => "form_input_#{field_name}", "label" => field.label, "value" => binding}
 
@@ -4582,13 +4778,13 @@ defmodule AshA2ui.Encoder.V0_9_1 do
     %{
       "id" => "form_error_#{field_name}",
       "component" => "Text",
-      "text" => %{"path" => "/errors/#{field_name}"},
+      "text" => %{"@path" => "/errors/#{field_name}"},
       "variant" => "caption"
     }
   end
 
   # Relationship selects use the loaded option list; enum-constrained
-  # attributes keep their static `one_of` options. The v0.9.1 basic-catalog
+  # attributes keep their static `one_of` options. The basic-catalog
   # ChoicePicker only accepts a literal options array (each option's `value`
   # is a plain string, no data binding), so loaded options are emitted inline
   # here and mirrored at /options/<field> in the data model.
@@ -4746,7 +4942,7 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # same way.
   defp put_experience_state(value, view) do
     value
-    |> Map.update!("ui", &Map.merge(&1, AshA2ui.Experience.ui_data(view)))
+    |> Map.update!("ui", &Map.merge(&1, Experience.ui_data(view)))
     |> put_empty_state(view)
     |> put_pagination_sentinels(view)
   end
@@ -4757,8 +4953,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
       rows = rows_at(value, view, table)
 
       acc
-      |> Map.put("_empty_visible#{sfx}", AshA2ui.Experience.sentinel(rows == []))
-      |> Map.put("_empty_message#{sfx}", AshA2ui.Experience.empty_message(view, table))
+      |> Map.put("_empty_visible#{sfx}", Experience.sentinel(rows == []))
+      |> Map.put("_empty_message#{sfx}", Experience.empty_message(view, table))
     end)
   end
 
@@ -4790,8 +4986,8 @@ defmodule AshA2ui.Encoder.V0_9_1 do
   # binds (a no-op under the basic catalog).
   defp adorned_query_state(view, state, count) do
     state
-    |> AshA2ui.Experience.with_pagination_sentinels(count, view.l10n)
-    |> AshA2ui.Experience.with_admin_pagination_booleans(count, view)
+    |> Experience.with_pagination_sentinels(count, view.l10n)
+    |> Experience.with_admin_pagination_booleans(count, view)
   end
 
   defp adorned_table_state({name, state}, value, view, query_tables) do
