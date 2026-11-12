@@ -40,6 +40,13 @@ defmodule AshA2ui.MixProject do
       licenses: ["MIT"],
       files: ~w(lib priv .formatter.exs mix.exs README* LICENSE*
       CHANGELOG* documentation usage-rules.md usage-rules),
+      # Browser probes, the upstream conformance cases (test data for this
+      # repo's suite) and the neobrutalist demo page are not library code.
+      exclude_patterns: [
+        ~r{^priv/js/probe/},
+        ~r{^priv/a2ui/v1_0/test/},
+        ~r{^priv/js/nb_demo\.html$}
+      ],
       links: %{
         "GitHub" => "https://github.com/lukegalea/ash_a2ui",
         "Changelog" => "https://github.com/lukegalea/ash_a2ui/blob/main/CHANGELOG.md"

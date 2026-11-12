@@ -10,6 +10,94 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 Requires Elixir 1.20 or later.
 
+### Breaking: A2UI 1.0 only
+
+ash_a2ui now speaks A2UI protocol 1.0 and nothing else. Support for v0.9.1,
+the per-surface version switch and every layer that adapted between the two
+are removed. There is no deprecation path. Surfaces keep their DSL; what
+changes is the wire format and the way a host wires the renderer.
+
+**Removed**
+
+- The `spec_version` DSL option, `spec_version:` on `AshA2ui.Dynamic.resolve/2`,
+  `AshA2ui.Info.build_surface/2` and `AshA2ui.ActionHandler.handle/3`, and
+  `AshA2ui.Info.encoder`. There is one encoder, `AshA2ui.Encoder`;
+  `AshA2ui.Encoder.V0_9_1` and `AshA2ui.Encoder.V1_0` are gone, as is the
+  `AshA2ui.Encoder` behaviour.
+- The AG-UI transport: `AshA2ui.AgUi`, `usage-rules/ag-ui.md` and the
+  CopilotKit wiring documentation. A2UI over AG-UI/CopilotKit carried v0.9
+  payloads only.
+- The v0.9.1 vendored schemas (`priv/a2ui/v0_9_1/`), the JS adapter
+  `priv/js/ash_a2ui_messages.js`, `AshA2ui.Encoder.V1_0.call_function/3`
+  (use `AshA2ui.Encoder.call_renderer_function/4`) and
+  `AshA2ui.LiveRenderer.handle_function_response` (use the
+  `:on_function_response` option).
+- `actionResponse`, `wantResponse`, `actionId`, the `callFunction` and
+  `functionResponse` messages, `surfaceProperties` and `theme` (and the
+  `surface_properties:` build option). 1.0 removed them.
+- The reserved data-model paths `/ui/response`, `/ui/action_result` and
+  `/ui/action_result_text`.
+- `ex_json_schema` (test only). The suite validates with JSV, a JSON Schema
+  draft 2020-12 validator.
+
+**Changed on the wire**
+
+- The version string is `"1.0"` on every message (`"v0.9.1"` and `"v1.0"`
+  are invalid).
+- A surface is one inline `createSurface` carrying `components` and
+  `dataModel`; `AshA2ui.Info.build_surface/2` returns a one-element list.
+  `updateDataModel` always carries `value` (`null` deletes).
+- Bindings are `{"@path": ...}`, function calls `{"@call": ..., "args": ...}`,
+  and the component envelope keys are `@accessibility`, `@checks`,
+  `@catalogId` and `@metadata`. Headings are Markdown `Text`.
+- Every server-handled control is an `ashAction` function call against the
+  ash_a2ui catalog. The renderer sends a `callAgentFunction`; the handler
+  answers with an `agentFunctionResponse` (last in the reply) carrying the
+  same `functionCallId`. A plain `action` event is still accepted and gets
+  the same data-model writes, with no response message.
+- Outcomes live in one map at `/ui/feedback`:
+  `{kind, message, code, functionCallId, result, resultText}`, always written
+  whole. `kind` is `""` when idle (it was `null`).
+- The CSV export is a `callRendererFunction` calling `downloadFile`; the
+  renderer answers with a `rendererFunctionResponse`.
+- The ash_a2ui catalog is a 1.0 catalog definition (`@call` keys,
+  `allowedCallers`, `protocolVersion`); the admin catalog is declared the
+  same way, and its surfaces mix basic components in with `@catalogId`.
+- The vendored specification is now upstream `a2ui-project/a2ui` at a pinned
+  commit (`priv/a2ui/v1_0/NOTES.md`), under `priv/a2ui/v1_0/json/` with the
+  basic catalog at `catalogs/basic/v1/catalog.json`.
+
+**Migrating a host app**
+
+1. Delete every `spec_version "..."` line from your `a2ui` blocks and every
+   `spec_version:` option from your calls. Nothing replaces them.
+2. If you pattern-match on messages, expect one `createSurface` instead of
+   three messages, `"version" => "1.0"`, and `{"@path": ...}` bindings.
+3. If you read `/ui/response`, `/ui/action_result` or
+   `/ui/action_result_text`, read `/ui/feedback` (`message`, `result`,
+   `resultText`).
+4. In a hand-written LiveView or controller, hand every renderer message to
+   `AshA2ui.ActionHandler.handle/3` and push all the returned messages back,
+   for `{:ok, _}` and `{:error, _}` alike. Replace the `"a2ui:action"` and
+   `"a2ui:function_response"` LiveView events with the single
+   `"a2ui:message"` event. `AshA2ui.LiveRenderer` already does this.
+5. In `assets/js/app.js`, import from the `@a2ui/lit` and `@a2ui/web_core`
+   root entry points (`import "@a2ui/lit"`,
+   `import {Catalog, MessageProcessor} from "@a2ui/web_core"`,
+   `import {basicCatalog} from "@a2ui/web_core/catalogs/basic/v1"`), drop the
+   `/v0_9` imports, and pass `Catalog` to `configureAshA2ui`. The
+   `"ash-a2ui:action-response"` DOM event's `actionId` field is now
+   `functionCallId`. Host-registered renderer functions move into a catalog
+   of their own.
+6. Use an `@a2ui/lit` / `@a2ui/web_core` release that implements the pinned
+   specification text (the `@`-prefixed envelope keys, required
+   `TextField.value`, agent-function routing). Published 0.15.0 predates
+   them and drops a surface that carries an `@`-prefixed key. See
+   [The A2UI 1.0 wire contract](documentation/topics/a2ui-1-0.md).
+7. If you used the AG-UI transport, serve surfaces over your own endpoint
+   with `AshA2ui.Info.build_surface/2` and `AshA2ui.ActionHandler.handle/3`
+   (see Rendering Clients).
+
 ### Bug Fixes:
 
 - **A basic TextField's input is named by its label.** The basic catalog draws
@@ -150,7 +238,7 @@ Requires Elixir 1.20 or later.
   not pass it.
 
 - **A canvas registry can state what running an action does.** The
-  optional `AshA2ui.Canvas.Registry.consequence/3` callback receives the
+  optional `AshA2ui.Canvas.Registry.consequence` callback receives the
   resource, the action name and the consequence the library derived from
   the action's type, and returns `:read`, `:mutation` or `:destructive`
   (which makes the capability's `confirmation` `:required`). It applies to
@@ -746,7 +834,7 @@ Requires Elixir 1.20 or later.
   conditional pagination, empty states, typed feedback, h1 title, carded
   form) is now the only composition. Removed outright, with no shim and no
   deprecation path:
-  - the `:experience_version` setting and `AshA2ui.Experience.version/0`,
+  - the `:experience_version` setting and `AshA2ui.Experience.version`,
     `v2?/0` and `effective_admin?/0` (use `admin?/0`; the admin catalog is
     active exactly when `catalog: :admin_v1` is selected). A leftover
     `experience_version` in host config is ignored.

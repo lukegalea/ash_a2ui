@@ -177,8 +177,8 @@ end
   Text): a to-one link (`link :rel` / `link {surface, id_path}`) in a
   table cell, card-row title/meta or detail value wraps its value Text
   (same id) in a borderless Button `<value id>_link` dispatching
-  `"open_surface"` with `{"field", "surface": {"path":
-  ".../_links/<field>/surface"}, "recordId": {"path": ...}}`. The handler
+  `"open_surface"` with `{"field", "surface": {"@path":
+  ".../_links/<field>/surface"}, "recordId": {"@path": ...}}`. The handler
   accepts it only for that field's resolved surface (no follow-ups; the
   record id is not checked, the opened surface authorizes its read) and
   `AshA2ui.LiveRenderer` then navigates like `"a2ui:open_surface"`. Only

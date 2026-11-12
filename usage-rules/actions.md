@@ -1,7 +1,8 @@
-# Actions: routing client envelopes into Ash
+# Actions: routing renderer messages into Ash
 
-Every inbound A2UI `action` envelope must go through
-`AshA2ui.ActionHandler.handle/3`. It validates the envelope, enforces the
+Every inbound A2UI renderer-to-agent message (`callAgentFunction` for
+`ashAction`, or a plain `action`) must go through
+`AshA2ui.ActionHandler.handle/3`. It validates the message, enforces the
 DSL allowlist, invokes the Ash action with the actor, and maps errors onto
 the reserved data-model paths. Calling Ash actions directly from transport
 code skips all of that.
@@ -9,7 +10,7 @@ code skips all of that.
 ## `handle/3` contract
 
 ```elixir
-AshA2ui.ActionHandler.handle(resource_or_ui_module, envelope,
+AshA2ui.ActionHandler.handle(resource_or_ui_module, message,
   actor: current_user,
   tenant: tenant          # optional
   # authorize?: true      # the default — leave it on
@@ -20,9 +21,11 @@ AshA2ui.ActionHandler.handle(resource_or_ui_module, envelope,
 - The first argument is a resource using the `AshA2ui` extension or an
   `AshA2ui.Standalone` UI module — the same module you pass to
   `AshA2ui.Info.build_surface/2`.
-- The envelope may be the full client->server message
-  (`%{"version" => ..., "action" => %{"name" => ..., "context" => ...}}`)
-  or a bare inner action map — both are accepted.
+- The message is one full renderer-to-agent message, verbatim:
+  `%{"version" => "1.0", "callAgentFunction" => ...}` (an `ashAction`
+  call; `args.name` and `args.context` carry the action) or
+  `%{"version" => "1.0", "action" => %{"name" => ..., "context" => ...}}`.
+  Anything else returns `{:error, []}`.
 - Push the returned messages to the client **for both `{:ok, _}` and
   `{:error, _}`** — error messages carry the validation feedback the
   renderer must display.
@@ -61,7 +64,7 @@ hook is `select_context`, whose row button reads "Select <context>".
 
 ## The core action names
 
-The core envelope names are `"submit_form"`, `"invoke"`, `"prompt"`,
+The core action names are `"submit_form"`, `"invoke"`, `"prompt"`,
 `"query"` and the four task-panel actions above. Feature-specific names exist only when the
 surface declares the feature: the context actions (`ash_a2ui:contexts`),
 the relationship-picker actions (`ash_a2ui:relationships`), `"edit_cell"`

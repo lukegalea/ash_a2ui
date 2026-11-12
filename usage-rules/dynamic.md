@@ -81,8 +81,8 @@ end
 
 - **Resolve once, server-side; keep the `%Surface{}` in server state**
   (LiveView assign, ETS, cache) keyed by `surface.surface_id`.
-- Route client `action` envelopes through
-  `AshA2ui.Dynamic.handle_action(server_held_surface, envelope, actor: actor)`.
+- Route renderer messages through
+  `AshA2ui.Dynamic.handle_action(server_held_surface, message, actor: actor)`.
   Never rebuild a surface from anything the client echoes back.
 - Drop the stored struct when the surface is dismissed.
 - `build_surface/2` / `build_data_model/2` / `handle_action/3` take the

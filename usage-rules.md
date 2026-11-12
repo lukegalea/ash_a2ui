@@ -3,13 +3,13 @@
 AshA2ui is an Ash extension that generates A2UI (Agent to UI) protocol
 payloads (A2UI 1.0) from Ash resources. You declare a surface (table +
 form + actions) in an `a2ui` DSL block; the extension emits the wire
-messages, routes client `action` envelopes back into Ash actions, and
+messages, routes renderer messages (`callAgentFunction`, `action`) back into Ash actions, and
 enforces authorization. Read the docs before assuming prior knowledge — the
 DSL is small and these rules cover most decisions.
 
 Sub-rules (addressable as `ash_a2ui:<name>`):
 
-- `ash_a2ui:actions` — routing client envelopes through
+- `ash_a2ui:actions` — routing renderer messages through
   `AshA2ui.ActionHandler`, the `row_actions` and `bulk_actions`
   allowlists, and the reserved data-model paths.
 - `ash_a2ui:liveview` — the `AshA2ui.LiveRenderer` transport and the JS
@@ -351,8 +351,8 @@ end
 
 ## Handling client actions
 
-- **Don't bypass `AshA2ui.ActionHandler`.** Every inbound `action` envelope
-  goes through `AshA2ui.ActionHandler.handle/3` — it validates the envelope,
+- **Don't bypass `AshA2ui.ActionHandler`.** Every inbound renderer message
+  goes through `AshA2ui.ActionHandler.handle/3` — it validates the message,
   enforces the DSL allowlist, invokes the Ash action with the actor, and
   maps validation errors onto the reserved data-model paths. Calling Ash
   actions directly from transport code skips the allowlist and the error
@@ -414,8 +414,8 @@ end
 ## Avoid list
 
 - ❌ Hand-writing or string-templating A2UI message JSON.
-- ❌ Calling Ash actions directly from transport code in response to client
-  envelopes (bypasses the allowlist — use `ActionHandler`).
+- ❌ Calling Ash actions directly from transport code in response to renderer
+  messages (bypasses the allowlist — use `ActionHandler`).
 - ❌ Wide-open `row_actions` or `bulk_actions` (e.g. mirroring every action
   on the resource).
 - ❌ Running a bulk write yourself from carried row ids — `bulk_invoke`
