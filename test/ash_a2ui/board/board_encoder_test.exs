@@ -33,7 +33,7 @@ defmodule AshA2ui.Board.BoardEncoderTest do
 
   defp v0_9_1_parts(ui) do
     messages = AshA2ui.Info.build_surface(ui, authorize?: false)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     components =
       messages |> Enum.find_value(& &1["updateComponents"]) |> Map.fetch!("components")
@@ -161,7 +161,7 @@ defmodule AshA2ui.Board.BoardEncoderTest do
 
     # --- v1.0 (no query: totals from the row count, no pagination) ---
     assert [message] = AshA2ui.Info.build_surface(AshA2ui.Test.BoardTaskV1UI, authorize?: false)
-    assert_valid_server_message(message, :v1_0)
+    assert_valid_agent_message(message)
 
     create = message["createSurface"]
     v1 = components_by_id(create["components"])

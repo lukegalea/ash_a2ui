@@ -93,7 +93,7 @@ defmodule AshA2ui.Experience.AdminCatalogFallbackTest do
 
       # byte-identical to the A2UI-101 basic emission
       assert unset_surface == basic_surface
-      Enum.each(basic_surface, &assert_valid_server_message/1)
+      Enum.each(basic_surface, &assert_valid_agent_message/1)
 
       [create, components, data] = basic_surface
       comps = components_by_id(components)

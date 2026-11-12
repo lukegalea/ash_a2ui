@@ -59,7 +59,7 @@ defmodule AshA2ui.TableDisplays.TimelineTest do
 
   defp parts(ui, opts \\ []) do
     messages = AshA2ui.Info.build_surface(ui, [authorize?: false] ++ opts)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     components =
       messages |> Enum.find_value(& &1["updateComponents"]) |> Map.fetch!("components")
@@ -134,7 +134,7 @@ defmodule AshA2ui.TableDisplays.TimelineTest do
                Dynamic.resolve(spec(%{}), allowlist: @allowlist, spec_version: "1.0")
 
       assert [message] = Dynamic.build_surface(v1, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       record = hd(message["createSurface"]["dataModel"]["records"])
       assert record["_timeline_when"] == "2026-10-01 08:30"

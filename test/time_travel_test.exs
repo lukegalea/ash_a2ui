@@ -90,7 +90,7 @@ defmodule AshA2ui.TimeTravelTest do
 
       assert Jason.encode!(live) =~ "change_tier"
       refute Jason.encode!(pinned) =~ "change_tier"
-      Enum.each(pinned, &SchemaHelper.assert_valid_server_message/1)
+      Enum.each(pinned, &SchemaHelper.assert_valid_agent_message/1)
     end
 
     test "build_data_model/2 refreshes at the same instant" do

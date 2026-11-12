@@ -62,7 +62,7 @@ defmodule AshA2ui.Board.BoardActionHandlerTest do
     message = envelope("invoke", %{"action" => "claim", "recordId" => card.id})
 
     assert {:ok, messages} = ActionHandler.handle(BoardTaskUI, message, authorize?: false)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     # The record changed state.
     assert Ash.get!(BoardTask, card.id, authorize?: false).status == :claimed
@@ -101,7 +101,7 @@ defmodule AshA2ui.Board.BoardActionHandlerTest do
         })
 
       assert {:ok, messages} = ActionHandler.handle(BoardTaskUI, message, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert value_at(messages, "/records/board_open") == []
       assert value_at(messages, "/_lane_total_board_open") == "0"

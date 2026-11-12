@@ -44,7 +44,7 @@ defmodule AshA2ui.Experience.SurfaceHeaderTest do
       [_create, message, _data] =
         AshA2ui.Info.build_surface(EstateUser, actor: nil, header: false)
 
-      SchemaHelper.assert_valid_server_message(message)
+      SchemaHelper.assert_valid_agent_message(message)
     end
 
     test "header: false changes nothing else" do
@@ -87,16 +87,12 @@ defmodule AshA2ui.Experience.SurfaceHeaderTest do
 
       catalog = "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 
-      schema =
-        catalog["components"]["entityPage"]
-        |> Map.put("$defs", catalog["$defs"] || %{})
-        |> ExJsonSchema.Schema.resolve()
+      validate = &AshA2ui.Test.SchemaHelper.validate_catalog_component(catalog, "entityPage", &1)
 
       # headerVisible adds no schema error. (The literal string title is
       # reported against the catalog's object-typed title on the default
       # page too; that predates this option.)
-      assert ExJsonSchema.Validator.validate(schema, page) ==
-               ExJsonSchema.Validator.validate(schema, default)
+      assert validate.(page) == validate.(default)
     end
 
     test "header: false changes nothing but the entityPage" do

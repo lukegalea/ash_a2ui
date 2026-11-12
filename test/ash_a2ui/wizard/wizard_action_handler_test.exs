@@ -28,7 +28,7 @@ defmodule AshA2ui.Wizard.WizardActionHandlerTest do
 
   defp handle_on(module, name, context) do
     {tag, messages} = ActionHandler.handle(module, envelope(name, context))
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     {tag, messages}
   end
 

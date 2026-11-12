@@ -45,7 +45,7 @@ defmodule AshA2ui.Experience.NoVersionSwitchTest do
       assert AshA2ui.Info.build_surface(Paginated, actor: nil) == default_surface
     end
 
-    Enum.each(default_surface, &assert_valid_server_message/1)
+    Enum.each(default_surface, &assert_valid_agent_message/1)
     comps = components_by_id(default_surface)
 
     # the experience layer's shapes, not the removed v1 ones
@@ -98,7 +98,7 @@ defmodule AshA2ui.Experience.NoVersionSwitchTest do
     }
 
     assert {:error, [message]} = ActionHandler.handle(Paginated, envelope)
-    assert_valid_server_message(message)
+    assert_valid_agent_message(message)
 
     assert %{"updateDataModel" => %{"path" => "/ui/feedback", "value" => feedback}} = message
     assert feedback == %{"kind" => "error", "message" => ~s(Unknown action "select_row".)}

@@ -49,7 +49,7 @@ defmodule AshA2ui.ActionHandlerTest do
   end
 
   defp assert_all_valid(messages) do
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     messages
   end
 
@@ -60,7 +60,7 @@ defmodule AshA2ui.ActionHandlerTest do
           "values" => %{"name" => "Widget", "count" => 2}
         })
 
-      assert_valid_client_message(env)
+      assert_valid_renderer_message(env)
 
       assert {:ok, messages} = ActionHandler.handle(KitchenSink, env)
       assert_all_valid(messages)
@@ -199,7 +199,7 @@ defmodule AshA2ui.ActionHandlerTest do
       record = Ash.create!(Widget, %{name: "W"}, authorize?: false)
 
       env = envelope("invoke", "widget", %{"action" => "touch", "recordId" => record.id})
-      assert_valid_client_message(env)
+      assert_valid_renderer_message(env)
 
       assert {:ok, messages} = ActionHandler.handle(Widget, env)
       assert_all_valid(messages)
@@ -344,7 +344,7 @@ defmodule AshA2ui.ActionHandlerTest do
       env = envelope("select_row", "kitchen_sink", %{"recordId" => record.id})
 
       assert {:error, [message]} = ActionHandler.handle(KitchenSink, env)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
       assert value_at([message], "/ui/feedback")["message"] == ~s(Unknown action "select_row".)
       refute value_at([message], "/form")
     end
@@ -363,13 +363,13 @@ defmodule AshA2ui.ActionHandlerTest do
       env = envelope("explode", "kitchen_sink", %{})
 
       assert {:error, [message]} = ActionHandler.handle(KitchenSink, env)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
       assert value_at([message], "/ui/feedback")["message"] =~ ~s(Unknown action "explode")
     end
 
     test "malformed message returns an /ui/feedback error message" do
       assert {:error, [message]} = ActionHandler.handle(KitchenSink, %{"wat" => true})
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
       assert value_at([message], "/ui/feedback")["message"] =~ "Malformed"
     end
   end

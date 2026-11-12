@@ -63,7 +63,7 @@ defmodule AshA2ui.V10EncoderTest do
   describe "encode_surface/3: inline createSurface" do
     test "emits a single schema-valid v1.0 message with inline components and dataModel" do
       assert [message] = encode_surface()
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       assert %{"version" => "v1.0", "createSurface" => create} = message
       assert create["surfaceId"] == "kitchen_sink_v1"
@@ -116,7 +116,7 @@ defmodule AshA2ui.V10EncoderTest do
       properties = %{"agentDisplayName" => "Support Agent"}
 
       assert [message] = encode_surface([], surface_properties: properties)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
       assert message["createSurface"]["surfaceProperties"] == properties
     end
 
@@ -195,7 +195,7 @@ defmodule AshA2ui.V10EncoderTest do
     test "emits a schema-valid v1.0 updateDataModel with the upgraded ui block" do
       message = resolve() |> V1_0.encode_data_model([], [])
 
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
       assert message["version"] == "v1.0"
 
       assert %{"path" => "/", "value" => value} = message["updateDataModel"]
@@ -236,7 +236,7 @@ defmodule AshA2ui.V10EncoderTest do
     test "builds a schema-valid callFunction message with a unique call id" do
       message = V1_0.call_function("openUrl", %{"url" => "https://example.com"})
 
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       assert message["callFunction"] == %{
                "call" => "openUrl",

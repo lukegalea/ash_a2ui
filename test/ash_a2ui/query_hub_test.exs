@@ -256,7 +256,7 @@ defmodule AshA2ui.QueryHubTest do
     test "the basic surface stays valid against the A2UI schema" do
       HubUI
       |> AshA2ui.Info.build_surface(authorize?: false)
-      |> Enum.each(&SchemaHelper.assert_valid_server_message/1)
+      |> Enum.each(&SchemaHelper.assert_valid_agent_message/1)
     end
   end
 

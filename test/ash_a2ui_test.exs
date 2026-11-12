@@ -40,7 +40,7 @@ defmodule AshA2uiTest do
              %{"updateDataModel" => %{"path" => "/", "value" => %{"records" => []}}}
            ] = messages
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     # 2. Simulated client submit_form (create) through the ActionHandler.
     create_env =
@@ -48,10 +48,10 @@ defmodule AshA2uiTest do
         "values" => %{"name" => "E2E Provider", "count" => 3, "active" => true}
       })
 
-    assert_valid_client_message(create_env)
+    assert_valid_renderer_message(create_env)
 
     assert {:ok, follow_ups} = ActionHandler.handle(KitchenSink, create_env)
-    Enum.each(follow_ups, &assert_valid_server_message/1)
+    Enum.each(follow_ups, &assert_valid_agent_message/1)
 
     # the refresh, the cleared buffers, the closed task panel, and the typed
     # success feedback
@@ -84,17 +84,17 @@ defmodule AshA2uiTest do
     invoke_env =
       envelope("invoke", "kitchen_sink", %{"action" => "destroy", "recordId" => record.id})
 
-    assert_valid_client_message(invoke_env)
+    assert_valid_renderer_message(invoke_env)
 
     assert {:ok, invoke_follow_ups} = ActionHandler.handle(KitchenSink, invoke_env)
-    Enum.each(invoke_follow_ups, &assert_valid_server_message/1)
+    Enum.each(invoke_follow_ups, &assert_valid_agent_message/1)
 
     assert %{"updateDataModel" => %{"path" => "/records", "value" => []}} =
              hd(invoke_follow_ups)
 
     # 4. build_data_model reflects the changes (record gone again).
     data_model = Info.build_data_model(KitchenSink)
-    assert_valid_server_message(data_model)
+    assert_valid_agent_message(data_model)
 
     assert %{
              "updateDataModel" => %{
@@ -110,7 +110,7 @@ defmodule AshA2uiTest do
     env = envelope("submit_form", "kitchen_sink", %{"values" => %{"count" => 1}})
 
     assert {:error, error_messages} = ActionHandler.handle(KitchenSink, env)
-    Enum.each(error_messages, &assert_valid_server_message/1)
+    Enum.each(error_messages, &assert_valid_agent_message/1)
 
     assert Enum.any?(error_messages, fn
              %{"updateDataModel" => %{"path" => "/errors/name"}} -> true
@@ -131,7 +131,7 @@ defmodule AshA2uiTest do
              %{"updateDataModel" => _}
            ] = messages
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     # The standalone field override applies.
     assert Enum.any?(components, &(&1["id"] == "records_list"))
@@ -144,12 +144,12 @@ defmodule AshA2uiTest do
       })
 
     assert {:ok, follow_ups} = ActionHandler.handle(MinimalUI, env)
-    Enum.each(follow_ups, &assert_valid_server_message/1)
+    Enum.each(follow_ups, &assert_valid_agent_message/1)
 
     assert [%Minimal{name: "Standalone record"}] = Ash.read!(Minimal)
 
     data_model = Info.build_data_model(MinimalUI)
-    assert_valid_server_message(data_model)
+    assert_valid_agent_message(data_model)
 
     assert %{"updateDataModel" => %{"value" => %{"records" => [row]}}} = data_model
     assert row["name"] == "Standalone record"

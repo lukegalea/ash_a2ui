@@ -66,12 +66,8 @@ defmodule AshA2ui.PrimaryActionTest do
 
     catalog = "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 
-    schema =
-      catalog["components"]["dataGrid"]
-      |> Map.put("$defs", catalog["$defs"] || %{})
-      |> ExJsonSchema.Schema.resolve()
-
-    assert ExJsonSchema.Validator.validate(schema, grid) == :ok
+    assert AshA2ui.Test.SchemaHelper.validate_catalog_component(catalog, "dataGrid", grid) ==
+             :ok
   end
 
   test "each row carries its label and variant; unmapped values get the defaults" do

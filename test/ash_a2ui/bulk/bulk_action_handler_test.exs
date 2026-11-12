@@ -40,7 +40,7 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
           do: task!(title, %{project_id: project.id})
 
     assert {:ok, messages} = bulk_invoke("approve", rows([a, b, c, d], [a, b, c]), project)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     # each selected record went through the action as the actor
     assert Enum.map([a, b, c, d], &reload!(&1).status) == [:approved, :approved, :approved, :open]
@@ -105,7 +105,7 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
 
     tasks = [good_one, bad, good_two]
     assert {:ok, messages} = bulk_invoke("approve", rows(tasks, tasks), project)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     assert reload!(good_one).status == :approved
     assert reload!(good_two).status == :approved
@@ -155,7 +155,7 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
     assert {:ok, [response | messages]} =
              ActionHandler.handle(BulkTasksUI, message, actor: actor(), spec_version: "1.0")
 
-    Enum.each([response | messages], &assert_valid_server_message(&1, :v1_0))
+    Enum.each([response | messages], &assert_valid_agent_message/1)
 
     assert %{"value" => %{"status" => "ok", "result" => %{"ok" => 1}}} =
              response["actionResponse"]
@@ -183,7 +183,7 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
     end
 
     assert {:ok, messages} = select.(true)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     records = value_at(messages, "/records")
 
@@ -215,7 +215,7 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
                actor: actor()
              )
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     # :stamp sets the score of the record its :record_id names: each call
     # got its own record, the unselected one was not touched
@@ -257,7 +257,7 @@ defmodule AshA2ui.Bulk.BulkActionHandlerTest do
                  actor: actor()
                )
 
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       rows = inbox_rows(messages)
       assert length(rows) == cap + 1

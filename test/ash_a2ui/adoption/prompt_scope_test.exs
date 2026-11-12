@@ -66,12 +66,11 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
   end
 
   defp surface(ui, opts \\ []) do
-    version = Keyword.get(opts, :version, :v0_9_1)
     messages = AshA2ui.Info.build_surface(ui, actor: @red)
 
     # The admin catalog's semantic components are outside the basic schema.
     if Keyword.get(opts, :validate?, true),
-      do: Enum.each(messages, &assert_valid_server_message(&1, version))
+      do: Enum.each(messages, &assert_valid_agent_message/1)
 
     {components, data} =
       case messages do
@@ -211,7 +210,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
     end
 
     test "the scoped prompt is valid on the A2UI 1.0 wire", %{intake: intake} do
-      {by_id, _data} = surface(TasksV1UI, version: :v1_0)
+      {by_id, _data} = surface(TasksV1UI)
       assert Map.has_key?(by_id, "row_action_delegate_prompt_select_principal_id_options")
 
       assert {:ok, messages} =
@@ -223,7 +222,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
                  "v1.0"
                )
 
-      Enum.each(messages, &assert_valid_server_message(&1, :v1_0))
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert labels(write_at(messages, "/prompt/options/delegate")["principal_id"]) == [
                "Rhea",
@@ -240,7 +239,7 @@ defmodule AshA2ui.Adoption.PromptScopeTest do
                  "recordId" => intake.id
                })
 
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert labels(write_at(messages, "/prompt/options/delegate")["principal_id"]) == [
                "Rhea",

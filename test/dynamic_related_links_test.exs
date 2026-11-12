@@ -89,7 +89,7 @@ defmodule AshA2ui.DynamicRelatedLinksTest do
 
       for state <- [%{}, AshA2ui.Info.context_state_for(PeopleUI, %{"person" => ada.id})] do
         dynamic = Dynamic.build_surface(surface, context_state: state)
-        Enum.each(dynamic, &assert_valid_server_message/1)
+        Enum.each(dynamic, &assert_valid_agent_message/1)
         assert dynamic == AshA2ui.Info.build_surface(PeopleUI, context_state: state)
       end
 
@@ -254,7 +254,7 @@ defmodule AshA2ui.DynamicRelatedLinksTest do
       assert {:ok, surface} = Dynamic.resolve(spec, allowlist: @allowlist)
       state = AshA2ui.Info.context_state_for(surface.dsl_state, %{"person" => ada.id})
       messages = Dynamic.build_surface(surface, context_state: state)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       %{"updateDataModel" => %{"value" => %{"records" => records}}} = List.last(messages)
       kickoff = Enum.find(records["their_notes"], &(&1["title"] == "Kickoff"))

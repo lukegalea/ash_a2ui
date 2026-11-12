@@ -77,7 +77,7 @@ defmodule AshA2ui.RelatedTablesTest do
     bob: bob
   } do
     messages = AshA2ui.Info.build_surface(PeopleUI)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     assert root(messages)["records"]["their_notes"] == []
 
     state = AshA2ui.Info.context_state_for(PeopleUI, %{"person" => ada.id})
@@ -155,7 +155,7 @@ defmodule AshA2ui.RelatedTablesTest do
 
     test "basic: only the master table gets View/Edit and the one create button" do
       messages = AshA2ui.Info.build_surface(PeopleTaskUI)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       comps = components_by_id(messages)
 
       # The master table (over the surface's own resource) keeps all three.

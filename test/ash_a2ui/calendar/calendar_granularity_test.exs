@@ -126,7 +126,7 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
                authorize?: false
              )
 
-    Enum.each(week, &assert_valid_server_message/1)
+    Enum.each(week, &assert_valid_agent_message/1)
     window = value_at(week, "/query")["window"]
 
     assert {window["granularity"], window["from"], window["to"]} ==
@@ -194,12 +194,8 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
 
     catalog = "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 
-    schema =
-      catalog["components"]["calendarView"]
-      |> Map.put("$defs", catalog["$defs"] || %{})
-      |> ExJsonSchema.Schema.resolve()
-
-    assert ExJsonSchema.Validator.validate(schema, view) == :ok
+    assert AshA2ui.Test.SchemaHelper.validate_catalog_component(catalog, "calendarView", view) ==
+             :ok
   end
 
   test "composed surfaces carry granularities both ways" do

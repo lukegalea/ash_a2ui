@@ -83,7 +83,7 @@ defmodule AshA2ui.Board.BoardDynamicTest do
     assert {:ok, surface} = Dynamic.resolve(board_spec(), allowlist: @allowlist)
 
     messages = Dynamic.build_surface(surface, authorize?: false)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     data = Enum.find_value(messages, &get_in(&1, ["updateDataModel", "value"]))
 
     # Two lanes x two swimlanes: one cell table each, swimlane-major.

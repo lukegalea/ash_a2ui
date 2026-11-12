@@ -74,11 +74,11 @@ defmodule AshA2ui.Wave4ReferralTest do
 
   defp handle!(name, context) do
     envelope = envelope(name, context)
-    assert_valid_client_message(envelope)
+    assert_valid_renderer_message(envelope)
     result = ActionHandler.handle(Referral, envelope, actor: nil, authorize?: false)
 
     {_ok_or_error, messages} = result
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     result
   end
 
@@ -100,7 +100,7 @@ defmodule AshA2ui.Wave4ReferralTest do
     [_create, _components, %{"updateDataModel" => %{"value" => value}} = message] =
       AshA2ui.Info.build_surface(Referral, authorize?: false)
 
-    assert_valid_server_message(message)
+    assert_valid_agent_message(message)
     value
   end
 

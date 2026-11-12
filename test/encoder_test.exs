@@ -1,7 +1,7 @@
 defmodule AshA2ui.EncoderTest do
   @moduledoc """
   `AshA2ui.Encoder.V0_9_1` payload tests: every message is validated against
-  the vendored v0.9.1 schemas via `SchemaHelper.assert_valid_server_message/1`,
+  the vendored v0.9.1 schemas via `SchemaHelper.assert_valid_agent_message/1`,
   plus targeted structural assertions on the emitted component tree, the
   frozen action-wire contract, and record serialization.
   """
@@ -69,7 +69,7 @@ defmodule AshA2ui.EncoderTest do
                %{"createSurface" => create},
                %{"updateComponents" => update},
                %{"updateDataModel" => data}
-             ] = Enum.map(messages, &assert_valid_server_message/1)
+             ] = Enum.map(messages, &assert_valid_agent_message/1)
 
       assert Enum.all?(messages, &(&1["version"] == "v0.9.1"))
       assert create["surfaceId"] == "kitchen_sink"
@@ -99,7 +99,7 @@ defmodule AshA2ui.EncoderTest do
 
     test "a table-only surface omits the form section" do
       messages = Minimal |> ResolvedView.resolve() |> V0_9_1.encode_surface([], [])
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components = components_by_id(messages)
 
@@ -426,7 +426,7 @@ defmodule AshA2ui.EncoderTest do
       }
 
       [_, _, message] = encode_kitchen_sink([record])
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert [row] = message["updateDataModel"]["value"]["records"]
 
@@ -459,7 +459,7 @@ defmodule AshA2ui.EncoderTest do
 
       [_, _, message] = encode_kitchen_sink([record])
       # the placeholder is a plain string, so the message stays schema-valid
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert [row] = message["updateDataModel"]["value"]["records"]
       assert row["name"] == "unsupported type: UnsupportedValue"
@@ -481,7 +481,7 @@ defmodule AshA2ui.EncoderTest do
       record = %KitchenSink{id: "x", name: "A"}
 
       message = V0_9_1.encode_data_model(view, [record], [])
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert %{
                "updateDataModel" => %{
@@ -503,7 +503,7 @@ defmodule AshA2ui.EncoderTest do
       record = %KitchenSink{id: "x", name: "A"}
 
       message = V0_9_1.encode_data_model(view, [record], scope: :records)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert %{
                "updateDataModel" => %{
@@ -534,7 +534,7 @@ defmodule AshA2ui.EncoderTest do
       Ash.create!(KitchenSink, %{name: "Second", status: :archived}, authorize?: false)
 
       messages = AshA2ui.Info.build_surface(KitchenSink, actor: nil)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert [%{"createSurface" => _}, %{"updateComponents" => _}, %{"updateDataModel" => data}] =
                messages
@@ -557,7 +557,7 @@ defmodule AshA2ui.EncoderTest do
       Ash.create!(KitchenSink, %{name: "Only", status: :draft}, authorize?: false)
 
       message = AshA2ui.Info.build_data_model(KitchenSink, actor: nil)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert [%{"name" => "Only"}] =
                Enum.filter(

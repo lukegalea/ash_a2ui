@@ -44,10 +44,10 @@ defmodule AshA2ui.QueryActionHandlerTest do
       seed!(7, &%{name: "Item #{&1}", status: :open})
 
       envelope = envelope("query", %{"query" => %{"search" => "item"}})
-      assert_valid_client_message(envelope)
+      assert_valid_renderer_message(envelope)
 
       assert {:ok, messages} = ActionHandler.handle(Paginated, envelope, actor: nil)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       values = by_path(messages)
 
@@ -93,7 +93,7 @@ defmodule AshA2ui.QueryActionHandlerTest do
         envelope("query", %{"query" => %{"sort" => %{"field" => "status", "dir" => "asc"}}})
 
       assert {:error, [message]} = ActionHandler.handle(Paginated, envelope, actor: nil)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert %{"path" => "/ui/feedback", "value" => %{"message" => value}} =
                message["updateDataModel"]
@@ -137,7 +137,7 @@ defmodule AshA2ui.QueryActionHandlerTest do
       assert {:ok, messages} =
                ActionHandler.handle(Paginated, envelope("submit_form", context), actor: nil)
 
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       values = by_path(messages)
 
       # 8 records after the create; page 2 of 5 sorted by name: Item 6, Item 7, Zed
@@ -190,7 +190,7 @@ defmodule AshA2ui.QueryActionHandlerTest do
       assert {:ok, messages} =
                ActionHandler.handle(Paginated, envelope("invoke", context), actor: nil)
 
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       values = by_path(messages)
 
       # "Other" is filtered out by the carried search; the victim is gone.

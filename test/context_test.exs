@@ -33,7 +33,7 @@ defmodule AshA2ui.ContextTest do
     }
   end
 
-  defp assert_all_valid(messages), do: Enum.each(messages, &assert_valid_server_message/1)
+  defp assert_all_valid(messages), do: Enum.each(messages, &assert_valid_agent_message/1)
 
   defp value_at(messages, path) do
     Enum.find_value(messages, fn

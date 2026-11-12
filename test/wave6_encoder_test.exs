@@ -49,7 +49,7 @@ defmodule AshA2ui.Wave6EncoderTest do
     end
 
     test "all messages are schema-valid", %{messages: messages} do
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
     end
 
     test "the templated record_row becomes a Card over a header + meta grid", %{
@@ -233,7 +233,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       end
 
       messages = AshA2ui.Info.build_surface(UnevenGroupUI)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       components = components(messages)
 
       assert components["form_group_all_body"]["children"] == [
@@ -276,7 +276,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       end
 
       messages = AshA2ui.Info.build_surface(SingleColumnGroupUI)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       components = components(messages)
 
       assert components["form_group_details_body"]["children"] == [
@@ -316,7 +316,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       end
 
       messages = AshA2ui.Info.build_surface(HiddenGroupedFieldUI)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       components = components(messages)
 
       assert components["form_group_details_row_0"]["children"] == [
@@ -354,7 +354,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       end
 
       messages = AshA2ui.Info.build_surface(MultiTableLayoutUI)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       components = components(messages)
 
       assert components["record_row_active_items"]["component"] == "Card"
@@ -379,7 +379,7 @@ defmodule AshA2ui.Wave6EncoderTest do
   describe "backward compatibility" do
     test "surfaces without groups or row_layout keep the frozen flat structure" do
       messages = AshA2ui.Info.build_surface(KitchenSink)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       components = components(messages)
 
       # the flat baseline: Card -> record_row_content Row of labeled cells

@@ -48,8 +48,8 @@ defmodule AshA2ui.ExportTest do
   # other message validates against the plain v1.0 schemas.
   defp assert_valid_export_messages(messages) do
     extension_schema =
-      SchemaHelper.resolved_schema(:v1_0, "server_to_client.json",
-        catalog: "catalogs/ash_a2ui/catalog.json"
+      SchemaHelper.spec_schema("agent_to_renderer.json",
+        catalogs: ["catalogs/basic/v1/catalog.json", "catalogs/ash_a2ui/catalog.json"]
       )
 
     Enum.each(messages, fn
@@ -57,7 +57,7 @@ defmodule AshA2ui.ExportTest do
         assert :ok = SchemaHelper.validate(extension_schema, message)
 
       message ->
-        assert_valid_server_message(message, :v1_0)
+        assert_valid_agent_message(message)
     end)
   end
 
@@ -115,7 +115,7 @@ defmodule AshA2ui.ExportTest do
   describe "encoder" do
     test "a table export renders the Export CSV button with the table conventions" do
       assert [message] = AshA2ui.Info.build_surface(ExportWordsV1UI, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       components = Map.new(message["createSurface"]["components"], &{&1["id"], &1})
 
@@ -134,7 +134,7 @@ defmodule AshA2ui.ExportTest do
 
     test "a column-selectable report export renders checkboxes bound to /export paths" do
       assert [message] = AshA2ui.Info.build_surface(WordReportV1UI, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       components = Map.new(message["createSurface"]["components"], &{&1["id"], &1})
 

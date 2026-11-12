@@ -84,7 +84,7 @@ defmodule AshA2ui.Calendar.CalendarDynamicTest do
         query_state: %{"window" => %{"anchor" => "2026-10-14"}}
       )
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     data = Enum.find_value(messages, &get_in(&1, ["updateDataModel", "value"]))
 
     assert data["query"]["window"]["from"] == "2026-10-12"

@@ -100,7 +100,7 @@ defmodule AshA2ui.Calendar.CalendarPresetTest do
     assert {:ok, messages} =
              ActionHandler.handle(PresetUI, envelope(context), actor: nil, authorize?: false)
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     messages
   end
 

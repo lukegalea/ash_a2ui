@@ -132,7 +132,7 @@ defmodule AshA2ui.LinksTest do
       hidden: hidden
     } do
       messages = AshA2ui.Info.build_surface(NotesUI)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       row = row(messages, "Kickoff")
 
@@ -367,7 +367,7 @@ defmodule AshA2ui.LinksTest do
     test "off by default: without link_buttons every linked value stays plain Text" do
       for ui <- [NotesUI, AshA2ui.Test.Links.PagedNotesUI, AshA2ui.Test.Links.PeopleUI] do
         messages = AshA2ui.Info.build_surface(ui)
-        Enum.each(messages, &assert_valid_server_message/1)
+        Enum.each(messages, &assert_valid_agent_message/1)
         comps = components_by_id(messages)
 
         refute Enum.any?(comps, fn {id, comp} ->
@@ -400,7 +400,7 @@ defmodule AshA2ui.LinksTest do
 
     test "card-row meta values link to-one fields; to-many and plain fields stay Text" do
       messages = AshA2ui.Info.build_surface(NotesUI, link_buttons: true)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       comps = components_by_id(messages)
 
       # link :person (through a source column) and link {:person, :subject_id}
@@ -421,7 +421,7 @@ defmodule AshA2ui.LinksTest do
 
     test "flat table cells link to-one fields" do
       messages = AshA2ui.Info.build_surface(AshA2ui.Test.Links.PagedNotesUI, link_buttons: true)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       comps = components_by_id(messages)
 
       assert_link_button(comps, "table_cell_person_name_value", "person_name", "")
@@ -466,7 +466,7 @@ defmodule AshA2ui.LinksTest do
 
     test "the v1.0 surface carries the same link buttons, schema-valid" do
       [create] = AshA2ui.Info.build_surface(NotesUI, spec_version: "1.0", link_buttons: true)
-      assert_valid_server_message(create, :v1_0)
+      assert_valid_agent_message(create)
 
       comps = Map.new(create["createSurface"]["components"], &{&1["id"], &1})
       button = link_button(comps, "record_row_meta_value_person_name")
@@ -594,7 +594,7 @@ defmodule AshA2ui.LinksTest do
 
       assert {:ok, [response]} = ActionHandler.handle(NotesUI, message, spec_version: "1.0")
       assert response["actionResponse"] == %{"value" => %{"status" => "ok", "message" => ""}}
-      assert_valid_server_message(response, :v1_0)
+      assert_valid_agent_message(response)
     end
   end
 

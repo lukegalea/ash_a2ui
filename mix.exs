@@ -185,7 +185,7 @@ defmodule AshA2ui.MixProject do
       {:ash_state_machine, "~> 0.2", optional: true},
       {:igniter, "~> 0.5", only: [:dev, :test]},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false},
-      {:ex_json_schema, "~> 0.10", only: [:dev, :test]},
+      {:jsv, "~> 0.27", only: :test},
       # no :only — reactor (via ash) requires jason in all envs anyway
       {:jason, "~> 1.4"},
       {:ex_doc, "~> 0.36", only: [:dev, :test]},

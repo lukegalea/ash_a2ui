@@ -110,7 +110,7 @@ defmodule AshA2ui.Board.BoardSectionsTest do
     {messages, reads} =
       count_reads(fn -> AshA2ui.Info.build_surface(StatusSectionsUI, authorize?: false) end)
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     assert Enum.uniq(reads) == [:board_task]
 
     records =
@@ -168,7 +168,7 @@ defmodule AshA2ui.Board.BoardSectionsTest do
     create_task!("only", %{status: :open})
 
     messages = AshA2ui.Info.build_surface(BoardTaskUI, authorize?: false)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     components =
       messages

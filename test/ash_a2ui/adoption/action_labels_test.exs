@@ -26,7 +26,7 @@ defmodule AshA2ui.Adoption.ActionLabelsTest do
   # admin emission's custom kinds are pinned by the admin catalog instead.
   defp components(ui \\ LabelledJobsUI) do
     messages = AshA2ui.Info.build_surface(ui, actor: @red)
-    unless AshA2ui.Experience.admin?(), do: Enum.each(messages, &assert_valid_server_message/1)
+    unless AshA2ui.Experience.admin?(), do: Enum.each(messages, &assert_valid_agent_message/1)
 
     messages
     |> Enum.find_value(& &1["updateComponents"])

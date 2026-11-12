@@ -71,7 +71,7 @@ defmodule AshA2ui.Adoption.BoardSelectContextTest do
 
   test "every card carries the select control", %{job: job} do
     messages = AshA2ui.Info.build_surface(SelectBoardUI, actor: @red)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     [_create, components, data] = messages
     by_id = Map.new(components["updateComponents"]["components"], &{&1["id"], &1})
 

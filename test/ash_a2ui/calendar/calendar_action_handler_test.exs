@@ -75,7 +75,7 @@ defmodule AshA2ui.Calendar.CalendarActionHandlerTest do
     assert {:ok, messages} =
              ActionHandler.handle(MonthUI, message, actor: actor, authorize?: false)
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     messages
   end
 
@@ -178,7 +178,7 @@ defmodule AshA2ui.Calendar.CalendarActionHandlerTest do
     assert {:ok, messages} =
              ActionHandler.handle(MonthUI, message, actor: @red, authorize?: false)
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     assert Ash.get!(Event, target.id, authorize?: false).status == :confirmed
 

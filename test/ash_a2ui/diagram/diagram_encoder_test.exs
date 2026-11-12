@@ -33,7 +33,7 @@ defmodule AshA2ui.Diagram.DiagramEncoderTest do
 
   defp parts(ui, opts) do
     messages = AshA2ui.Info.build_surface(ui, [authorize?: false] ++ opts)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     components =
       messages |> Enum.find_value(& &1["updateComponents"]) |> Map.fetch!("components")
@@ -134,7 +134,7 @@ defmodule AshA2ui.Diagram.DiagramEncoderTest do
 
     # --- v1.0 (an MFA source, and a source that fails) ---
     assert [message] = AshA2ui.Info.build_surface(FlowV1UI, authorize?: false)
-    assert_valid_server_message(message, :v1_0)
+    assert_valid_agent_message(message)
 
     create = message["createSurface"]
     v1 = components_by_id(create["components"])
@@ -228,12 +228,12 @@ defmodule AshA2ui.Diagram.DiagramEncoderTest do
 
     catalog = "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 
-    schema =
-      catalog["components"]["liveDiagram"]
-      |> Map.put("$defs", catalog["$defs"] || %{})
-      |> ExJsonSchema.Schema.resolve()
-
-    assert ExJsonSchema.Validator.validate(schema, by_id["diagram_flow"]) == :ok
+    assert AshA2ui.Test.SchemaHelper.validate_catalog_component(
+             catalog,
+             "liveDiagram",
+             by_id["diagram_flow"]
+           ) ==
+             :ok
   end
 
   @tag ac: "A2UI-108/AC-5"
@@ -253,14 +253,14 @@ defmodule AshA2ui.Diagram.DiagramEncoderTest do
     # ...and a full data-model refresh (what a PubSub-driven LiveRenderer
     # refresh pushes) carries the moved marker.
     refresh = AshA2ui.Info.build_data_model(FlowUI, actor: red, authorize?: false)
-    assert_valid_server_message(refresh)
+    assert_valid_agent_message(refresh)
     markers = refresh["updateDataModel"]["value"]["diagram"]["flow"]["markers"]
     assert Map.keys(markers) == ["exam"]
     assert hd(markers["exam"])["status"] == "executing"
 
     # refresh_messages/2 writes just /diagram/<name>.
     assert [message] = AshA2ui.Diagram.refresh_messages(FlowUI, actor: red)
-    assert_valid_server_message(message)
+    assert_valid_agent_message(message)
     assert message["updateDataModel"]["path"] == "/diagram/flow"
     assert labels(message["updateDataModel"]["value"]["markers"]["exam"]) == ["Ada Lovelace"]
 
@@ -270,7 +270,7 @@ defmodule AshA2ui.Diagram.DiagramEncoderTest do
 
     # v1.0 surfaces get v1.0 writes.
     assert [v1_flow, v1_offline] = AshA2ui.Diagram.refresh_messages(FlowV1UI, actor: red)
-    assert_valid_server_message(v1_flow, :v1_0)
+    assert_valid_agent_message(v1_flow)
     assert v1_flow["version"] == "v1.0"
     assert v1_offline["updateDataModel"]["value"]["error"] == "This diagram is unavailable."
   end

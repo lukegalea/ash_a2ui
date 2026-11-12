@@ -78,7 +78,7 @@ defmodule AshA2ui.Experience.CatalogNegotiationTest do
 
       Application.put_env(:ash_a2ui, :catalog, :basic)
       assert built == AshA2ui.Info.build_surface(Task, [])
-      Enum.each(built, &assert_valid_server_message/1)
+      Enum.each(built, &assert_valid_agent_message/1)
     end
 
     test "the v1.0 createSurface names the basic catalog" do

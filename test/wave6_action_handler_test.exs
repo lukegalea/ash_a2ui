@@ -47,7 +47,7 @@ defmodule AshA2ui.Wave6ActionHandlerTest do
       })
 
     assert {:ok, messages} = ActionHandler.handle(Promotion, env)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     rows = value_at(messages, "/records")
 

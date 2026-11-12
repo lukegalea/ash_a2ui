@@ -42,7 +42,7 @@ defmodule AshA2ui.Wave5EncoderTest do
     end
 
     test "all messages are schema-valid", %{messages: messages} do
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
     end
 
     test "emits the composite instead of a ChoicePicker", %{messages: messages} do
@@ -159,7 +159,7 @@ defmodule AshA2ui.Wave5EncoderTest do
     end
 
     test "all messages are schema-valid", %{messages: messages} do
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
     end
 
     test "create_inline renders widget-mapped row inputs and an add button",

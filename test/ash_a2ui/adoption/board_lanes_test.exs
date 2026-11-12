@@ -38,7 +38,7 @@ defmodule AshA2ui.Adoption.BoardLanesTest do
 
   test "the lanes sit in a Row, each lane at weight 1" do
     messages = AshA2ui.Info.build_surface(JobBoardUI, actor: @red)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     by_id = components(JobBoardUI)
     lanes = by_id["board_board_lanes"]

@@ -40,7 +40,7 @@ defmodule AshA2ui.Calendar.CalendarEncoderTest do
 
   defp v0_9_1_parts(ui, opts) do
     messages = AshA2ui.Info.build_surface(ui, [authorize?: false] ++ opts)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     components =
       messages |> Enum.find_value(& &1["updateComponents"]) |> Map.fetch!("components")
@@ -173,7 +173,7 @@ defmodule AshA2ui.Calendar.CalendarEncoderTest do
                query_state: %{"window" => %{"anchor" => "2026-10-20"}}
              )
 
-    assert_valid_server_message(message, :v1_0)
+    assert_valid_agent_message(message)
 
     create = message["createSurface"]
     v1 = components_by_id(create["components"])
@@ -285,12 +285,7 @@ defmodule AshA2ui.Calendar.CalendarEncoderTest do
     catalog = "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 
     for {kind, id} <- [{"calendarView", "calendar"}, {"dataGrid", "data_grid"}] do
-      schema =
-        catalog["components"][kind]
-        |> Map.put("$defs", catalog["$defs"] || %{})
-        |> ExJsonSchema.Schema.resolve()
-
-      assert ExJsonSchema.Validator.validate(schema, by_id[id]) == :ok
+      assert AshA2ui.Test.SchemaHelper.validate_catalog_component(catalog, kind, by_id[id]) == :ok
     end
 
     # No basic calendar controls under the admin catalog.

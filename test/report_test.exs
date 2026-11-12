@@ -86,7 +86,7 @@ defmodule AshA2ui.ReportTest do
   describe "encoder (v0.9.1)" do
     setup do
       messages = AshA2ui.Info.build_surface(WordReportUI, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components =
         messages
@@ -161,7 +161,7 @@ defmodule AshA2ui.ReportTest do
       message = envelope("report", %{"params" => %{"min_length" => "3"}})
 
       assert {:ok, messages} = ActionHandler.handle(WordReportUI, message, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert value_at(messages, "/report/lengths/rows") == [
                %{"word" => "abcdef", "length" => 6, "state" => "new"}
@@ -235,7 +235,7 @@ defmodule AshA2ui.ReportTest do
 
     test "the surface bootstraps as one schema-valid inline createSurface" do
       assert [message] = AshA2ui.Info.build_surface(WordReportV1UI, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       assert message["createSurface"]["dataModel"]["report"] == %{
                "lengths" => %{"params" => %{"min_length" => ""}, "rows" => []}
@@ -269,8 +269,8 @@ defmodule AshA2ui.ReportTest do
       assert %{"value" => %{"status" => "ok", "result" => %{"count" => 1}}} =
                response["actionResponse"]
 
-      assert_valid_server_message(response, :v1_0)
-      Enum.each(followups, &assert_valid_server_message(&1, :v1_0))
+      assert_valid_agent_message(response)
+      Enum.each(followups, &assert_valid_agent_message/1)
 
       assert [%{"word" => "abcdef"}] = value_at(followups, "/report/lengths/rows")
 

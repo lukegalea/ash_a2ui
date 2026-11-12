@@ -179,7 +179,7 @@ defmodule AshA2ui.SectionsTest do
 
     test "the surface renders one suffixed section per bucket, headed by its label", ctx do
       messages = AshA2ui.Info.build_surface(BucketWordsUI, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components =
         messages
@@ -256,7 +256,7 @@ defmodule AshA2ui.SectionsTest do
         })
 
       assert {:ok, messages} = ActionHandler.handle(BucketWordsUI, message, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       records_path = "/records/#{runtime_name(ctx.alpha)}"
       assert [%{"word" => "apple"}] = value_at(messages, records_path)
@@ -278,7 +278,7 @@ defmodule AshA2ui.SectionsTest do
       message = envelope("invoke", %{"action" => "approve", "recordId" => ctx.fresh.id})
 
       assert {:ok, messages} = ActionHandler.handle(BucketWordsUI, message, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       emitted = paths(messages)
 
@@ -310,7 +310,7 @@ defmodule AshA2ui.SectionsTest do
 
     test "the surface bootstraps as one schema-valid inline createSurface", ctx do
       assert [message] = AshA2ui.Info.build_surface(BucketWordsV1UI, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       create = message["createSurface"]
       assert [%{"word" => "apple"}] = create["dataModel"]["records"][runtime_name(ctx.alpha)]
@@ -337,7 +337,7 @@ defmodule AshA2ui.SectionsTest do
 
       assert response["actionId"] == "act_1"
       assert %{"value" => %{"status" => "ok"}} = response["actionResponse"]
-      assert_valid_server_message(response, :v1_0)
+      assert_valid_agent_message(response)
 
       assert value_at(followups, "/records/#{runtime_name(ctx.alpha)}") == []
     end

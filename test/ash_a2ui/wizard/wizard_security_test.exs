@@ -17,7 +17,7 @@ defmodule AshA2ui.Wizard.WizardSecurityTest do
   defp handle(name, context) do
     message = %{"version" => "v0.9.1", "action" => %{"name" => name, "context" => context}}
     {tag, messages} = ActionHandler.handle(Enrollment, message)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     {tag, messages}
   end
 

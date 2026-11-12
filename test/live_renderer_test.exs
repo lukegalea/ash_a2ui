@@ -35,7 +35,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
 
         assert length(messages) == 3
-        Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
+        Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
 
         assert [
                  %{"createSurface" => _},
@@ -116,7 +116,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       test "routes the envelope through action_fn and pushes the ok messages", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/stubbed")
         envelope = Fixtures.action_envelope()
-        SchemaHelper.assert_valid_client_message(envelope)
+        SchemaHelper.assert_valid_renderer_message(envelope)
 
         render_hook(view, "a2ui:action", envelope)
 
@@ -137,7 +137,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
             ] = messages
         })
 
-        Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
+        Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
       end
 
       test "an error tuple from action_fn also pushes its messages", %{conn: conn} do
@@ -152,7 +152,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           messages: [%{"updateDataModel" => %{"path" => "/errors/name"}} | _] = messages
         })
 
-        Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
+        Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
       end
     end
 
@@ -172,7 +172,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_receive {:data_model_fn, MinimalUI, _opts}, 1_000
 
         assert_push_event(view, "a2ui:messages", %{messages: [message]}, 1_000)
-        SchemaHelper.assert_valid_server_message(message)
+        SchemaHelper.assert_valid_agent_message(message)
         assert %{"updateDataModel" => %{"path" => "/records"}} = message
       end
 
@@ -223,7 +223,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
         assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
         assert messages != []
-        Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
+        Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
       end
 
       test "a query action round-trips through the LiveView transport", %{conn: conn} do
@@ -241,11 +241,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           }
         }
 
-        SchemaHelper.assert_valid_client_message(envelope)
+        SchemaHelper.assert_valid_renderer_message(envelope)
         render_hook(view, "a2ui:action", envelope)
 
         assert_push_event(view, "a2ui:messages", %{messages: messages})
-        Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
+        Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
 
         assert [
                  %{"updateDataModel" => %{"path" => "/records", "value" => []}},
@@ -316,7 +316,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           }
         }
 
-        SchemaHelper.assert_valid_client_message(envelope)
+        SchemaHelper.assert_valid_renderer_message(envelope)
         render_hook(view, "a2ui:action", envelope)
 
         # The stub's follow-up rewrites /context; the LiveRenderer must
@@ -347,7 +347,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         )
 
         assert_push_event(view, "a2ui:messages", %{messages: [message]}, 1_000)
-        SchemaHelper.assert_valid_server_message(message)
+        SchemaHelper.assert_valid_agent_message(message)
 
         assert %{"updateDataModel" => %{"path" => "/", "value" => value}} = message
         assert %{"new_items" => _, "done_items" => _} = value["records"]
@@ -447,7 +447,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
         {:ok, view, _html} = live(conn, "/live-renderer/people-deep-link?ctx[person]=#{ada.id}")
         assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
-        Enum.each(messages, &SchemaHelper.assert_valid_server_message/1)
+        Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
 
         pushed = List.last(messages)["updateDataModel"]["value"]["records"]
 

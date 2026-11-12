@@ -46,7 +46,7 @@ defmodule AshA2ui.Wizard.WizardEncoderTest do
 
   defp v0_9_1(module) do
     [create, components, data] = AshA2ui.Info.build_surface(module)
-    Enum.each([create, components, data], &assert_valid_server_message/1)
+    Enum.each([create, components, data], &assert_valid_agent_message/1)
 
     {Map.new(components["updateComponents"]["components"], &{&1["id"], &1}),
      data["updateDataModel"]["value"]}
@@ -54,7 +54,7 @@ defmodule AshA2ui.Wizard.WizardEncoderTest do
 
   defp v1_0(module) do
     [create] = AshA2ui.Info.build_surface(module)
-    assert_valid_server_message(create, :v1_0)
+    assert_valid_agent_message(create)
     payload = create["createSurface"]
 
     {Map.new(payload["components"], &{&1["id"], &1}), payload["dataModel"]}

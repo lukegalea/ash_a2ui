@@ -133,7 +133,7 @@ defmodule AshA2ui.AgUiTest do
       event = AgUi.surface_activity("surface-minimal", messages)
 
       for operation <- event["content"]["a2ui_operations"] do
-        SchemaHelper.assert_valid_server_message(operation)
+        SchemaHelper.assert_valid_agent_message(operation)
       end
     end
 
@@ -301,7 +301,7 @@ defmodule AshA2ui.AgUiTest do
           }
         })
 
-      SchemaHelper.assert_valid_client_message(envelope)
+      SchemaHelper.assert_valid_renderer_message(envelope)
 
       assert {:ok, messages} = AshA2ui.ActionHandler.handle(MinimalUI, envelope)
       assert Enum.any?(messages, &match?(%{"updateDataModel" => _}, &1))
@@ -449,7 +449,7 @@ defmodule AshA2ui.AgUiTest do
       assert Enum.any?(messages, &match?(%{"updateComponents" => _}, &1))
       assert Enum.all?(messages, &(&1["version"] == "v0.9.1"))
 
-      for message <- messages, do: SchemaHelper.assert_valid_server_message(message)
+      for message <- messages, do: SchemaHelper.assert_valid_agent_message(message)
     end
 
     test "a default surface pinned to 1.0 emits the single inline createSurface" do

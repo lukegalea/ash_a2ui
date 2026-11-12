@@ -36,7 +36,7 @@ defmodule AshA2ui.Adoption.PromptWidgetsTest do
 
   defp surface(ui) do
     messages = AshA2ui.Info.build_surface(ui, actor: @red)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
     [_create, components, data] = messages
 
     {Map.new(components["updateComponents"]["components"], &{&1["id"], &1}),

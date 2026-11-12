@@ -70,7 +70,7 @@ defmodule AshA2ui.EditableTest do
     setup do
       create_word!("teh", replacement: "the")
       messages = AshA2ui.Info.build_surface(EditableWordsUI, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components =
         messages
@@ -135,7 +135,7 @@ defmodule AshA2ui.EditableTest do
         })
 
       assert {:ok, messages} = ActionHandler.handle(EditableWordsUI, message, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert [%{"replacement" => "their"}] = value_at(messages, "/records")
       assert Ash.get!(BucketWord, word.id, authorize?: false).replacement == "their"
@@ -154,7 +154,7 @@ defmodule AshA2ui.EditableTest do
       assert {:error, messages} =
                ActionHandler.handle(EditableWordsUI, message, authorize?: false)
 
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert value_at(messages, "/errors/replacement") =~ "lowercase"
 
@@ -226,7 +226,7 @@ defmodule AshA2ui.EditableTest do
 
     test "editable cells carry wantResponse on their Save action", %{word: _word} do
       assert [message] = AshA2ui.Info.build_surface(EditableWordsV1UI, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       save =
         Enum.find(
@@ -260,8 +260,8 @@ defmodule AshA2ui.EditableTest do
 
       assert response["actionId"] == "cell_1"
       assert %{"value" => %{"status" => "ok"}} = response["actionResponse"]
-      assert_valid_server_message(response, :v1_0)
-      Enum.each(followups, &assert_valid_server_message(&1, :v1_0))
+      assert_valid_agent_message(response)
+      Enum.each(followups, &assert_valid_agent_message/1)
     end
 
     test "a failed commit answers with an error actionResponse and the row mirror", %{

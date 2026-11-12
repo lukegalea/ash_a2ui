@@ -28,7 +28,7 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
     [_create, components_message, data_message] =
       messages = AshA2ui.Info.build_surface(BulkTasksUI, actor: actor())
 
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     components = by_id(components_message["updateComponents"]["components"])
     data = data_message["updateDataModel"]["value"]
@@ -53,7 +53,7 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
 
     # v1.0: one inline createSurface with the same composition
     [create] = AshA2ui.Info.build_surface(BulkTasksUI, actor: actor(), spec_version: "1.0")
-    assert_valid_server_message(create, :v1_0)
+    assert_valid_agent_message(create)
 
     v1_components = by_id(create["createSurface"]["components"])
     assert_bulk_flat_table(v1_components)
@@ -63,16 +63,16 @@ defmodule AshA2ui.Bulk.BulkEncoderTest do
 
     # card rows: the CheckBox leads the card header; a table without bulk
     # actions keeps its rows and components unchanged
-    for {version, schema} <- [{"0.9.1", :v0_9_1}, {"1.0", :v1_0}] do
+    for version <- ["0.9.1", "1.0"] do
       {components, data} =
         case AshA2ui.Info.build_surface(BulkCardsUI, actor: actor(), spec_version: version) do
           [create] ->
-            assert_valid_server_message(create, schema)
+            assert_valid_agent_message(create)
 
             {by_id(create["createSurface"]["components"]), create["createSurface"]["dataModel"]}
 
           [_create, components_message, data_message] = triple ->
-            Enum.each(triple, &assert_valid_server_message(&1, schema))
+            Enum.each(triple, &assert_valid_agent_message/1)
 
             {by_id(components_message["updateComponents"]["components"]),
              data_message["updateDataModel"]["value"]}

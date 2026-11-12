@@ -90,7 +90,7 @@ defmodule AshA2ui.RangeFilterTest do
                  "scheduled_for" => %{"from" => "2026-03-01T00:00:00Z", "to" => ""}
                })
 
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert value_at(messages, "/records") |> Enum.map(& &1["title"]) ==
                ["May visit", "March visit"]
@@ -162,7 +162,7 @@ defmodule AshA2ui.RangeFilterTest do
       seed()
 
       messages = Info.build_surface(AshA2ui.Test.AppointmentsUI, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       [_create, %{"updateComponents" => %{"components" => components}}, data_model] = messages
 

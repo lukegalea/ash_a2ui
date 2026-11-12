@@ -99,7 +99,7 @@ defmodule AshA2ui.MultiTableTest do
   describe "encoder: component tree" do
     setup do
       messages = AshA2ui.Info.build_surface(ReviewItem)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       %{messages: messages, components: components_by_id(messages)}
     end
 
@@ -210,7 +210,7 @@ defmodule AshA2ui.MultiTableTest do
       create_item!("Old", state: :done)
 
       messages = AshA2ui.Info.build_surface(ReviewItem)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       data = value_at(messages, "/")
 
@@ -226,7 +226,7 @@ defmodule AshA2ui.MultiTableTest do
       create_item!("Old", state: :done)
 
       message = AshA2ui.Info.build_data_model(ReviewItem)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       data = message["updateDataModel"]["value"]
       assert [%{"name" => "Fresh"}] = data["records"]["new_items"]
@@ -240,10 +240,10 @@ defmodule AshA2ui.MultiTableTest do
       create_item!("Old", state: :done)
 
       env = envelope("invoke", %{"action" => "approve", "recordId" => item.id})
-      assert_valid_client_message(env)
+      assert_valid_renderer_message(env)
 
       assert {:ok, messages} = ActionHandler.handle(ReviewItem, env)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       # the update-type row action ran the :approve action itself
       assert Ash.get!(ReviewItem, item.id, authorize?: false).state == :done
@@ -266,7 +266,7 @@ defmodule AshA2ui.MultiTableTest do
       env = envelope("invoke", %{"action" => "destroy", "recordId" => item.id})
 
       assert {:ok, messages} = ActionHandler.handle(ReviewItem, env)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert value_at(messages, "/records/new_items") == []
       assert [%{"name" => "Old"}] = value_at(messages, "/records/done_items")
@@ -277,7 +277,7 @@ defmodule AshA2ui.MultiTableTest do
       env = envelope("submit_form", %{"values" => %{"name" => "Created", "count" => 1}})
 
       assert {:ok, messages} = ActionHandler.handle(ReviewItem, env)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert [%{"name" => "Created", "count" => 1}] = value_at(messages, "/records/new_items")
       assert value_at(messages, "/records/done_items") == []
@@ -314,7 +314,7 @@ defmodule AshA2ui.MultiTableTest do
         })
 
       assert {:ok, messages} = ActionHandler.handle(ReviewItem, env)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert paths(messages) == [
                "/records/new_items",

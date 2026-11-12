@@ -137,11 +137,11 @@ defmodule AshA2ui.Adoption.AdminRowActionsTest do
     {by_id, _data} = surface()
     catalog = "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 
-    schema =
-      catalog["components"]["dataGrid"]
-      |> Map.put("$defs", catalog["$defs"] || %{})
-      |> ExJsonSchema.Schema.resolve()
-
-    assert ExJsonSchema.Validator.validate(schema, by_id["data_grid"]) == :ok
+    assert AshA2ui.Test.SchemaHelper.validate_catalog_component(
+             catalog,
+             "dataGrid",
+             by_id["data_grid"]
+           ) ==
+             :ok
   end
 end

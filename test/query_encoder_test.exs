@@ -27,7 +27,7 @@ defmodule AshA2ui.QueryEncoderTest do
   describe "query component tree" do
     test "all messages are schema-valid and root interleaves the query sections" do
       messages = encode()
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components = components_by_id(messages)
 
@@ -78,7 +78,7 @@ defmodule AshA2ui.QueryEncoderTest do
       view = %{view | query: patched, tables: [%{table | query: patched}]}
 
       messages = V0_9_1.encode_surface(view, [], [])
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components = components_by_id(messages)
       refute Map.has_key?(components, "query_search_input")
@@ -253,7 +253,7 @@ defmodule AshA2ui.QueryEncoderTest do
       }
 
       assert [_, _, message] = encode([], query_state: state)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       # the carried state, adorned with the pagination sentinels derived
       # from it (no rows, one page: everything hidden)
@@ -297,7 +297,7 @@ defmodule AshA2ui.QueryEncoderTest do
       end
 
       messages = AshA2ui.Info.build_surface(Paginated, actor: nil)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       [_, _, data] = messages
       value = data["updateDataModel"]["value"]
@@ -328,7 +328,7 @@ defmodule AshA2ui.QueryEncoderTest do
           query_state: %{"search" => "needle", "page" => 1}
         )
 
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
       value = message["updateDataModel"]["value"]
 
       assert [%{"name" => "Zebra Needle"}] = value["records"]
@@ -345,7 +345,7 @@ defmodule AshA2ui.QueryEncoderTest do
           query_state: %{"sort" => %{"field" => "status", "dir" => "asc"}}
         )
 
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
       value = message["updateDataModel"]["value"]
 
       assert length(value["records"]) == 2

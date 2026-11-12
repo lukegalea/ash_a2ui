@@ -36,7 +36,7 @@ defmodule AshA2ui.Experience.ModeStateMachineTest do
     @tag ac: "A2UI-101/AC-6"
     test "initial surface is browse with hidden panel" do
       [create, components, data] = AshA2ui.Info.build_surface(Task)
-      Enum.each([create, components, data], &assert_valid_server_message/1)
+      Enum.each([create, components, data], &assert_valid_agent_message/1)
 
       %{"updateDataModel" => %{"value" => model}} = data
       ui = model["ui"]

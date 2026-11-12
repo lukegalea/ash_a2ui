@@ -77,7 +77,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
   # surfaces skip the basic schema check (as the lane-only board's do).
   defp surface_parts(ui, validate? \\ true) do
     messages = AshA2ui.Info.build_surface(ui, authorize?: false)
-    if validate?, do: Enum.each(messages, &assert_valid_server_message/1)
+    if validate?, do: Enum.each(messages, &assert_valid_agent_message/1)
 
     components =
       messages
@@ -297,7 +297,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
 
     # --- v1.0 (no query: totals from the row count) ---
     assert [message] = AshA2ui.Info.build_surface(SwimlaneBoardV1UI, authorize?: false)
-    assert_valid_server_message(message, :v1_0)
+    assert_valid_agent_message(message)
 
     create = message["createSurface"]
     v1 = Map.new(create["components"], &{&1["id"], &1})
@@ -350,7 +350,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
     message = envelope("invoke", %{"action" => "claim", "recordId" => card.id})
 
     assert {:ok, messages} = ActionHandler.handle(SwimlaneBoardUI, message, authorize?: false)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     assert Ash.get!(BoardTask, card.id, authorize?: false).status == :claimed
 
@@ -392,7 +392,7 @@ defmodule AshA2ui.Board.BoardSwimlanesTest do
         })
 
       assert {:ok, messages} = ActionHandler.handle(SwimlaneBoardUI, message, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       messages
     end
 

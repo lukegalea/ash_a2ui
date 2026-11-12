@@ -150,7 +150,7 @@ defmodule AshA2ui.V10ActionHandlerTest do
   end
 
   defp assert_all_valid(messages) do
-    Enum.each(messages, &assert_valid_server_message(&1, :v1_0))
+    Enum.each(messages, &assert_valid_agent_message/1)
     messages
   end
 
@@ -161,7 +161,7 @@ defmodule AshA2ui.V10ActionHandlerTest do
           action_id: "action-123"
         )
 
-      assert_valid_client_message(env, :v1_0)
+      assert_valid_renderer_message(env)
 
       assert {:ok, [response | rest]} = ActionHandler.handle(KitchenSinkV1UI, env)
       assert_all_valid([response | rest])

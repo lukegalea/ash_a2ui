@@ -309,7 +309,7 @@ defmodule AshA2ui.TransformerTest do
       assert length(messages) == 3
 
       for message <- messages do
-        SchemaHelper.assert_valid_server_message(message)
+        SchemaHelper.assert_valid_agent_message(message)
       end
     end
 

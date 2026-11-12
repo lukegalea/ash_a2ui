@@ -50,7 +50,7 @@ defmodule AshA2ui.TableDisplays.MatrixTest do
 
   defp parts(ui) do
     messages = AshA2ui.Info.build_surface(ui, authorize?: false)
-    Enum.each(messages, &assert_valid_server_message/1)
+    Enum.each(messages, &assert_valid_agent_message/1)
 
     components =
       messages |> Enum.find_value(& &1["updateComponents"]) |> Map.fetch!("components")
@@ -113,7 +113,7 @@ defmodule AshA2ui.TableDisplays.MatrixTest do
       seed()
 
       assert [message] = AshA2ui.Info.build_surface(ArmMatrixUI, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       grid = message["createSurface"]["dataModel"]["_matrix_results"]
       assert texts(grid["columns"]) == ["Case name", "Baseline", "Candidate", "Shadow"]
@@ -198,7 +198,7 @@ defmodule AshA2ui.TableDisplays.MatrixTest do
       }
 
       assert {:ok, messages} = ActionHandler.handle(MatrixUI, envelope, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       grid =
         Enum.find_value(messages, fn
@@ -337,7 +337,7 @@ defmodule AshA2ui.TableDisplays.MatrixTest do
                ResolvedView.resolve(surface.dsl_state).tables
 
       messages = Dynamic.build_surface(surface, authorize?: false)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
       value = Enum.find_value(messages, &get_in(&1, ["updateDataModel", "value"]))
       assert length(value["_matrix_results"]["rows"]) == 3
 

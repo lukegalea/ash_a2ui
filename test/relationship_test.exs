@@ -81,7 +81,7 @@ defmodule AshA2ui.RelationshipTest do
   describe "form select encoding" do
     test "the belongs_to form input is a ChoicePicker bound to /form/<field>" do
       messages = AshA2ui.Info.build_surface(Post)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components = components_by_id(messages)
 
@@ -98,7 +98,7 @@ defmodule AshA2ui.RelationshipTest do
       author_a = create_author!(%{name: "Al", email: "al@example.com"})
 
       messages = AshA2ui.Info.build_surface(Post)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       expected_options = [
         %{"label" => "Al", "value" => author_a.id},
@@ -118,7 +118,7 @@ defmodule AshA2ui.RelationshipTest do
       author = create_author!(%{name: "Solo", email: nil})
 
       message = AshA2ui.Info.build_data_model(Post)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert message["updateDataModel"]["value"]["options"] == %{
                "author_id" => [%{"label" => "Solo", "value" => author.id}]
@@ -148,7 +148,7 @@ defmodule AshA2ui.RelationshipTest do
       author = create_author!(%{name: "Label-less", email: nil})
 
       message = AshA2ui.Info.build_data_model(NoLabelUI)
-      assert_valid_server_message(message)
+      assert_valid_agent_message(message)
 
       assert [%{"label" => label, "value" => value}] =
                message["updateDataModel"]["value"]["options"]["author_id"]
@@ -279,9 +279,9 @@ defmodule AshA2ui.RelationshipTest do
           "values" => %{"title" => "Hello", "author_id" => author.id}
         })
 
-      assert_valid_client_message(env)
+      assert_valid_renderer_message(env)
       assert {:ok, messages} = ActionHandler.handle(Post, env)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert [post] = Ash.read!(Post, authorize?: false)
       assert post.author_id == author.id
@@ -308,7 +308,7 @@ defmodule AshA2ui.RelationshipTest do
       Ash.create!(Post, %{title: "Loaded", author_id: author.id}, authorize?: false)
 
       messages = AshA2ui.Info.build_surface(Post)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       components = components_by_id(messages)
 
@@ -337,7 +337,7 @@ defmodule AshA2ui.RelationshipTest do
         })
 
       assert {:ok, messages} = ActionHandler.handle(Post, env)
-      Enum.each(messages, &assert_valid_server_message/1)
+      Enum.each(messages, &assert_valid_agent_message/1)
 
       assert [%{"title" => "Via action", "author_email" => "eve@example.com"}] =
                value_at(messages, "/records")
