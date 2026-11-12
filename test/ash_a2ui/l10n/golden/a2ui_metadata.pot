@@ -723,11 +723,13 @@ msgid "Kitchen sink"
 msgstr ""
 
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:105
 #: test/support/word_report_ui.ex:23
 msgid "Length"
 msgstr ""
 
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:105
 #: test/support/word_report_ui.ex:23
 msgid "Lengths"
 msgstr ""
@@ -787,6 +789,7 @@ msgid "Medium"
 msgstr ""
 
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:105
 #: test/support/word_report_ui.ex:23
 msgid "Min length"
 msgstr ""
@@ -1288,6 +1291,10 @@ msgctxt "one_of:arm"
 msgid "Shadow"
 msgstr ""
 
+#: test/support/word_report_ui.ex:105
+msgid "Shortest word to list"
+msgstr ""
+
 #: test/support/article.ex:1
 msgid "Shout title"
 msgstr ""
@@ -1332,6 +1339,7 @@ msgstr ""
 #: test/support/review_item.ex:1
 #: test/support/submission.ex:1
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:105
 #: test/support/word_report_ui.ex:23
 msgid "State"
 msgstr ""
@@ -1644,6 +1652,7 @@ msgstr ""
 #: test/support/editable_words_ui.ex:1
 #: test/support/editable_words_ui.ex:26
 #: test/support/word_report_ui.ex:1
+#: test/support/word_report_ui.ex:105
 #: test/support/word_report_ui.ex:23
 #: test/support/word_report_ui.ex:51
 msgid "Word"

@@ -16,7 +16,12 @@ defmodule AshA2ui.LoadingTest do
     v09 = %ResolvedView{surface_id: "s2", spec_version: :v0_9_1}
 
     on = Loading.messages(v1, true)
-    assert Enum.all?(on, &(&1["version"] == "v1.0" and &1["updateDataModel"]["surfaceId"] == "s1"))
+
+    assert Enum.all?(
+             on,
+             &(&1["version"] == "v1.0" and &1["updateDataModel"]["surfaceId"] == "s1")
+           )
+
     assert writes(on) == %{"/ui/loading" => true, "/ui/loading_visible" => [%{"id" => "on"}]}
 
     off = Loading.messages(v09, false)

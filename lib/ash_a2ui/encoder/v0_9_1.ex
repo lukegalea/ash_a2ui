@@ -4327,6 +4327,12 @@ defmodule AshA2ui.Encoder.V0_9_1 do
           "label" => report_field_label(view, param),
           "value" => %{"path" => "#{report.path}/params/#{param}"}
         }
+        |> maybe_put(
+          "placeholder",
+          if(AshA2ui.Experience.admin?(view),
+            do: translate_declared(view.l10n, Keyword.get(report.param_placeholders, param))
+          )
+        )
       end)
 
     cells =

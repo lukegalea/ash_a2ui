@@ -34,6 +34,10 @@ Requires Elixir 1.20 or later.
 
 ### Features:
 
+- **`param_placeholders` on a `:report` component.** A placeholder per report
+  param (`param_placeholders search: "Search vendors"`), emitted as the param
+  TextField's `"placeholder"` under the admin catalog, as `search_placeholder`
+  is for a query's search box. Keys must be among the component's `params`.
 - **`/ui/loading` and `AshA2ui.Loading`.** A reserved flag that says a surface's
   rows are still being fetched, with `AshA2ui.Loading.messages/3` to set it. A
   `:report` component now carries a loading row (`report_<name>_loading`,

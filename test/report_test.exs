@@ -122,7 +122,9 @@ defmodule AshA2ui.ReportTest do
                "path" => "/ui/loading_visible"
              }
 
-      assert components["report_lengths_loading_item"]["children"] == ["report_lengths_loading_text"]
+      assert components["report_lengths_loading_item"]["children"] == [
+               "report_lengths_loading_text"
+             ]
 
       param = components["report_lengths_param_min_length"]
       assert param["component"] == "TextField"

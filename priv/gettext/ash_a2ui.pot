@@ -119,8 +119,8 @@ msgstr[1] ""
 msgid "Active"
 msgstr ""
 
-#: lib/ash_a2ui/encoder/v0_9_1.ex:4631
-#: lib/ash_a2ui/encoder/v0_9_1.ex:4657
+#: lib/ash_a2ui/encoder/v0_9_1.ex:4637
+#: lib/ash_a2ui/encoder/v0_9_1.ex:4663
 msgid "Add"
 msgstr ""
 
@@ -189,7 +189,7 @@ msgstr ""
 msgid "Executing"
 msgstr ""
 
-#: lib/ash_a2ui/encoder/v0_9_1.ex:4500
+#: lib/ash_a2ui/encoder/v0_9_1.ex:4506
 msgid "Export CSV"
 msgstr ""
 
@@ -211,7 +211,7 @@ msgstr ""
 msgid "Live: now"
 msgstr ""
 
-#: lib/ash_a2ui/encoder/v0_9_1.ex:4412
+#: lib/ash_a2ui/encoder/v0_9_1.ex:4418
 msgid "Loading"
 msgstr ""
 
@@ -254,7 +254,7 @@ msgstr ""
 msgid "Previous"
 msgstr ""
 
-#: lib/ash_a2ui/encoder/v0_9_1.ex:4678
+#: lib/ash_a2ui/encoder/v0_9_1.ex:4684
 msgid "Remove"
 msgstr ""
 
@@ -268,7 +268,7 @@ msgstr[1] ""
 msgid "Return to now"
 msgstr ""
 
-#: lib/ash_a2ui/encoder/v0_9_1.ex:4397
+#: lib/ash_a2ui/encoder/v0_9_1.ex:4403
 msgid "Run"
 msgstr ""
 
