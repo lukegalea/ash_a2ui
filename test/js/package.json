@@ -1,0 +1,9 @@
+{
+  "name": "ash_a2ui-js-tests",
+  "private": true,
+  "type": "module",
+  "description": "The @a2ui runtime the node tests drive the hook and catalogs against (mix js.test).",
+  "devDependencies": {
+    "@a2ui/web_core": "0.15.0"
+  }
+}
