@@ -1,27 +1,30 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ash-a2ui.dev/catalogs/admin/v1",
+  "$id": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1",
   "protocolVersion": "1.0",
   "title": "AshA2ui Admin Catalog v1",
   "description": "Semantic admin components for AshA2ui surfaces (see notes/2026-09-07-admin-catalog-contract.md): the page shell, collection, task panel and feedback components. An admin surface names this catalog as its catalogId; the basic inputs, buttons and pickers inside it carry the basic catalog's id as @catalogId. Selected with `config :ash_a2ui, :catalog, :admin_v1`. Dynamic properties are literals, {\"@path\": ...} bindings or function calls. The admin envelopes (row actions, row click, sort, pagination, calendar window) name an ash_a2ui action and its context; the renderer sends them as the ashAction function of the ash_a2ui catalog.",
-  "catalogId": "https://ash-a2ui.dev/catalogs/admin/v1",
+  "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1",
   "metadata": {
     "extensions": {
-      "version": "1.12.0",
-      "changelog": {
-        "1.12.0": "Additive: record pages. fieldDisplay gains optional badge, badgeTone and badgeHelp (bindings to the field's _badge_<field>, _badge_tone_<field> and _badge_help_<field> under its /detail/<context> path: the value drawn as a pill with that tone and one-line tooltip), note (a few words beside the label saying how the value came to be), emptyText (the muted words shown when the value is empty) and hideWhenEmpty (true: an empty value draws no row at all). dataGrid gains an optional layout (rows: list rows instead of a grid) and columns an optional placement (trailing or expand: where a list-rows renderer draws them). Renderers that ignore them draw the plain value and the grid. The catalogId is unchanged.",
-        "1.11.0": "Additive: the table's cells and sort. A badge column's badge gains an optional helpPath (row-relative, the _badge_help_<field> key: the pill's one-line tooltip, empty for none). dataGrid columns gain an optional caption ({path, text?}: a third line under the value and its subtitle, the text's {date} filled with the path's value formatted as a date and {value} with it as is; without text the line is the value) and sortFirst (desc when the header's first click sorts descending). The dataGrid's sort gains an optional reset: true, a header's third click then sends a null sort (the query's default order) instead of toggling back. Renderers that ignore them draw the pill without a tooltip, no third line, and toggle. The catalogId is unchanged.",
-        "1.10.0": "Additive: the filter bar and the table header. dataGrid columns gain optional help ({title, body}: header help opened from an info mark; body paragraphs separated by blank lines, a line `**Term** — text` a definition) and sortField (the field a sortable header sorts by when it is not the column's path); a column's detail gains an optional helpPath (row-relative, the _detail_help_<column> key: an info mark with a tooltip after the line). dataGrid columns also gain optional width (px) and moreNoun, more gains valuesPath (the row's list of all the values), and rowClick an optional width. emptyState gains optional title, icon (inbox | search | archive), clearAction ({label, action}) and clearVisible. pagination gains optional pageSizeOptions (the sizes offered) and pageSizeAction (the query envelope sent with the picked pageSize and page 1). The basic inputs this catalog replaces accept more keys: ChoicePicker hint (a footer under the options), counts (a binding to a value → count map), dynamicOptions (a binding to an option list) and options carrying parent (their group's value) or group: true (a group: picking it picks all its leaves; only leaf values are written); TextField placeholder. An empty statusBanner takes no layout space. Badge and icon tones gain pending and gray. The catalogId is unchanged.",
-        "1.9.0": "Additive: dataGrid rowClick gains optional labelPath and variantPath (row-relative: the row's _primary_label and _primary_variant keys) and inline. With inline the renderer also draws the row click as one button per row in a final column, its label and Button variant (default | primary | borderless) read from the row, dispatching the same envelope; the rowActions entry the row click mirrors is then left out. Without these the row click and rowActions are unchanged. The catalogId is unchanged.",
-        "1.8.0": "Additive: dataGrid columns gain optional subtitle ({path}: a second line under the value), icon ({path, labelPath, tonePath?}: a leading icon picked per row from a small generic vocabulary), more ({path}: a count; 2 or more adds a \"+N more\" tag) and detail ({path, datePath?, iconPath?, iconTonePath?}: a detail line under the value, {date} filled in by the renderer, after an optional icon). The fields they read from ride in the row and are not columns of their own. Renderers that ignore them draw the plain value. The catalogId is unchanged.",
-        "1.7.0": "Additive: sortable headers. dataGrid columns gain an optional sortable flag (the field is in the table query's sortable allowlist), and the dataGrid an optional sort: the binding to the current sort ({field, dir} or null) and the query envelope a header click dispatches with the new sort. The catalogId is unchanged.",
-        "1.6.0": "Additive: entityPage gains an optional headerVisible boolean. false leaves the page header (title and description) out, for a host page that already owns the heading; omitted means true. The title stays required. The catalogId is unchanged.",
-        "1.5.0": "Additive: calendarView gains an optional granularities list (the window sizes the user may switch between); the renderer offers a switch and dispatches windowAction with granularity added. The window state carries the size it shows. The catalogId is unchanged.",
-        "1.4.0": "Additive: the liveDiagram component (diagram entities): a mermaid diagram (static source) with markers bound by node id, and the node list a renderer without mermaid shows instead. The catalogId is unchanged.",
-        "1.3.0": "Additive: the calendarView component (display :calendar tables): the table's query window as a month or week grid, or one day, with the days that hold records marked, wrapping the table's dataGrid. The catalogId is unchanged.",
-        "1.2.0": "Additive: dataGrid rowActions entries gain an optional visiblePath (per-row visibility of visible_when actions) and an optional prompt (prompt_fields actions collect their values in a dialog over a grid child before the invoke). The catalogId is unchanged.",
-        "1.1.0": "Additive: dataGrid columns gain optional format/align/mono/badge/link and the grid an optional rowClick envelope; fieldDisplay gains an optional link binding; the openSurface client function. Renderers that read only columns[label, path] are unaffected; the catalogId is unchanged (no breaking change).",
-        "1.0.0": "The ten-component contract (notes/2026-09-07-admin-catalog-contract.md)."
+      "ash_a2ui": {
+        "version": "2.0.0",
+        "changelog": {
+          "2.0.0": "Breaking: the A2UI 1.0 wire (protocolVersion \"1.0\"). Bindings are {\"@path\": ...} and function calls {\"@call\": ...}; an admin surface names this catalog as its catalogId and its basic components carry the basic catalog's id as @catalogId; every envelope (row actions, row click, sort, pagination, calendar window) is sent as the ash_a2ui catalog's ashAction function. The catalogId moves to https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1, and this contract metadata moves under metadata.extensions.ash_a2ui. New: filterPicker, a query filter's picker (the ChoicePicker with hint, counts, dynamicOptions and grouped options). dataGrid columns' more declares textPath, captionPath and labelPath (the server-written tag text, list caption and accessible label).",
+          "1.12.0": "Additive: record pages. fieldDisplay gains optional badge, badgeTone and badgeHelp (bindings to the field's _badge_<field>, _badge_tone_<field> and _badge_help_<field> under its /detail/<context> path: the value drawn as a pill with that tone and one-line tooltip), note (a few words beside the label saying how the value came to be), emptyText (the muted words shown when the value is empty) and hideWhenEmpty (true: an empty value draws no row at all). dataGrid gains an optional layout (rows: list rows instead of a grid) and columns an optional placement (trailing or expand: where a list-rows renderer draws them). Renderers that ignore them draw the plain value and the grid. The catalogId is unchanged.",
+          "1.11.0": "Additive: the table's cells and sort. A badge column's badge gains an optional helpPath (row-relative, the _badge_help_<field> key: the pill's one-line tooltip, empty for none). dataGrid columns gain an optional caption ({path, text?}: a third line under the value and its subtitle, the text's {date} filled with the path's value formatted as a date and {value} with it as is; without text the line is the value) and sortFirst (desc when the header's first click sorts descending). The dataGrid's sort gains an optional reset: true, a header's third click then sends a null sort (the query's default order) instead of toggling back. Renderers that ignore them draw the pill without a tooltip, no third line, and toggle. The catalogId is unchanged.",
+          "1.10.0": "Additive: the filter bar and the table header. dataGrid columns gain optional help ({title, body}: header help opened from an info mark; body paragraphs separated by blank lines, a line `**Term** — text` a definition) and sortField (the field a sortable header sorts by when it is not the column's path); a column's detail gains an optional helpPath (row-relative, the _detail_help_<column> key: an info mark with a tooltip after the line). dataGrid columns also gain optional width (px) and moreNoun, more gains valuesPath (the row's list of all the values), and rowClick an optional width. emptyState gains optional title, icon (inbox | search | archive), clearAction ({label, action}) and clearVisible. pagination gains optional pageSizeOptions (the sizes offered) and pageSizeAction (the query envelope sent with the picked pageSize and page 1). The basic inputs this catalog replaces accept more keys: ChoicePicker hint (a footer under the options), counts (a binding to a value → count map), dynamicOptions (a binding to an option list) and options carrying parent (their group's value) or group: true (a group: picking it picks all its leaves; only leaf values are written); TextField placeholder. An empty statusBanner takes no layout space. Badge and icon tones gain pending and gray. The catalogId is unchanged.",
+          "1.9.0": "Additive: dataGrid rowClick gains optional labelPath and variantPath (row-relative: the row's _primary_label and _primary_variant keys) and inline. With inline the renderer also draws the row click as one button per row in a final column, its label and Button variant (default | primary | borderless) read from the row, dispatching the same envelope; the rowActions entry the row click mirrors is then left out. Without these the row click and rowActions are unchanged. The catalogId is unchanged.",
+          "1.8.0": "Additive: dataGrid columns gain optional subtitle ({path}: a second line under the value), icon ({path, labelPath, tonePath?}: a leading icon picked per row from a small generic vocabulary), more ({path}: a count; 2 or more adds a \"+N more\" tag) and detail ({path, datePath?, iconPath?, iconTonePath?}: a detail line under the value, {date} filled in by the renderer, after an optional icon). The fields they read from ride in the row and are not columns of their own. Renderers that ignore them draw the plain value. The catalogId is unchanged.",
+          "1.7.0": "Additive: sortable headers. dataGrid columns gain an optional sortable flag (the field is in the table query's sortable allowlist), and the dataGrid an optional sort: the binding to the current sort ({field, dir} or null) and the query envelope a header click dispatches with the new sort. The catalogId is unchanged.",
+          "1.6.0": "Additive: entityPage gains an optional headerVisible boolean. false leaves the page header (title and description) out, for a host page that already owns the heading; omitted means true. The title stays required. The catalogId is unchanged.",
+          "1.5.0": "Additive: calendarView gains an optional granularities list (the window sizes the user may switch between); the renderer offers a switch and dispatches windowAction with granularity added. The window state carries the size it shows. The catalogId is unchanged.",
+          "1.4.0": "Additive: the liveDiagram component (diagram entities): a mermaid diagram (static source) with markers bound by node id, and the node list a renderer without mermaid shows instead. The catalogId is unchanged.",
+          "1.3.0": "Additive: the calendarView component (display :calendar tables): the table's query window as a month or week grid, or one day, with the days that hold records marked, wrapping the table's dataGrid. The catalogId is unchanged.",
+          "1.2.0": "Additive: dataGrid rowActions entries gain an optional visiblePath (per-row visibility of visible_when actions) and an optional prompt (prompt_fields actions collect their values in a dialog over a grid child before the invoke). The catalogId is unchanged.",
+          "1.1.0": "Additive: dataGrid columns gain optional format/align/mono/badge/link and the grid an optional rowClick envelope; fieldDisplay gains an optional link binding; the openSurface client function. Renderers that read only columns[label, path] are unaffected; the catalogId is unchanged (no breaking change).",
+          "1.0.0": "The ten-component contract (notes/2026-09-07-admin-catalog-contract.md)."
+        }
       }
     }
   },
@@ -109,8 +112,14 @@
               },
               "more": {
                 "type": "object",
-                "description": "Optional (1.8): row-relative binding to how many values the cell's field has. When it is 2 or more the renderer adds a tag counting the rest (\"+N more\", N = count - 1). valuesPath (optional, 1.10) names the row's list of all the values (the _more_values_<column> key, strings), for a list of them.",
-                "properties": {"path": {"type": "string"}, "valuesPath": {"type": "string"}},
+                "description": "Optional (1.8): row-relative binding to how many values the cell's field has. When it is 2 or more the renderer adds a tag counting the rest (\"+N more\", N = count - 1). valuesPath (optional, 1.10) names the row's list of all the values (the _more_values_<column> key, strings), for a list of them. textPath, captionPath and labelPath (row-relative, optional) name the server-written words: the tag's text (the _more_text_<column> key, pluralized for the reader), the list's caption (_more_caption_<column>) and the tag's accessible label (_more_label_<column>).",
+                "properties": {
+                  "path": {"type": "string"},
+                  "valuesPath": {"type": "string"},
+                  "textPath": {"type": "string"},
+                  "captionPath": {"type": "string"},
+                  "labelPath": {"type": "string"}
+                },
                 "required": ["path"],
                 "additionalProperties": false
               },
@@ -535,6 +544,41 @@
         "weight": {"type": "number"}
       },
       "required": ["component", "source", "markers"]
+    },
+    "filterPicker": {
+      "type": "object",
+      "description": "A query filter's picker: the basic ChoicePicker plus what an admin filter carries. hint is a line of help under the picker; counts binds a value-to-count map (the filter's facet counts); dynamicOptions binds an option list from the query state (a path filter's options, shown after the static ones); an option may be a group (group: true) or a group's leaf (parent: the group's value). The value binds the query state's filter (a string list, or a scalar the renderer reads as a one-item list).",
+      "allOf": [
+        {"$ref": "common_types.json#/$defs/Checkable"},
+        {
+          "type": "object",
+          "properties": {
+            "component": {"const": "filterPicker"},
+            "label": {"$ref": "common_types.json#/$defs/DynamicString", "description": "The filter's label."},
+            "variant": {"type": "string", "enum": ["multipleSelection", "mutuallyExclusive"], "default": "mutuallyExclusive"},
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+                  "value": {"type": "string"},
+                  "parent": {"type": "string", "description": "The value of the group this option belongs to."},
+                  "group": {"type": "boolean", "description": "true for a group heading option."}
+                },
+                "required": ["label", "value"],
+                "additionalProperties": false
+              }
+            },
+            "value": {"$ref": "common_types.json#/$defs/DynamicStringList", "description": "The selected values (bound to /query/filters/<name>)."},
+            "hint": {"type": "string", "description": "A line of help shown under the picker."},
+            "counts": {"$ref": "common_types.json#/$defs/DataBinding", "description": "Binding to the filter's facet counts ({value: count})."},
+            "dynamicOptions": {"$ref": "common_types.json#/$defs/DataBinding", "description": "Binding to options read from the query state ([{label, value}])."},
+            "weight": {"type": "number"}
+          },
+          "required": ["component", "options", "value"]
+        }
+      ]
     }
   },
   "functions": {
@@ -571,7 +615,7 @@
       "additionalProperties": false
     },
     "anyComponent": {
-      "oneOf": [{"$ref": "#/components/entityPage"}, {"$ref": "#/components/dataGrid"}, {"$ref": "#/components/emptyState"}, {"$ref": "#/components/pagination"}, {"$ref": "#/components/recordPanel"}, {"$ref": "#/components/fieldDisplay"}, {"$ref": "#/components/formSection"}, {"$ref": "#/components/actionBar"}, {"$ref": "#/components/statusBanner"}, {"$ref": "#/components/confirmDialog"}, {"$ref": "#/components/calendarView"}, {"$ref": "#/components/liveDiagram"}]
+      "oneOf": [{"$ref": "#/components/entityPage"}, {"$ref": "#/components/dataGrid"}, {"$ref": "#/components/emptyState"}, {"$ref": "#/components/pagination"}, {"$ref": "#/components/recordPanel"}, {"$ref": "#/components/fieldDisplay"}, {"$ref": "#/components/formSection"}, {"$ref": "#/components/actionBar"}, {"$ref": "#/components/statusBanner"}, {"$ref": "#/components/confirmDialog"}, {"$ref": "#/components/calendarView"}, {"$ref": "#/components/liveDiagram"}, {"$ref": "#/components/filterPicker"}]
     },
     "anyFunction": {
       "oneOf": [{"$ref": "#/functions/openSurface"}]

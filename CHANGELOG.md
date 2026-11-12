@@ -63,6 +63,20 @@ changes is the wire format and the way a host wires the renderer.
 - The ash_a2ui catalog is a 1.0 catalog definition (`@call` keys,
   `allowedCallers`, `protocolVersion`); the admin catalog is declared the
   same way, and its surfaces mix basic components in with `@catalogId`.
+- The catalog ids move to the package's home:
+  `https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1` and
+  `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1`.
+- The admin catalog contract is 2.0.0 (`AshA2ui.Experience.admin_catalog_version/0`).
+  Its version and changelog live under `metadata.extensions.ash_a2ui`, the
+  prefixed extension key the 1.0 spec asks for. It declares `filterPicker`,
+  the query filter picker admin surfaces emit, and the `more` tag's
+  `textPath`, `captionPath` and `labelPath`; it includes everything 1.12 and
+  earlier added.
+- Component ids that could collide are renamed: a table cell's own `Row` is
+  `table_cell_<field>_row` (its caption and value keep
+  `table_cell_<field>_label` and `_value`), and a calendar's granularity
+  switch Buttons are `calendar_granularity_<size>_button`. Every surface's
+  ids are unique, which the 1.0 renderer enforces.
 - The vendored specification is now upstream `a2ui-project/a2ui` at a pinned
   commit (`priv/a2ui/v1_0/NOTES.md`), under `priv/a2ui/v1_0/json/` with the
   basic catalog at `catalogs/basic/v1/catalog.json`.
@@ -1056,7 +1070,7 @@ changes is the wire format and the way a host wires the renderer.
   or nested forms keep those subtrees byte-equal to the basic-v2
   composition — only the core upgrades. The catalog definition ships at
   `priv/a2ui/admin_v1/catalog.json` (catalog id
-  `https://ash-a2ui.dev/catalogs/admin/v1`); the Lit renderer registration
+  `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1` since 2.0); the Lit renderer registration
   ships separately as `priv/js/ash_admin_catalog.js`
   (`createAshAdminCatalog(deps)`). The action handler learns nothing new —
   zero new action names or dispatch clauses.

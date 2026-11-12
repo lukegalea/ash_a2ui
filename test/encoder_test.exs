@@ -25,7 +25,7 @@ defmodule AshA2ui.EncoderTest do
   alias AshA2ui.Test.{KitchenSink, Minimal}
 
   @catalog_id "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
-  @ash_catalog_id "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+  @ash_catalog_id "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
 
   # ASCII subset of UAX #31's ^[\p{XID_Start}_][\p{XID_Continue}]*$
   @identifier ~r/^[A-Za-z_][A-Za-z0-9_]*$/
@@ -201,14 +201,14 @@ defmodule AshA2ui.EncoderTest do
 
       assert row_children ==
                [
-                 "table_cell_active",
-                 "table_cell_count",
-                 "table_cell_price",
-                 "table_cell_birthday",
-                 "table_cell_scheduled_at",
-                 "table_cell_status",
-                 "table_cell_name",
-                 "table_cell_inserted_at"
+                 "table_cell_active_row",
+                 "table_cell_count_row",
+                 "table_cell_price_row",
+                 "table_cell_birthday_row",
+                 "table_cell_scheduled_at_row",
+                 "table_cell_status_row",
+                 "table_cell_name_row",
+                 "table_cell_inserted_at_row"
                ] ++
                  [
                    "row_action_update_button",
@@ -224,7 +224,7 @@ defmodule AshA2ui.EncoderTest do
       assert %{
                "component" => "Row",
                "children" => ["table_cell_name_label", "table_cell_name_value"]
-             } = components["table_cell_name"]
+             } = components["table_cell_name_row"]
 
       assert %{"component" => "Text", "text" => "Name", "variant" => "caption"} =
                components["table_cell_name_label"]

@@ -116,7 +116,7 @@
           "name": "query",
           "sourceComponentId": "query_apply_button"
         },
-        "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+        "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
       }
     },
     "child": "query_apply_text",
@@ -171,7 +171,7 @@
           "name": "query",
           "sourceComponentId": "query_prev_button"
         },
-        "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+        "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
       }
     },
     "child": "query_prev_text",
@@ -216,7 +216,7 @@
           "name": "query",
           "sourceComponentId": "query_next_button"
         },
-        "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+        "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
       }
     },
     "child": "query_next_text",
@@ -335,7 +335,7 @@
           "name": "context_select",
           "sourceComponentId": "row_context_button"
         },
-        "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+        "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
       }
     },
     "child": "row_context_text",

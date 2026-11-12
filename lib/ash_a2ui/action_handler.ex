@@ -520,7 +520,7 @@ defmodule AshA2ui.ActionHandler do
        when is_binary(name) and is_binary(surface_id) and is_binary(source) and
               is_binary(timestamp) and is_map(context) do
     cond do
-      not match?({:ok, _datetime, _offset}, DateTime.from_iso8601(timestamp)) ->
+      not rfc3339?(timestamp) ->
         {:invalid, "action timestamp is not an RFC 3339 date-time"}
 
       not optional?(body, "userMessage", &is_binary/1) ->
@@ -538,6 +538,11 @@ defmodule AshA2ui.ActionHandler do
     do:
       {:invalid,
        "action needs a string name, surfaceId, sourceComponentId and timestamp, and a context object"}
+
+  # RFC 3339 allows a lowercase "t" separator and "z" zone (section 5.6);
+  # DateTime.from_iso8601/1 takes only the uppercase ones.
+  defp rfc3339?(timestamp),
+    do: match?({:ok, _datetime, _offset}, DateTime.from_iso8601(String.upcase(timestamp)))
 
   defp action_metadata?(metadata) when is_map(metadata),
     do:

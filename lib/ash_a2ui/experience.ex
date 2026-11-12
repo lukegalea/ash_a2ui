@@ -81,7 +81,7 @@ defmodule AshA2ui.Experience do
   @typedoc "The record task panel modes (`:hidden` for the closed state)."
   @type mode :: :create | :view | :edit | :hidden
 
-  @admin_catalog_id "https://ash-a2ui.dev/catalogs/admin/v1"
+  @admin_catalog_id "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1"
   @feedback_kinds ["", "pending", "success", "warning", "error"]
 
   @doc """
@@ -155,9 +155,11 @@ defmodule AshA2ui.Experience do
   def admin_catalog_id, do: @admin_catalog_id
 
   @doc """
-  The admin catalog contract version (`metadata.extensions.version` in
-  `priv/a2ui/admin_v1/catalog.json`). Minor versions are additive within the
-  unchanged `admin_catalog_id/0` — 1.1 added the column presentation hints
+  The admin catalog contract version (`metadata.extensions.ash_a2ui.version`
+  in `priv/a2ui/admin_v1/catalog.json`). 2.0 is the A2UI 1.0 wire: the new
+  `admin_catalog_id/0`, `@path`/`@call` bindings, envelopes sent as
+  `ashAction`, and the `filterPicker` component. Minor versions are additive
+  within one catalog id — 1.1 added the column presentation hints
   (format/align/mono/badge/link), `rowClick`, FieldDisplay `link` and the
   `openSurface` client function; 1.2 added the `rowActions` entries'
   `visiblePath` (per-row `visible_when`) and `prompt` (prompt dialogs);
@@ -166,7 +168,7 @@ defmodule AshA2ui.Experience do
   pagination page sizes and the extended ChoicePicker/TextField keys.
   """
   @spec admin_catalog_version() :: String.t()
-  def admin_catalog_version, do: "1.12.0"
+  def admin_catalog_version, do: "2.0.0"
 
   @doc """
   The zero-or-one visibility sentinel value: `[]` (hidden) or a one-item

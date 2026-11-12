@@ -19,7 +19,7 @@ defmodule AshA2ui.Encoder do
 
       "action": {"functionCall": {
         "@call": "ashAction",
-        "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1",
+        "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
         "args": {"name": "invoke", "sourceComponentId": "row_action_archive_button",
                  "context": {"action": "archive", "recordId": {"@path": "id"}}}
       }}
@@ -66,7 +66,7 @@ defmodule AshA2ui.Encoder do
     * `records_list` — `List` whose children are a template
       `{"componentId": "record_row", "path": "/records"}`; `record_row` is a
       `Card` wrapping `record_row_content`, a `Row` of per-field labeled
-      cells — each `table_cell_<field>` is a `Row` of a caption `Text`
+      cells — each `table_cell_<field>_row` is a `Row` of a caption `Text`
       (`table_cell_<field>_label`, the humanized field name) and a value
       `Text` (`table_cell_<field>_value`, bound to the template-relative
       path `<field>`, `format: :date` rendered through `formatDate`; with
@@ -271,7 +271,7 @@ defmodule AshA2ui.Encoder do
 
   @version "1.0"
   @basic_catalog_id "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
-  @ash_catalog_id "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+  @ash_catalog_id "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
 
   # The admin catalog's own components (priv/a2ui/admin_v1/catalog.json).
   # Every other component the encoder emits is a basic-catalog component.
@@ -820,9 +820,9 @@ defmodule AshA2ui.Encoder do
   # --- component tree ---
 
   # Multi-table id scheme: single-table surfaces keep the frozen unsuffixed
-  # ids ("records_list", "table_cell_<field>", "query_apply_button", ...);
+  # ids ("records_list", "table_cell_<field>_row", "query_apply_button", ...);
   # multi-table surfaces infix the table component name right after the id's
-  # leading noun ("records_list_<name>", "table_cell_<name>_<field>",
+  # leading noun ("records_list_<name>", "table_cell_<name>_<field>_row",
   # "query_<name>_apply_button", ...) — see the sfx/1-using call sites.
   defp components(view, options) do
     view = put_prompt_options(view, options)
@@ -2448,11 +2448,12 @@ defmodule AshA2ui.Encoder do
   end
 
   # One Button per window size the calendar may switch to (none without a
-  # switch).
+  # switch). The ids carry "granularity" so the Day switch never meets the
+  # per-day template Button (`<base>_day_button`).
   defp granularity_button_ids(base, table) do
     case AshA2ui.Calendar.switchable(table.calendar) do
       [_only] -> []
-      sizes -> Enum.map(sizes, &"#{base}_#{&1}_button")
+      sizes -> Enum.map(sizes, &"#{base}_granularity_#{&1}_button")
     end
   end
 
@@ -2464,7 +2465,7 @@ defmodule AshA2ui.Encoder do
       sizes ->
         Enum.flat_map(sizes, fn size ->
           calendar_button(
-            "#{base}_#{size}",
+            "#{base}_granularity_#{size}",
             granularity_label(view, size),
             table,
             %{"granularity" => to_string(size)},
@@ -3209,7 +3210,7 @@ defmodule AshA2ui.Encoder do
   # at record_row, so this stays invisible to the data model and actions.
   defp flat_row_components(view, table, action_ids, sfx) do
     fields = table.component.fields
-    cell_ids = Enum.map(fields, &"table_cell#{sfx}_#{&1}")
+    cell_ids = Enum.map(fields, &cell_id(&1, sfx))
 
     card = %{
       "id" => "record_row#{sfx}",
@@ -3429,7 +3430,7 @@ defmodule AshA2ui.Encoder do
       editable_cell(view, table, field_name, sfx)
     else
       field = view.fields[field_name]
-      base = "table_cell#{sfx}_#{field_name}"
+      base = cell_base(field_name, sfx)
 
       {value_id, value_components} =
         linked_value(
@@ -3441,7 +3442,7 @@ defmodule AshA2ui.Encoder do
 
       [
         %{
-          "id" => base,
+          "id" => cell_id(field_name, sfx),
           "component" => "Row",
           "children" => ["#{base}_label", value_id]
         },
@@ -3455,6 +3456,14 @@ defmodule AshA2ui.Encoder do
       ]
     end
   end
+
+  # A cell's component ids: `table_cell<sfx>_<field>` followed by the part's
+  # role (`_row` for the cell's own Row, `_label`, `_value`, `_input`, ...).
+  # Every id ends in a role and no role ends another, so two fields can
+  # never share an id (`status` and `status_label` give
+  # `table_cell_status_label` and `table_cell_status_label_row`).
+  defp cell_base(field_name, sfx), do: "table_cell#{sfx}_#{field_name}"
+  defp cell_id(field_name, sfx), do: cell_base(field_name, sfx) <> "_row"
 
   # A to-one reference link in the basic catalog: the value Text becomes
   # the child of a borderless Button (`<value id>_link`, any layout weight
@@ -3509,16 +3518,15 @@ defmodule AshA2ui.Encoder do
   # committed — a Save Button dispatching `edit_cell` with the row's id and
   # this field's current value, and an error Text bound to the row's
   # reserved `_error_<field>` mirror (written by the handler when the
-  # commit's validation fails; empty otherwise). The Save button's
-  # ashAction call (answered by agentFunctionResponse) drives per-cell pending→settled
-  # feedback.
+  # commit's validation fails; empty otherwise). The Save's outcome is the
+  # surface's /ui/feedback, like every other write.
   defp editable_cell(view, table, field_name, sfx) do
     field = view.fields[field_name]
-    base = "table_cell#{sfx}_#{field_name}"
+    base = cell_base(field_name, sfx)
 
     [
       %{
-        "id" => base,
+        "id" => cell_id(field_name, sfx),
         "component" => "Row",
         "align" => "center",
         "children" => ["#{base}_input", "#{base}_save_button", "#{base}_error"]

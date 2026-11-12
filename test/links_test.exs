@@ -435,7 +435,7 @@ defmodule AshA2ui.LinksTest do
 
       assert_link_button(comps, "table_cell_person_name_value", "person_name", "")
 
-      assert comps["table_cell_person_name"]["children"] == [
+      assert comps["table_cell_person_name_row"]["children"] == [
                "table_cell_person_name_label",
                "table_cell_person_name_value_link"
              ]
@@ -588,7 +588,7 @@ defmodule AshA2ui.LinksTest do
       end
     end
 
-    test "an accepted ashAction call settles idle and answers last", %{ada: ada} do
+    test "an accepted ashAction call leaves the feedback alone and answers", %{ada: ada} do
       message =
         Messages.call(
           "open_surface",
@@ -601,12 +601,9 @@ defmodule AshA2ui.LinksTest do
       assert {:ok, messages} = ActionHandler.handle(NotesUI, message)
       assert_valid_agent_messages(messages)
 
-      assert [
-               %{"updateDataModel" => %{"path" => "/ui/feedback", "value" => idle}},
-               %{"agentFunctionResponse" => %{"functionCallId" => "a1", "value" => idle}}
-             ] = messages
-
-      assert %{"kind" => "", "functionCallId" => "a1"} = idle
+      # open_surface is quiet: no feedback write, an empty value.
+      assert [%{"agentFunctionResponse" => %{"functionCallId" => "a1", "value" => %{}}}] =
+               messages
     end
   end
 

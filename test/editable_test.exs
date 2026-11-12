@@ -87,7 +87,7 @@ defmodule AshA2ui.EditableTest do
     test "an editable cell is a TextField + Save button + error mirror", %{
       components: components
     } do
-      assert components["table_cell_replacement"]["children"] == [
+      assert components["table_cell_replacement_row"]["children"] == [
                "table_cell_replacement_input",
                "table_cell_replacement_save_button",
                "table_cell_replacement_error"
@@ -117,7 +117,7 @@ defmodule AshA2ui.EditableTest do
     end
 
     test "non-editable columns keep the plain label/value cell", %{components: components} do
-      assert components["table_cell_word"]["children"] == [
+      assert components["table_cell_word_row"]["children"] == [
                "table_cell_word_label",
                "table_cell_word_value"
              ]

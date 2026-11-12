@@ -177,13 +177,13 @@ defmodule AshA2ui.RelatedTablesTest do
       end
 
       assert comps["record_row_their_notes_content"]["children"] == [
-               "table_cell_their_notes_title",
-               "table_cell_their_notes_status",
-               "table_cell_their_notes_amount"
+               "table_cell_their_notes_title_row",
+               "table_cell_their_notes_status_row",
+               "table_cell_their_notes_amount_row"
              ]
 
       assert comps["record_row_participations_content"]["children"] == [
-               "table_cell_participations_note_title"
+               "table_cell_participations_note_title_row"
              ]
 
       # One create label in the whole tree, never repeated per table.

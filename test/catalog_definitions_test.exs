@@ -25,6 +25,18 @@ defmodule AshA2ui.CatalogDefinitionsTest do
       assert catalog["$id"] == catalog["catalogId"]
     end
 
+    # a2ui_protocol.md, "Extensions": a third-party extension key MUST carry
+    # an organization or product prefix separated by an underscore, and the
+    # a2ui_ prefix is reserved for official extensions.
+    test "#{path} prefixes its metadata extensions" do
+      extensions = get_in(read(unquote(path)), ["metadata", "extensions"]) || %{}
+
+      for key <- Map.keys(extensions) do
+        assert key =~ ~r/\A[^_]+_./u, "extension #{inspect(key)} has no prefix"
+        refute String.starts_with?(key, "a2ui_"), "extension #{inspect(key)} is reserved"
+      end
+    end
+
     test "#{path} names functions with @call and leaves the envelope to ComponentCommon" do
       catalog = read(unquote(path))
 

@@ -63,7 +63,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       assert components["record_row_body"]["children"] ==
                ["record_row_header", "record_row_meta_row_0"]
 
-      refute Map.has_key?(components, "table_cell_name")
+      refute Map.has_key?(components, "table_cell_name_row")
     end
 
     test "the header row holds the title and the badge + actions on the right", %{
@@ -378,7 +378,7 @@ defmodule AshA2ui.Wave6EncoderTest do
       # the flat baseline: Card -> record_row_content Row of labeled cells
       assert components["record_row"]["child"] == "record_row_content"
       assert components["record_row_content"]["component"] == "Row"
-      assert Map.has_key?(components, "table_cell_name")
+      assert Map.has_key?(components, "table_cell_name_row")
       refute Map.has_key?(components, "record_row_body")
 
       assert Enum.take(components["form_fields"]["children"], 2) ==

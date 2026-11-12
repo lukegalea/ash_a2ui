@@ -146,8 +146,8 @@ defmodule AshA2ui.MultiTableTest do
              }
 
       assert components["record_row_new_items_content"]["children"] == [
-               "table_cell_new_items_name",
-               "table_cell_new_items_count",
+               "table_cell_new_items_name_row",
+               "table_cell_new_items_count_row",
                "row_action_new_items_approve_button",
                "row_action_new_items_destroy_button",
                "view_new_items_button",

@@ -99,7 +99,8 @@
  * it back in the form it came in through `dispatchActionSpec`. Bindings are
  * `{"@path": ...}`.
  *
- * Verified against @a2ui/lit + @a2ui/web_core 0.15.0, where the basic
+ * Written against @a2ui/lit + @a2ui/web_core 0.15.0 (see the hook's note
+ * on the spec envelope keys that release refuses), where the basic
  * elements render into Light DOM and A2uiLitElement scopes `static styles`
  * to the tag: a Catalog takes `{...ComponentApi, tagName, element}` entries
  * (`retagged`, below); the renderer resolves `createSurface.catalogId` by
@@ -1155,7 +1156,7 @@ function defineAnatomyElements({lit, basicCatalog}) {
         /(^|_)row_action_.*_button$/.test(id) ||
         id.endsWith("_prev_button") ||
         id.endsWith("_next_button") ||
-        /^calendar(_.+)?_(today|all|day)_button$/.test(id)
+        (/^calendar(_.+)?_(today|all|day)_button$/.test(id) && !id.includes("_granularity_"))
       );
     }
   }

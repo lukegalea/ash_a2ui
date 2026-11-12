@@ -17,7 +17,7 @@ defmodule AshA2ui.Export do
           "functionCallId": "fc_…",
           "callFunction": {
             "@call": "downloadFile",
-            "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1",
+            "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
             "args": {
               "filename": "misspellings.csv",
               "mimeType": "text/csv",

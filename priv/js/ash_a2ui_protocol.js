@@ -19,7 +19,7 @@
 export const PROTOCOL_VERSION = "1.0";
 
 /** The id of the ash_a2ui catalog (`AshA2ui.Encoder.ash_catalog_id/0`). */
-export const ASH_A2UI_CATALOG_ID = "https://ash-a2ui.dev/catalogs/ash_a2ui/v1";
+export const ASH_A2UI_CATALOG_ID = "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1";
 
 /** The data-model path of the one feedback map every surface carries. */
 export const FEEDBACK_PATH = "/ui/feedback";
@@ -32,11 +32,11 @@ export const FEEDBACK_PATH = "/ui/feedback";
  */
 export const ASH_A2UI_CATALOG = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://ash-a2ui.dev/catalogs/ash_a2ui/v1",
+  $id: "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
   protocolVersion: "1.0",
   title: "AshA2ui Function Catalog",
   description: "The functions an AshA2ui agent and renderer share beside the basic catalog: ashAction, which a renderer calls on the agent for every server-handled interaction, and downloadFile, which the agent calls on the renderer to deliver an export. It declares no components. The shipped LiveView hook (priv/js/ash_a2ui_hook.js) registers the implementations.",
-  catalogId: "https://ash-a2ui.dev/catalogs/ash_a2ui/v1",
+  catalogId: "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1",
   components: {},
   functions: {
     ashAction: {

@@ -268,10 +268,10 @@ defmodule AshA2ui.Wave4ReferralTest do
       # No View/Edit controls: the Referral surface declares no :form, so
       # there is no task panel to open.
       assert components["record_row_content"]["children"] == [
-               "table_cell_code",
-               "table_cell_status",
-               "table_cell_status_label",
-               "table_cell_contact_email",
+               "table_cell_code_row",
+               "table_cell_status_row",
+               "table_cell_status_label_row",
+               "table_cell_contact_email_row",
                "row_action_approve_slot",
                "row_action_decline_slot",
                "row_action_soft_delete_button"

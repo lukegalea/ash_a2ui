@@ -4,7 +4,7 @@
  *
  * `createAshAdminCatalog(deps)` builds a `@a2ui/web_core` Catalog
  * registered under the admin catalog id
- * (`https://ash-a2ui.dev/catalogs/admin/v1`) so a surface whose
+ * (`https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1`) so a surface whose
  * `createSurface.catalogId` matches resolves these components. The
  * renderer resolves a surface's catalog by exact id and renders every
  * component type with its catalog entry's element. The admin catalog is a
@@ -90,8 +90,10 @@
  * ## Contract with the host bundle
  *
  * Same discipline as `ash_a2ui_catalog.js`: the host passes the single
- * `lit` / `@a2ui/lit` instance in. Verified against @a2ui/lit +
- * @a2ui/web_core 0.15.0 / lit 3.x.
+ * `lit` / `@a2ui/lit` instance in. Written against @a2ui/lit +
+ * @a2ui/web_core 0.15.0 / lit 3.x; an admin surface mixes catalogs through
+ * `@catalogId`, which that release refuses (see the hook's note), so it
+ * renders on the first web_core release after 0.15.0.
  *
  * ## Schema provenance
  *
@@ -161,10 +163,10 @@ import {
 } from "@a2ui/web_core/v1_0";
 
 /** The admin catalog id a surface must declare to resolve here. */
-const ADMIN_CATALOG_ID = "https://ash-a2ui.dev/catalogs/admin/v1";
+const ADMIN_CATALOG_ID = "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1";
 
-/** The admin catalog contract version (additive within the v1 id). */
-export const ADMIN_CATALOG_VERSION = "1.12.0";
+/** The admin catalog contract version (minor versions are additive). */
+export const ADMIN_CATALOG_VERSION = "2.0.0";
 
 /**
  * The DOM event a reference-link activation raises when the host passed no
@@ -224,6 +226,7 @@ const TAGS = {
   confirmDialog: "ash-admin-confirm-dialog",
   calendarView: "ash-admin-calendar-view",
   liveDiagram: "ash-admin-live-diagram",
+  filterPicker: "ash-admin-filter-picker",
 };
 
 /** Basic input kinds this catalog replaces with a11y-hardened elements. */
@@ -275,8 +278,12 @@ export function createAshAdminCatalog(deps) {
   }
 
   const schemas = buildSchemas(basicCatalog);
+  // filterPicker extends the basic ChoicePicker's schema, so it exists only
+  // when the basic catalog has one to extend.
   const adminApis = Object.fromEntries(
-    Object.keys(TAGS).map((kind) => [kind, {name: kind, schema: schemas[kind], tagName: TAGS[kind]}]),
+    Object.keys(TAGS)
+      .filter((kind) => schemas[kind])
+      .map((kind) => [kind, {name: kind, schema: schemas[kind], tagName: TAGS[kind]}]),
   );
 
   defineAdminElements(deps, {adminApis, inputSchemas: schemas.inputs});
@@ -410,6 +417,10 @@ export function buildSchemas(basicCatalog = null) {
 
   return {
     inputs,
+    // A query filter's picker: the extended ChoicePicker under its own name
+    // (two catalogs declaring one name would make a mixed surface
+    // ambiguous).
+    filterPicker: inputs.ChoicePicker,
     entityPage: EmptyObject.extend({
       title: DynamicStringSchema,
       description: DynamicStringSchema.nullable().optional(),
@@ -1798,6 +1809,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
           rowText(column.more?.captionPath) ||
           (Array.isArray(moreValues) ? `${moreValues.length} ${str(column.moreNoun) || "values"}` : "");
         const moreTitle = Array.isArray(moreValues) ? `${moreCaption}: ${moreValues.join(", ")}` : "";
+        const moreLabel = rowText(column.more?.labelPath);
         const subtitle = at(column.subtitle);
         const detail = column.detail
           ? detailText(at(column.detail), column.detail.datePath ? getByPath(row, column.detail.datePath) : null)
@@ -1847,7 +1859,11 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
               : nothing}
             <span>${value}</span>
             ${more > 0
-              ? html`<span class="am-badge" data-tone="neutral" title=${moreTitle || nothing}
+              ? html`<span
+                  class="am-badge"
+                  data-tone="neutral"
+                  title=${moreTitle || nothing}
+                  aria-label=${moreLabel || nothing}
                   >${moreText}</span
                 >`
               : nothing}
@@ -4891,6 +4907,17 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
     }
 
     customElements.define(tag, AshAdminChoicePicker);
+
+    // The admin filterPicker draws exactly like the choicepicker, bound to
+    // its own Api (the same extended schema under the filterPicker name).
+    if (adminApis.filterPicker && !customElements.get(TAGS.filterPicker)) {
+      class AshAdminFilterPicker extends AshAdminChoicePicker {
+        createController() {
+          return new A2uiController(this, adminApis.filterPicker);
+        }
+      }
+      customElements.define(TAGS.filterPicker, AshAdminFilterPicker);
+    }
   }
 
   function defineDateTimeInput() {

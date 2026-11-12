@@ -176,18 +176,19 @@ defmodule AshA2ui.Calendar.CalendarGranularityTest do
     by_id = SwitchUI |> AshA2ui.Info.build_surface(authorize?: false) |> components_by_id()
 
     assert Enum.take(by_id["calendar_nav"]["children"], -3) ==
-             ~w(calendar_month_button calendar_week_button calendar_day_button)
+             ~w(calendar_granularity_month_button calendar_granularity_week_button
+                calendar_granularity_day_button)
 
-    assert by_id["calendar_week_button"]["action"]["functionCall"]["args"]["context"][
+    assert by_id["calendar_granularity_week_button"]["action"]["functionCall"]["args"]["context"][
              "granularity"
            ] == "week"
 
-    assert by_id["calendar_week_text"]["text"] == "Week"
+    assert by_id["calendar_granularity_week_text"]["text"] == "Week"
 
     # A calendar without a switch has no size Buttons.
     plain = MonthUI |> AshA2ui.Info.build_surface(authorize?: false) |> components_by_id()
     assert Map.has_key?(plain, "calendar_nav")
-    refute Map.has_key?(plain, "calendar_month_button")
+    refute Map.has_key?(plain, "calendar_granularity_month_button")
 
     Application.put_env(:ash_a2ui, :catalog, :admin_v1)
     admin = SwitchUI |> AshA2ui.Info.build_surface(authorize?: false) |> components_by_id()
