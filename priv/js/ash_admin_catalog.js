@@ -471,11 +471,16 @@ export function buildSchemas(basicCatalog = null) {
           sortFirst: EnumOf(["desc"]).optional(),
           // 1.12: where a list-rows renderer draws the column (a row
           // layout's trailing or expand fields).
-          placement: EnumOf(["trailing", "expand"]).optional(),
+          // 1.14: group / groupSubtitle head a run of rows sharing the value.
+          placement: EnumOf(["trailing", "expand", "group", "groupSubtitle"]).optional(),
+          // 1.14: the field's empty_text, for a list-rows renderer.
+          emptyText: Str.optional(),
         }),
       ),
       // 1.12: "rows" asks for list rows instead of a grid (display :rows).
       layout: EnumOf(["rows"]).optional(),
+      // 1.14: the icon name for a list-rows renderer's group headers.
+      groupIcon: Str.optional(),
       // Row arrays / a "/rows" binding / a function call — DynamicValue's
       // union covers the literal array, the {path} binding and the
       // {call} envelope, so the whole prop classifies DYNAMIC like the

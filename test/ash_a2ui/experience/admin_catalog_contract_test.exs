@@ -109,6 +109,28 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     assert Map.has_key?(changelog(catalog), "1.3.0")
   end
 
+  test "catalog 1.14 is additive: grouped list rows" do
+    catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
+
+    assert changelog(catalog)["1.14.0"] =~ "grouped list rows"
+    assert changelog(catalog)["2.0.0"] =~ "1.14"
+
+    grid = catalog["components"]["dataGrid"]["properties"]
+    assert grid["groupIcon"]["type"] == "string"
+    assert grid["columns"]["items"]["properties"]["emptyText"]["type"] == "string"
+
+    assert grid["columns"]["items"]["properties"]["placement"]["enum"] == [
+             "trailing",
+             "expand",
+             "group",
+             "groupSubtitle"
+           ]
+
+    source = File.read!(@renderer_asset_path)
+    assert source =~ "groupIcon: Str.optional()"
+    assert source =~ ~s{placement: EnumOf(["trailing", "expand", "group", "groupSubtitle"])}
+  end
+
   test "catalog 1.13 is additive: plain links" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
@@ -136,10 +158,8 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     grid = catalog["components"]["dataGrid"]["properties"]
     assert grid["layout"]["enum"] == ["rows"]
 
-    assert grid["columns"]["items"]["properties"]["placement"]["enum"] == [
-             "trailing",
-             "expand"
-           ]
+    assert ["trailing", "expand" | _later] =
+             grid["columns"]["items"]["properties"]["placement"]["enum"]
   end
 
   test "catalog 2.0 is the A2UI 1.0 wire: filterPicker, the more tag's words" do

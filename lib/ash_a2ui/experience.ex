@@ -170,8 +170,10 @@ defmodule AshA2ui.Experience do
   1.7 added sortable headers (column `sortable`, the dataGrid's `sort`);
   1.10 added column `help` and `sortField`, the detail line's `helpPath`,
   pagination page sizes and the extended ChoicePicker/TextField keys;
-  1.13 added plain links (`{href, label}` with no surface). 2.0 includes
-  every 1.x addition.
+  1.13 added plain links (`{href, label}` with no surface); 1.14 added
+  grouped list rows (column placements `group`/`groupSubtitle`, the
+  dataGrid's `groupIcon`, column `emptyText`). 2.0 includes every 1.x
+  addition.
   """
   @spec admin_catalog_version() :: String.t()
   def admin_catalog_version, do: "2.0.0"
