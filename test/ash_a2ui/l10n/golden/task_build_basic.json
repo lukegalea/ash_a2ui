@@ -68,7 +68,7 @@
                 "name": "query",
                 "sourceComponentId": "query_apply_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_apply_text",
@@ -120,7 +120,7 @@
                 "name": "query",
                 "sourceComponentId": "query_prev_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_prev_text",
@@ -162,7 +162,7 @@
                 "name": "query",
                 "sourceComponentId": "query_next_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_next_text",
@@ -183,7 +183,7 @@
                 "name": "start_create",
                 "sourceComponentId": "create_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "create_text",
@@ -203,7 +203,7 @@
         },
         {
           "children": [
-            "table_cell_name",
+            "table_cell_name_row",
             "row_action_destroy_button",
             "view_button",
             "edit_button"
@@ -217,7 +217,7 @@
             "table_cell_name_value"
           ],
           "component": "Row",
-          "id": "table_cell_name"
+          "id": "table_cell_name_row"
         },
         {
           "component": "Text",
@@ -250,7 +250,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_destroy_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_destroy_text",
@@ -276,7 +276,7 @@
                 "name": "view_record",
                 "sourceComponentId": "view_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "view_button_text",
@@ -302,7 +302,7 @@
                 "name": "start_edit",
                 "sourceComponentId": "edit_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "edit_button_text",
@@ -470,7 +470,7 @@
                 "name": "submit_form",
                 "sourceComponentId": "form_submit_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "form_submit_text",
@@ -494,7 +494,7 @@
                 "name": "cancel_record_task",
                 "sourceComponentId": "form_cancel_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "form_cancel_text",
@@ -576,6 +576,10 @@
             "message": "",
             "result": {},
             "resultText": ""
+          },
+          "feedback_text": {
+            "pending": "Working…",
+            "slow": "This is taking longer than usual. Still working…"
           },
           "intent": "browse",
           "panel": {

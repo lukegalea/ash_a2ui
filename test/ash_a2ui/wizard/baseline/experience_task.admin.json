@@ -1,7 +1,7 @@
 [
   {
     "createSurface": {
-      "catalogId": "https://ash-a2ui.dev/catalogs/admin/v1",
+      "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v1",
       "components": [
         {
           "children": [
@@ -57,7 +57,7 @@
                 "name": "query",
                 "sourceComponentId": "query_apply_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_apply_text",
@@ -80,7 +80,7 @@
                 "name": "start_create",
                 "sourceComponentId": "create_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "create_text",
@@ -287,7 +287,7 @@
                 "name": "submit_form",
                 "sourceComponentId": "action_bar"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "busy": false,
@@ -310,7 +310,7 @@
                 "name": "cancel_record_task",
                 "sourceComponentId": "form_cancel_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "form_cancel_text",
@@ -388,6 +388,10 @@
             "message": "",
             "result": {},
             "resultText": ""
+          },
+          "feedback_text": {
+            "pending": "Working…",
+            "slow": "This is taking longer than usual. Still working…"
           },
           "intent": "browse",
           "panel": {

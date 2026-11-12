@@ -251,7 +251,7 @@ written whole, and `createSurface.dataModel` starts it idle:
 |---|---|
 | `kind` | `"success"`, `"warning"`, `"error"`, `"pending"` (written by the hook while a call is in flight), or `""` (idle) |
 | `message` | Display-ready text |
-| `code` | `""` on success and idle, otherwise the error code (`VALIDATION_FAILED`, `FORBIDDEN`, `ACTION_FAILED`, `TIMEOUT`, ...) |
+| `code` | `""` on success and idle, otherwise the error code (`VALIDATION_FAILED`, `FORBIDDEN`, `ACTION_FAILED`, ...); `"TIMEOUT"` on a pending map the hook rewrote because the call has gone unanswered past its watchdog |
 | `functionCallId` | The call this outcome answers, `""` for a plain `action` event |
 | `result` | The serialized map a map-returning generic action returned (`{}` otherwise) |
 | `resultText` | The same result as display-ready text: one `Humanized key: value` line per key, sorted by key (`""` otherwise) |
@@ -268,9 +268,14 @@ failed." and is only logged). Field errors on fields the action shows no
 input for are named in
 it as "<Label>: <message>" (see
 [Actions and Authorization](actions-and-authorization.md)). Task open/cancel and context
-select/clear reset it to idle. Actions that only fetch
-data for the client (`query`, `option_search`, `context_search`) leave it
-untouched. The emitted surface binds its `status_text` Text to
+select/clear reset it to idle. The quiet actions, which report no outcome of
+their own (`query`, `option_search`, `context_search`, `option_select`,
+`nested_add`, `nested_remove`, `bulk_select`, `prompt`, `wizard_next`,
+`wizard_back`, `open_surface`; `AshA2ui.ActionHandler.quiet_actions/0`),
+leave it untouched unless they fail, and the hook shows no pending state for
+them. The pending and slow messages the hook writes come from
+`/ui/feedback_text/pending` and `/ui/feedback_text/slow`, which the server
+writes in the surface's language. The emitted surface binds its `status_text` Text to
 `/ui/feedback/message` (right under the task panel, above the tables), and
 the admin catalog's `statusBanner` binds the whole map. When the trigger was
 an `ashAction` call, the same value is the `agentFunctionResponse` (see

@@ -33,7 +33,8 @@ defmodule AshA2ui.ActionHandler do
       `args.name` and `args.context` dispatch as described below. The
       follow-ups end with one `agentFunctionResponse` carrying the same
       `functionCallId`: `value` is the settled `/ui/feedback` map on
-      success, `error` (`code`, `message`) on failure. Any other function,
+      success (an empty map for a quiet action, which leaves it alone),
+      `error` (`code`, `message`) on failure. Any other function,
       or `ashAction` under another catalog id, is answered with
       `UNKNOWN_FUNCTION`. A call that fails the `callAgentFunction` or the
       `ashAction` argument schema is answered with `INVALID_FUNCTION_CALL`.
@@ -271,9 +272,11 @@ defmodule AshA2ui.ActionHandler do
       action outside the allowlist), `UNKNOWN_ACTION` (an unknown name) or
       `READ_ONLY_AS_OF` (a write on a surface pinned to an instant).
 
-  A function call whose action writes no feedback (a query, a search)
-  still settles `/ui/feedback` to idle, so the pending state the renderer
-  shows for a call never outlives it. A plain `action` leaves it as it was.
+  The quiet actions (`quiet_actions/0`: reads, searches, picker and panel
+  steps) leave `/ui/feedback` as it was unless they fail, and their
+  function call is answered with an empty `value`. A renderer shows no
+  pending state for them, so a page turn or a search keystroke never
+  replaces the last outcome. A plain `action` is settled the same way.
 
   Values are serialized JSON-safe (dates/datetimes to ISO 8601, decimals to
   strings, atoms to strings).
@@ -309,6 +312,12 @@ defmodule AshA2ui.ActionHandler do
   # The field error a relationship prompt value the actor cannot read gets.
   @unavailable "is not one of the available options"
 
+  # Actions that report no outcome of their own: reads, searches, picker and
+  # panel steps. The renderer shows no pending state for them and the
+  # handler leaves /ui/feedback as it was (see quiet_actions/0).
+  @quiet_actions ~w(query option_search context_search option_select nested_add nested_remove
+                    bulk_select prompt wizard_next wizard_back open_surface)
+
   # Actions that write, or open a form that would. On a surface pinned to an
   # instant (`:as_of`) every one is refused.
   @writes ~w(submit_form invoke bulk_invoke prompt edit_cell nested_add nested_remove
@@ -317,6 +326,21 @@ defmodule AshA2ui.ActionHandler do
   @pinned_refusal msg(
                     "This view shows an earlier moment, so nothing on it can be changed. Return to now to make changes."
                   )
+
+  @doc """
+  The action names that report no outcome of their own: reads, searches,
+  pickers and panel steps (`query`, `option_search`, `context_search`,
+  `option_select`, `nested_add`, `nested_remove`, `bulk_select`, `prompt`,
+  `wizard_next`, `wizard_back`, `open_surface`).
+
+  A renderer writes no pending feedback for an `ashAction` call to one of
+  them, and the handler leaves `/ui/feedback` as it was unless the action
+  fails, so a page turn or a search keystroke never replaces the last
+  outcome. The shipped hook carries the same list (`QUIET_ACTIONS` in
+  `priv/js/ash_a2ui_protocol.js`).
+  """
+  @spec quiet_actions() :: [String.t()]
+  def quiet_actions, do: @quiet_actions
 
   @doc """
   Handles one A2UI 1.0 renderer-to-agent message for the surface declared on
@@ -367,7 +391,7 @@ defmodule AshA2ui.ActionHandler do
       {:refuse_call, call_id, code, text} ->
         Logger.warning("Refused A2UI callAgentFunction #{call_id} (#{code}): #{text}")
         view = ResolvedView.resolve(resource_or_ui_module, opts)
-        settle({:error, [status(view, text, code)]}, view, call_id)
+        settle({:error, [status(view, text, code)]}, view, call_id, nil)
 
       {:function_response, response} ->
         callback = opts[:on_function_response]
@@ -394,7 +418,7 @@ defmodule AshA2ui.ActionHandler do
         expand_and_dispatch(view, ash_opts(view, opts), name, context)
       end
 
-    settle(result, view, call_id)
+    settle(result, view, call_id, name)
   end
 
   defp expand_and_dispatch(view, ash_opts, name, context) do
@@ -416,17 +440,20 @@ defmodule AshA2ui.ActionHandler do
 
   # --- settling an outcome -----------------------------------------------------
 
-  # Every outcome settles /ui/feedback, the one path the status Text and the
-  # admin statusBanner bind. A failure without a feedback write gets the
-  # generic one. A function call's success without one settles it to idle:
-  # the renderer showed a pending state under the call's id, and that state
-  # must not outlive the call. A plain action's success leaves it alone.
+  # Every failure settles /ui/feedback, the one path the status Text and the
+  # admin statusBanner bind: one without a feedback write gets the generic
+  # one. A quiet action's success leaves the feedback as it was, and so does
+  # a plain action's. Every other action writes its outcome; should one not,
+  # a function call settles the feedback to idle, since the renderer showed
+  # a pending state under the call's id and that state must not outlive the
+  # call.
   #
   # For a function call every feedback write carries the call's id, and the
   # agentFunctionResponse goes last, so the data model (feedback included)
   # is settled before the renderer resolves the call: `value` is the final
-  # feedback map, `error` its code and message.
-  defp settle({tag, messages}, view, call_id) do
+  # feedback map (an empty map when the call left the feedback alone),
+  # `error` its code and message.
+  defp settle({tag, messages}, view, call_id, name) do
     messages =
       cond do
         Enum.any?(messages, &feedback_write?/1) ->
@@ -435,7 +462,7 @@ defmodule AshA2ui.ActionHandler do
         tag == :error ->
           messages ++ [status(view, t(view, msg("The action failed.")), "ACTION_FAILED")]
 
-        call_id ->
+        call_id && name not in @quiet_actions ->
           messages ++ [update_data_model(view, "/ui/feedback", Experience.clear_feedback())]
 
         true ->
@@ -455,6 +482,7 @@ defmodule AshA2ui.ActionHandler do
     do: match?(%{"updateDataModel" => %{"path" => "/ui/feedback"}}, message)
 
   defp feedback_value(%{"updateDataModel" => %{"value" => value}}), do: value
+  defp feedback_value(nil), do: %{}
 
   defp stamp_call_id(
          %{"updateDataModel" => %{"path" => "/ui/feedback", "value" => value} = update} = message,

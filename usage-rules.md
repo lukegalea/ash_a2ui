@@ -174,8 +174,8 @@ end
 - Per-cell editing (spreadsheet-style columns) is an `editable` block on
   the table (`fields` allowlist + `update_action`), not a form: cells
   commit through the `"edit_cell"` action, validation errors mirror into
-  the failing row's `_error_<field>` key, and each cell gets
-  pending→settled feedback through its `ashAction` call. The editable
+  the failing row's `_error_<field>` key, and the outcome is the surface's
+  `/ui/feedback` like any other write. The editable
   `fields` list is a client-reachable allowlist — keep it minimal.
 - Selection-driven screens (pick a record → scope everything else) use
   `context` entities: server-validated pickers, dependent option lists

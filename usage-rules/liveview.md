@@ -95,7 +95,8 @@ const liveSocket = new LiveSocket("/live", Socket, {hooks: {AshA2ui}});
 
 The hook registers the ash_a2ui catalog (`ashAction`, `downloadFile`)
 beside the host's catalogs itself. Optional `configureAshA2ui` keys:
-`markdown`, `openSurface`, `pendingMessage` and `actionTimeoutMs`. A host
+`markdown`, `openSurface`, `pendingMessage`, `slowMessage` (defaults for a
+surface without `/ui/feedback_text`) and `actionTimeoutMs`. A host
 that needs more renderer functions declares them in a catalog of its own.
 
 Forgetting `configureAshA2ui({MessageProcessor, Catalog, catalogs})` is the most

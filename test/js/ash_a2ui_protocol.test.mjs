@@ -10,9 +10,10 @@ import {
   feedback,
   panelStateOf,
   pendingFeedback,
+  quietAction,
   replaceExistingSurfaces,
   rpcError,
-  timeoutFeedback,
+  slowFeedback,
 } from "../../priv/js/ash_a2ui_protocol.js";
 import {readJson, webCore} from "./support.mjs";
 
@@ -59,11 +60,21 @@ test("feedback maps are always whole", () => {
     ...feedback("pending", "Working…"),
     functionCallId: "f1",
   });
-  assert.deepEqual(timeoutFeedback("f1"), {
-    ...feedback("error", "The server did not respond in time. Please try again."),
+  assert.deepEqual(slowFeedback("Still working…", "f1"), {
+    ...feedback("pending", "Still working…"),
     code: "TIMEOUT",
     functionCallId: "f1",
   });
+});
+
+test("quietAction names the actions that report no outcome of their own", () => {
+  for (const name of ["query", "option_search", "context_search", "prompt", "wizard_next"]) {
+    assert.equal(quietAction({name}), true, name);
+  }
+  for (const name of ["submit_form", "invoke", "edit_cell", "start_edit", "context_select"]) {
+    assert.equal(quietAction({name}), false, name);
+  }
+  assert.equal(quietAction(undefined), false);
 });
 
 test("ashActionCall names the ash_a2ui catalog", () => {

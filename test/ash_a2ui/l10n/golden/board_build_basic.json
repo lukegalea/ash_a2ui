@@ -137,7 +137,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_open_apply_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_open_apply_text",
@@ -189,7 +189,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_open_prev_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_open_prev_text",
@@ -231,7 +231,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_open_next_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_open_next_text",
@@ -349,7 +349,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_board_open_claim_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_board_open_claim_text",
@@ -387,7 +387,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_board_open_complete_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_board_open_complete_text",
@@ -524,7 +524,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_claimed_apply_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_claimed_apply_text",
@@ -576,7 +576,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_claimed_prev_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_claimed_prev_text",
@@ -618,7 +618,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_claimed_next_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_claimed_next_text",
@@ -736,7 +736,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_board_claimed_claim_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_board_claimed_claim_text",
@@ -774,7 +774,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_board_claimed_complete_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_board_claimed_complete_text",
@@ -911,7 +911,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_completed_apply_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_completed_apply_text",
@@ -963,7 +963,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_completed_prev_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_completed_prev_text",
@@ -1005,7 +1005,7 @@
                 "name": "query",
                 "sourceComponentId": "query_board_completed_next_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_board_completed_next_text",
@@ -1123,7 +1123,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_board_completed_claim_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_board_completed_claim_text",
@@ -1161,7 +1161,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_board_completed_complete_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_board_completed_complete_text",
@@ -1329,6 +1329,10 @@
             "message": "",
             "result": {},
             "resultText": ""
+          },
+          "feedback_text": {
+            "pending": "Working…",
+            "slow": "This is taking longer than usual. Still working…"
           },
           "intent": "browse",
           "panel": {

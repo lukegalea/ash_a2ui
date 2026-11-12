@@ -91,7 +91,7 @@ test("the merged catalog is the basic catalog with AshA2ui's elements", () => {
 test("the admin catalog declares what its catalog document declares", () => {
   assert.equal(admin.id, ADMIN_JSON.catalogId);
   assert.equal(admin.protocolVersion, ADMIN_JSON.protocolVersion);
-  assert.equal(adminCatalog.ADMIN_CATALOG_VERSION, ADMIN_JSON.metadata.extensions.version);
+  assert.equal(adminCatalog.ADMIN_CATALOG_VERSION, ADMIN_JSON.metadata.extensions.ash_a2ui.version);
 
   for (const name of Object.keys(ADMIN_JSON.components)) {
     assert.ok(admin.components.has(name), `admin component ${name}`);
@@ -147,6 +147,13 @@ function adminSurface(hook, components, dataModel = {}) {
   assert.deepEqual(sent(hook), [], "the surface applies");
 }
 
+const banner = {
+  id: "status_banner",
+  component: "statusBanner",
+  kind: {"@path": "/ui/feedback/kind"},
+  message: {"@path": "/ui/feedback/message"},
+};
+
 const pagination = {
   id: "pagination",
   component: "pagination",
@@ -164,9 +171,10 @@ const pagination = {
   },
 };
 
-test("a pagination page turn is an ashAction with its bindings resolved", async () => {
+test("a pagination page turn is a quiet ashAction with its bindings resolved", async () => {
   const hook = mountHook({catalogs: [mergedCatalog, admin], pendingMessage: "Loading…"});
-  adminSurface(hook, [pagination]);
+  const saved = feedback("success", "Saved.", {resultText: "Total: 42"});
+  adminSurface(hook, [banner, pagination], {ui: {feedback: saved}});
   const surface = await render(hook, "s1");
 
   const next = deepAll(surface, "button").find((button) => button.textContent.includes("Next"));
@@ -185,11 +193,15 @@ test("a pagination page turn is an ashAction with its bindings resolved", async 
       context: {query: QUERY, pageDelta: 1, component: "tasks"},
     },
   });
-  assert.deepEqual(feedbackOf(hook, "s1"), feedback("pending", "Loading…", {functionCallId}));
+  assert.deepEqual(feedbackOf(hook, "s1"), saved, "a page turn writes no pending state");
 
-  hook.processMessages(answer(functionCallId, "success"));
+  // The agent leaves the feedback alone for a quiet action.
+  hook.processMessages([{version: "1.0", agentFunctionResponse: {functionCallId, value: {}}}]);
   await settle();
-  assert.deepEqual(hook.responses[0].response, {value: {kind: "success"}});
+  assert.deepEqual(hook.responses[0].response, {value: {}});
+  assert.deepEqual(feedbackOf(hook, "s1"), saved, "the last outcome and its result stay");
+  const statusBanner = deep(surface, "ash-admin-status-banner");
+  assert.equal(statusBanner.hasAttribute("hidden"), false, "the banner never hid");
 });
 
 test("a page chip sends its distance as pageDelta", async () => {
@@ -248,6 +260,141 @@ test("a row action resolves its row-relative bindings and settles on the outcome
   hook.processMessages(answer(functionCallId, "success", "Closed"));
   await settle();
   assert.equal(gridElement._amBusyRowAction, null, "settled by the outcome, not the pending write");
+});
+
+test("a row action stays busy past the watchdog until the server's outcome", async () => {
+  const hook = mountHook({catalogs: [mergedCatalog, admin], actionTimeoutMs: 20});
+  const grid = {
+    id: "grid",
+    component: "dataGrid",
+    columns: [{label: "Title", path: "title"}],
+    rows: {"@path": "/rows"},
+    rowId: "id",
+    rowActions: [
+      {label: "Close", action: "invoke", context: {action: "close", recordId: {"@path": "id"}}},
+    ],
+  };
+  adminSurface(hook, [grid], {
+    rows: [{id: "r1", title: "One"}],
+    ui: {feedback: feedback(), feedback_text: {pending: "Working…", slow: "Still working…"}},
+  });
+  const surface = await render(hook, "s1");
+
+  deepAll(surface, "[data-a2ui-action='close'] button")[0].click();
+  await tick();
+  const {functionCallId} = sent(hook)[0].callAgentFunction;
+  const gridElement = deep(surface, "ash-admin-data-grid");
+
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  await settle();
+  assert.deepEqual(feedbackOf(hook, "s1"), {
+    ...feedback("pending", "Still working…"),
+    code: "TIMEOUT",
+    functionCallId,
+  });
+  assert.ok(gridElement._amBusyRowAction, "still busy: the server may still be running it");
+
+  hook.processMessages([
+    {
+      version: "1.0",
+      updateDataModel: {
+        surfaceId: "s1",
+        path: "/ui/feedback",
+        value: feedback("success", "Closed", {functionCallId}),
+      },
+    },
+  ]);
+  await settle();
+  assert.equal(gridElement._amBusyRowAction, null, "the late outcome settles it");
+});
+
+test("a filterPicker renders on an admin surface with its hint", async () => {
+  const hook = mountHook({catalogs: [mergedCatalog, admin]});
+  adminSurface(
+    hook,
+    [
+      {
+        id: "query_filter_status",
+        component: "filterPicker",
+        label: "Status",
+        variant: "mutuallyExclusive",
+        value: {"@path": "/query/filters/status"},
+        options: [
+          {label: "All", value: ""},
+          {label: "Open", value: "open"},
+        ],
+        hint: "Statuses update nightly.",
+        counts: {"@path": "/query/facets/status"},
+      },
+    ],
+    {query: {...QUERY, filters: {status: ""}, facets: {status: {open: 3}}}},
+  );
+  const surface = await render(hook, "s1");
+
+  const picker = deep(surface, "ash-admin-filter-picker");
+  assert.ok(picker, "the filter picker element renders");
+  const text = (picker.shadowRoot ?? picker).textContent;
+  assert.match(text, /Statuses update nightly/);
+  assert.match(text, /Open/);
+});
+
+// The admin calendarView over a month window, its windowAction a query.
+function calendarSurface(hook) {
+  const calendar = {
+    id: "cal",
+    component: "calendarView",
+    label: "Visits",
+    granularity: "month",
+    window: {"@path": "/query/visits/window"},
+    windowAction: {name: "query", context: {query: {"@path": "/query"}, component: "visits"}},
+  };
+  const window = (anchor, label) => ({granularity: "month", anchor, selected: "", marks: [], label});
+  hook.processMessages([
+    {
+      version: "1.0",
+      createSurface: {
+        surfaceId: "s1",
+        catalogId: admin.id,
+        components: [{id: "root", component: "Column", children: ["cal"]}, calendar],
+        dataModel: {
+          query: {visits: {window: window("2026-11-01", "November 2026")}},
+          ui: {feedback: feedback()},
+        },
+      },
+    },
+  ]);
+  return window;
+}
+
+test("a calendar move stays in flight until its own window arrives", async () => {
+  const hook = mountHook({catalogs: [mergedCatalog, admin], actionTimeoutMs: 0});
+  const window = calendarSurface(hook);
+  const surface = await render(hook, "s1");
+  const calendar = deep(surface, "ash-admin-calendar-view");
+
+  calendar.request({anchor: "2026-12-01"}, calendar.windowKey("2026-12-01", ""));
+  await settle();
+  assert.ok(calendar._pending, "the move is in flight");
+  calendar.request({anchor: "2027-01-01"}, calendar.windowKey("2027-01-01", ""));
+  await settle();
+  assert.ok(calendar._pending, "the second move is in flight");
+
+  const [first] = sent(hook).map((message) => message.callAgentFunction.functionCallId);
+  hook.processMessages([
+    {
+      version: "1.0",
+      updateDataModel: {
+        surfaceId: "s1",
+        path: "/query/visits/window",
+        value: window("2026-12-01", "December 2026"),
+      },
+    },
+    {version: "1.0", agentFunctionResponse: {functionCallId: first, value: {}}},
+  ]);
+  await settle();
+
+  assert.ok(calendar._pending, "an earlier window does not settle the later move");
+  assert.notEqual(calendar.calendarElement()?.getAttribute("month"), "2026-12-01");
 });
 
 // A basic-catalog prompt: a Modal whose Confirm sends `invoke`.

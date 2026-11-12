@@ -347,7 +347,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
                } = query_state
       end
 
-      test "an ashAction function call round-trips and is answered last", %{conn: conn} do
+      test "a quiet ashAction function call round-trips and is answered last", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/query")
         assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
 
@@ -363,10 +363,12 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_push_event(view, "a2ui:messages", %{messages: messages})
         Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
 
-        assert %{"agentFunctionResponse" => %{"functionCallId" => "fc_query", "value" => idle}} =
+        # A query is quiet: it leaves /ui/feedback alone and answers with
+        # an empty value.
+        assert %{"agentFunctionResponse" => %{"functionCallId" => "fc_query", "value" => %{}}} =
                  List.last(messages)
 
-        assert %{"kind" => "", "functionCallId" => "fc_query"} = idle
+        refute Enum.any?(messages, &match?(%{"updateDataModel" => %{"path" => "/ui/feedback"}}, &1))
         assert %{"search" => "x"} = :sys.get_state(view.pid).socket.assigns.ash_a2ui_query_state
       end
 

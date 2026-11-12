@@ -69,7 +69,7 @@
                 "name": "context_clear",
                 "sourceComponentId": "context_project_clear_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "context_project_clear_text",
@@ -110,7 +110,7 @@
                 "name": "context_select",
                 "sourceComponentId": "context_project_option_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "context_project_option_text",
@@ -171,7 +171,7 @@
                 "name": "bulk_invoke",
                 "sourceComponentId": "bulk_action_approve_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "bulk_action_approve_text",
@@ -204,7 +204,7 @@
                 "name": "bulk_invoke",
                 "sourceComponentId": "bulk_action_reject_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "bulk_action_reject_text",
@@ -237,7 +237,7 @@
                 "name": "bulk_invoke",
                 "sourceComponentId": "bulk_action_destroy_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "bulk_action_destroy_text",
@@ -270,7 +270,7 @@
                 "name": "bulk_select",
                 "sourceComponentId": "bulk_select_page_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "bulk_select_page_text",
@@ -303,7 +303,7 @@
                 "name": "bulk_select",
                 "sourceComponentId": "bulk_clear_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "bulk_clear_text",
@@ -355,7 +355,7 @@
                 "name": "query",
                 "sourceComponentId": "query_apply_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_apply_text",
@@ -410,7 +410,7 @@
                 "name": "query",
                 "sourceComponentId": "query_prev_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_prev_text",
@@ -455,7 +455,7 @@
                 "name": "query",
                 "sourceComponentId": "query_next_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "query_next_text",
@@ -475,9 +475,9 @@
         {
           "children": [
             "record_row_selected",
-            "table_cell_title",
-            "table_cell_status",
-            "table_cell_score",
+            "table_cell_title_row",
+            "table_cell_status_row",
+            "table_cell_score_row",
             "row_action_approve_slot",
             "row_action_flag_button"
           ],
@@ -490,7 +490,7 @@
             "table_cell_title_value"
           ],
           "component": "Row",
-          "id": "table_cell_title"
+          "id": "table_cell_title_row"
         },
         {
           "component": "Text",
@@ -511,7 +511,7 @@
             "table_cell_status_value"
           ],
           "component": "Row",
-          "id": "table_cell_status"
+          "id": "table_cell_status_row"
         },
         {
           "component": "Text",
@@ -532,7 +532,7 @@
             "table_cell_score_value"
           ],
           "component": "Row",
-          "id": "table_cell_score"
+          "id": "table_cell_score_row"
         },
         {
           "component": "Text",
@@ -576,7 +576,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_approve_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_approve_text",
@@ -617,7 +617,7 @@
                 "name": "invoke",
                 "sourceComponentId": "row_action_flag_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "row_action_flag_text",
@@ -780,6 +780,10 @@
             "message": "",
             "result": {},
             "resultText": ""
+          },
+          "feedback_text": {
+            "pending": "Working…",
+            "slow": "This is taking longer than usual. Still working…"
           },
           "intent": "browse",
           "panel": {

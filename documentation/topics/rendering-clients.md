@@ -92,7 +92,7 @@ of the generated LiveView when needed.
 The package ships the LiveView JS hook at `priv/js/ash_a2ui_hook.js`. It has
 **no bundled dependencies** — your app bundle imports the `@a2ui` renderer
 packages and hands the renderer classes to the hook via
-`configureAshA2ui({MessageProcessor, catalogs})` before the `LiveSocket`
+`configureAshA2ui({MessageProcessor, Catalog, catalogs})` before the `LiveSocket`
 mounts it:
 
 - Import **`@a2ui/lit`** for its side effect: registering the

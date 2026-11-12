@@ -38,7 +38,7 @@
                 "name": "start_create",
                 "sourceComponentId": "create_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "create_text",
@@ -58,7 +58,7 @@
         },
         {
           "children": [
-            "table_cell_subject",
+            "table_cell_subject_row",
             "view_button",
             "edit_button"
           ],
@@ -71,7 +71,7 @@
             "table_cell_subject_value"
           ],
           "component": "Row",
-          "id": "table_cell_subject"
+          "id": "table_cell_subject_row"
         },
         {
           "component": "Text",
@@ -100,7 +100,7 @@
                 "name": "view_record",
                 "sourceComponentId": "view_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "view_button_text",
@@ -126,7 +126,7 @@
                 "name": "start_edit",
                 "sourceComponentId": "edit_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "edit_button_text",
@@ -326,7 +326,7 @@
                 "name": "option_search",
                 "sourceComponentId": "form_select_author_id_search_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "form_select_author_id_search_text",
@@ -360,7 +360,7 @@
                 "name": "option_select",
                 "sourceComponentId": "form_select_author_id_option_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "form_select_author_id_option_text",
@@ -430,7 +430,7 @@
                 "name": "nested_remove",
                 "sourceComponentId": "nested_tags_remove_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "nested_tags_remove_text",
@@ -472,7 +472,7 @@
                 "name": "option_search",
                 "sourceComponentId": "nested_tags_search_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "nested_tags_search_text",
@@ -509,7 +509,7 @@
                 "name": "nested_add",
                 "sourceComponentId": "nested_tags_option_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "nested_tags_option_text",
@@ -574,7 +574,7 @@
                 "name": "submit_form",
                 "sourceComponentId": "form_submit_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "form_submit_text",
@@ -598,7 +598,7 @@
                 "name": "cancel_record_task",
                 "sourceComponentId": "form_cancel_button"
               },
-              "catalogId": "https://ash-a2ui.dev/catalogs/ash_a2ui/v1"
+              "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
             }
           },
           "child": "form_cancel_text",
@@ -666,6 +666,10 @@
             "message": "",
             "result": {},
             "resultText": ""
+          },
+          "feedback_text": {
+            "pending": "Working…",
+            "slow": "This is taking longer than usual. Still working…"
           },
           "intent": "browse",
           "panel": {

@@ -119,8 +119,8 @@ test("an agent error settles the call with the agent's code and message", async 
   assert.deepEqual(feedbackOf(hook, "s1"), feedback("error", "Not allowed", {functionCallId}));
 });
 
-test("an unanswered call times out into TIMEOUT feedback", async () => {
-  const hook = mountHook({actionTimeoutMs: 10});
+test("an unanswered call stays pending under a slow notice, until the late outcome", async () => {
+  const hook = mountHook({actionTimeoutMs: 10, slowMessage: "Still at it…"});
   bootstrap(hook);
 
   await click(hook, "s1", "submit");
@@ -128,10 +128,56 @@ test("an unanswered call times out into TIMEOUT feedback", async () => {
 
   assert.equal(hook.responses[0].response.error.code, "TIMEOUT");
   assert.deepEqual(feedbackOf(hook, "s1"), {
-    ...feedback("error", "The server did not respond in time. Please try again."),
+    ...feedback("pending", "Still at it…"),
     code: "TIMEOUT",
     functionCallId,
   });
+
+  hook.processMessages([settled(functionCallId, "success", "Saved")]);
+  assert.deepEqual(feedbackOf(hook, "s1"), feedback("success", "Saved", {functionCallId}));
+});
+
+test("the pending and slow messages are the surface's own words", async () => {
+  const hook = mountHook({actionTimeoutMs: 10, pendingMessage: "Working…"});
+  bootstrap(hook);
+  hook.processMessages([
+    {
+      version: "1.0",
+      updateDataModel: {
+        surfaceId: "s1",
+        path: "/ui/feedback_text",
+        value: {pending: "En cours…", slow: "Toujours en cours…"},
+      },
+    },
+  ]);
+
+  const done = click(hook, "s1", "submit");
+  await tick();
+  assert.equal(feedbackOf(hook, "s1").message, "En cours…");
+
+  await done;
+  assert.equal(feedbackOf(hook, "s1").message, "Toujours en cours…");
+});
+
+test("a quiet action leaves the last outcome and its result on screen", async () => {
+  const hook = mountHook({actionTimeoutMs: 10});
+  bootstrap(hook);
+  const saved = feedback("success", "Saved", {resultText: "Total: 42"});
+  hook.processMessages([
+    {version: "1.0", updateDataModel: {surfaceId: "s1", path: "/ui/feedback", value: saved}},
+  ]);
+
+  const surface = hook.processor.getSurface("s1");
+  const answered = hook.runAshAction(
+    {name: "query", sourceComponentId: "pager", context: {page: 2}},
+    {surface},
+  );
+  await tick();
+  assert.deepEqual(feedbackOf(hook, "s1"), saved, "no pending state for a page turn");
+
+  await answered;
+  assert.equal(hook.responses[0].response.error.code, "TIMEOUT");
+  assert.deepEqual(feedbackOf(hook, "s1"), saved, "no slow notice either");
 });
 
 test("a timeout leaves feedback a later call owns", async () => {

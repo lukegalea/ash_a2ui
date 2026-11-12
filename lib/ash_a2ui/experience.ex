@@ -19,6 +19,10 @@ defmodule AshA2ui.Experience do
     * `"feedback"` — the outcome of the last action, one map written whole
       (see `feedback/3`): `"kind"`, `"message"`, `"code"`,
       `"functionCallId"`, `"result"` and `"resultText"`.
+    * `"feedback_text"` — the words a renderer writes into `"feedback"`
+      itself, in the surface's language: `"pending"` (shown the moment an
+      `ashAction` call goes out) and `"slow"` (shown when the call has not
+      been answered in time; the call is still pending).
 
   ## The task state machine
 
@@ -186,7 +190,7 @@ defmodule AshA2ui.Experience do
   fresh surface is in browse mode with the record panel closed.
   """
   @spec initial_ui_state(ResolvedView.t()) :: %{String.t() => term}
-  def initial_ui_state(_view) do
+  def initial_ui_state(view) do
     %{
       "/ui/intent" => "browse",
       "/ui/panel/visible" => sentinel(false),
@@ -197,7 +201,10 @@ defmodule AshA2ui.Experience do
       "/ui/panel/submit_visible" => sentinel(false),
       "/ui/panel/form_visible" => sentinel(false),
       "/ui/panel/view_visible" => sentinel(false),
-      "/ui/feedback" => clear_feedback()
+      "/ui/feedback" => clear_feedback(),
+      "/ui/feedback_text/pending" => L10n.t(view.l10n, msg("Working…")),
+      "/ui/feedback_text/slow" =>
+        L10n.t(view.l10n, msg("This is taking longer than usual. Still working…"))
     }
   end
 
@@ -396,7 +403,8 @@ defmodule AshA2ui.Experience do
       }
 
   `kind` is `""` (idle), `"pending"` (written by the renderer while an
-  `ashAction` call is in flight), `"success"`, `"warning"` (a bulk run that
+  `ashAction` call is in flight; with `"code" => "TIMEOUT"` once the call
+  has gone unanswered past the renderer's watchdog), `"success"`, `"warning"` (a bulk run that
   partly succeeded) or `"error"`. `extra` sets any of the other keys:
   `"code"` (the error code, `""` otherwise), `"functionCallId"` (the
   `ashAction` call the outcome answers), `"result"` and `"resultText"` (a

@@ -58,6 +58,16 @@ changes is the wire format and the way a host wires the renderer.
 - Outcomes live in one map at `/ui/feedback`:
   `{kind, message, code, functionCallId, result, resultText}`, always written
   whole. `kind` is `""` when idle (it was `null`).
+- The shipped hook writes a pending `/ui/feedback` the moment an `ashAction`
+  call goes out, except for the quiet actions
+  (`AshA2ui.ActionHandler.quiet_actions/0`: reads, searches, picker and
+  panel steps), which the handler also leaves untouched unless they fail
+  and answers with an empty `value`. A call unanswered after
+  `actionTimeoutMs` shows a slow notice that stays pending
+  (`code: "TIMEOUT"`), so busy controls stay busy until the real outcome.
+  The pending and slow words come from `/ui/feedback_text`, which the
+  server writes in the surface's language (new msgids "Working…" and
+  "This is taking longer than usual. Still working…").
 - The CSV export is a `callRendererFunction` calling `downloadFile`; the
   renderer answers with a `rendererFunctionResponse`.
 - The ash_a2ui catalog is a 1.0 catalog definition (`@call` keys,

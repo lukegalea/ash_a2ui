@@ -1467,9 +1467,8 @@ defmodule AshA2ui do
     in-row inputs with a per-cell Save button dispatching the `"edit_cell"`
     client action — the server runs `update_action` on the identified record
     with just that field's value (cast against the action like any client
-    input). The Save button's `ashAction` call, answered by an
-    `agentFunctionResponse`, gives each cell pending→settled feedback;
-    validation errors are mirrored into
+    input). The Save's outcome is the surface's `/ui/feedback`, like any
+    other write; validation errors are mirrored into
     the failing row's reserved `_error_<field>` key (rendered next to the
     cell) alongside the standard `/errors/<field>` write. Not supported
     together with a `row_layout` (card rows render read-only meta values).

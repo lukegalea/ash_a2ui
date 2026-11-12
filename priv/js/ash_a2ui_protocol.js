@@ -7,7 +7,8 @@
  *   - the ash_a2ui function catalog (`ASH_A2UI_CATALOG`, the document in
  *     `priv/a2ui/v1_0/catalogs/ash_a2ui/catalog.json`) and
  *     `createAshFunctionCatalog`, which binds its functions to code;
- *   - the `/ui/feedback` map: idle, pending and timeout;
+ *   - the `/ui/feedback` map: idle, pending and slow, and the quiet actions
+ *     that write none;
  *   - the renderer-to-agent `action` message for an event action;
  *   - `replaceExistingSurfaces`, which lets a re-joined LiveView bootstrap a
  *     surface the processor still holds;
@@ -23,6 +24,40 @@ export const ASH_A2UI_CATALOG_ID = "https://github.com/lukegalea/ash_a2ui/catalo
 
 /** The data-model path of the one feedback map every surface carries. */
 export const FEEDBACK_PATH = "/ui/feedback";
+
+/**
+ * Where a surface keeps the words the renderer writes into the feedback map
+ * itself, in the surface's language: `pending` and `slow`
+ * (`AshA2ui.Experience.initial_ui_state/1`).
+ */
+export const FEEDBACK_TEXT_PATH = "/ui/feedback_text";
+
+/**
+ * The ash_a2ui actions that report no outcome of their own: reads,
+ * searches, picker and panel steps (`AshA2ui.ActionHandler.quiet_actions/0`,
+ * kept equal by the Elixir tests). An `ashAction` call to one writes no
+ * pending feedback, and the agent leaves `/ui/feedback` alone unless the
+ * action fails, so a page turn or a search keystroke never replaces the
+ * last outcome.
+ */
+export const QUIET_ACTIONS = Object.freeze([
+  "query",
+  "option_search",
+  "context_search",
+  "option_select",
+  "nested_add",
+  "nested_remove",
+  "bulk_select",
+  "prompt",
+  "wizard_next",
+  "wizard_back",
+  "open_surface",
+]);
+
+/** Whether `ashAction` args name a quiet action (see `QUIET_ACTIONS`). */
+export function quietAction(args) {
+  return Boolean(args) && QUIET_ACTIONS.includes(args.name);
+}
 
 /**
  * The ash_a2ui catalog document, kept equal to
@@ -195,12 +230,14 @@ export function pendingFeedback(message, functionCallId) {
   return feedback("pending", message, {functionCallId});
 }
 
-/** The feedback written when an `ashAction` call is never answered. */
-export function timeoutFeedback(functionCallId) {
-  return feedback("error", "The server did not respond in time. Please try again.", {
-    code: "TIMEOUT",
-    functionCallId,
-  });
+/**
+ * The feedback written when an `ashAction` call has gone unanswered past the
+ * watchdog. The agent may still be running the action, so the call stays
+ * pending (`kind: "pending"`, `code: "TIMEOUT"`): busy controls stay busy
+ * and nothing invites a second submit. The agent's late outcome replaces it.
+ */
+export function slowFeedback(message, functionCallId) {
+  return feedback("pending", message, {code: "TIMEOUT", functionCallId});
 }
 
 /** The `ashAction` FunctionCall for the given args. */

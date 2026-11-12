@@ -82,6 +82,10 @@
             "result": {},
             "resultText": ""
           },
+          "feedback_text": {
+            "pending": "Working…",
+            "slow": "This is taking longer than usual. Still working…"
+          },
           "intent": "browse",
           "panel": {
             "form_visible": [],

@@ -20,15 +20,21 @@
  * ..., "args": {name, sourceComponentId, context}}}`). The hook registers
  * that catalog beside the host's catalogs, and its `ashAction`:
  *
- *   1. writes `{kind: "pending", message: pendingMessage, functionCallId}`
- *      to the surface's `/ui/feedback` at once, so bound status components
- *      show feedback at 0 RTT;
+ *   1. writes `{kind: "pending", message, functionCallId}` to the surface's
+ *      `/ui/feedback` at once, so bound status components show feedback at
+ *      0 RTT. The message is the surface's `/ui/feedback_text/pending` (in
+ *      its own language), else `pendingMessage`. A quiet action
+ *      (`QUIET_ACTIONS`: reads, searches, picker and panel steps) writes
+ *      nothing here or in step 3, so a page turn or a search keystroke
+ *      leaves the last outcome on screen;
  *   2. sends the call as `callAgentFunction` with that `functionCallId`;
  *   3. waits for the agent's `agentFunctionResponse`, which arrives last in
  *      the agent's batch, after the data-model writes (the settled
  *      `/ui/feedback` among them). If none arrives within `actionTimeoutMs`
- *      and `/ui/feedback` still belongs to this call, it writes a `TIMEOUT`
- *      error there;
+ *      and `/ui/feedback` still belongs to this call, it writes the slow
+ *      notice there: still `kind: "pending"`, `code: "TIMEOUT"`, the
+ *      surface's `/ui/feedback_text/slow`. The agent may still be running
+ *      the action, so busy controls stay busy until its outcome lands;
  *   4. dispatches the bubbling `"ash-a2ui:action-response"` CustomEvent on
  *      the container, `detail = {functionCallId, surfaceId, response}`,
  *      where `response` is `{value}` or `{error: {code, message}}`.
@@ -84,13 +90,19 @@
  *     Text headings render as headings instead of literal `##` markdown
  *     (see the configureAshA2ui docs below).
  *
- * Verified against `@a2ui/lit` / `@a2ui/web_core` 0.15.0: message ingest is
+ * Written against the runtime API of `@a2ui/lit` / `@a2ui/web_core` 0.15.0
+ * (the version `mix js.test` pins): message ingest is
  * `new MessageProcessor(catalogs, actionHandler, {outboundListener})` plus
  * `processor.processMessagesWithErrors(messages)`; the `<a2ui-surface>`
  * element takes a `SurfaceModel` through its `surface` property, delivered
  * by `processor.onSurfaceCreated(cb)`; `processor.callAgentFunction(surfaceId,
  * call, {functionCallId, timeoutMs})` sends `callAgentFunction` through the
  * `outboundListener` and settles on the matching `agentFunctionResponse`.
+ * 0.15.0 predates the spec's `@`-prefixed component envelope keys
+ * (`@checks`, `@accessibility`, `@catalogId`): it refuses a surface whose
+ * components carry them, which AshA2ui emits for form checks, accessible
+ * labels and mixed catalogs. Rendering every AshA2ui surface needs the
+ * first `@a2ui/web_core` release after 0.15.0.
  *
  * ## Zero jank: bootstrap skeleton and panel reveal
  *
@@ -120,15 +132,17 @@
 
 import {
   FEEDBACK_PATH,
+  FEEDBACK_TEXT_PATH,
   PROTOCOL_VERSION,
   actionMessage,
   ashActionCall,
   createAshFunctionCatalog,
   panelStateOf,
   pendingFeedback,
+  quietAction,
   replaceExistingSurfaces,
   rpcError,
-  timeoutFeedback,
+  slowFeedback,
 } from "./ash_a2ui_protocol.js";
 
 let hookDeps = null;
@@ -163,13 +177,17 @@ let hookDeps = null;
  *   markdown?: {ContextProvider: Function, context: object, render: Function},
  *   openSurface?: Function,
  *   pendingMessage?: string,
+ *   slowMessage?: string,
  *   actionTimeoutMs?: number,
  * }} deps
  *   `Catalog`: the `@a2ui/web_core` class the hook builds the ash_a2ui
- *   function catalog with. `pendingMessage`: the optimistic `/ui/feedback`
- *   message shown while an `ashAction` call is in flight (default
- *   "Working…"). `actionTimeoutMs`: how long an `ashAction` call waits for
- *   its `agentFunctionResponse` (default 10000; 0 waits forever).
+ *   function catalog with. `pendingMessage` and `slowMessage`: the
+ *   optimistic `/ui/feedback` messages for a surface whose data model has no
+ *   `/ui/feedback_text` (an AshA2ui surface carries them in its own
+ *   language): shown while an `ashAction` call is in flight, and once it
+ *   has gone unanswered past `actionTimeoutMs`. `actionTimeoutMs`: how long
+ *   an `ashAction` call waits for its `agentFunctionResponse` before the
+ *   slow notice shows (default 10000; 0 waits without one).
  *   `openSurface`: `(args, {surfaceId, href}) => void`, to handle
  *   reference-link navigation client-side instead of pushing the
  *   `"a2ui:open_surface"` LiveView event.
@@ -198,6 +216,7 @@ export function resolveDeps(deps = hookDeps || globalThis.__ASH_A2UI_DEPS__) {
     catalogs: deps.catalogs || [],
     markdown: deps.markdown || null,
     pendingMessage: deps.pendingMessage || "Working…",
+    slowMessage: deps.slowMessage || "This is taking longer than usual. Still working…",
     openSurface: typeof deps.openSurface === "function" ? deps.openSurface : null,
     actionTimeoutMs: deps.actionTimeoutMs === undefined ? 10000 : deps.actionTimeoutMs,
   };
@@ -526,8 +545,14 @@ export const AshA2ui = {
   async runAshAction(args, context) {
     const surfaceId = context && context.surface && context.surface.id;
     const functionCallId = randomCallId();
+    const quiet = quietAction(args);
 
-    this.writeFeedback(surfaceId, pendingFeedback(this.deps.pendingMessage, functionCallId));
+    if (!quiet) {
+      this.writeFeedback(
+        surfaceId,
+        pendingFeedback(this.feedbackText(surfaceId, "pending"), functionCallId),
+      );
+    }
 
     let response;
     try {
@@ -539,9 +564,13 @@ export const AshA2ui = {
     } catch (error) {
       response = {error: rpcError(error)};
       // Any other failure was answered by the agent, whose batch already
-      // wrote /ui/feedback. A later action owning the feedback keeps it.
+      // wrote /ui/feedback. A later action owning the feedback keeps it,
+      // and a quiet call never owns it.
       if (response.error.code === "TIMEOUT" && this.feedbackCallId(surfaceId) === functionCallId) {
-        this.writeFeedback(surfaceId, timeoutFeedback(functionCallId));
+        this.writeFeedback(
+          surfaceId,
+          slowFeedback(this.feedbackText(surfaceId, "slow"), functionCallId),
+        );
       }
     }
 
@@ -564,6 +593,17 @@ export const AshA2ui = {
   writeFeedback(surfaceId, value) {
     if (!this.processor || !this.surfaceExists(surfaceId)) return;
     this.apply([{version: PROTOCOL_VERSION, updateDataModel: {surfaceId, path: FEEDBACK_PATH, value}}]);
+  },
+
+  /**
+   * The surface's own words for a feedback state the hook writes (`pending`
+   * or `slow`, under `/ui/feedback_text`), else the configured default.
+   */
+  feedbackText(surfaceId, key) {
+    const surface = this.processor && this.processor.getSurface(surfaceId);
+    const text = surface ? surface.dataModel.get(`${FEEDBACK_TEXT_PATH}/${key}`) : undefined;
+    if (typeof text === "string" && text !== "") return text;
+    return key === "slow" ? this.deps.slowMessage : this.deps.pendingMessage;
   },
 
   /** The `functionCallId` the surface's `/ui/feedback` belongs to. */

@@ -463,9 +463,9 @@ end
   the table's records are rewritten with the failing row carrying the
   submitted value (for in-place correction) and the message at
   `_error_<field>`.
-- The per-call `agentFunctionResponse` handshake gives each cell
-  pending→settled feedback (the shipped hook holds the pending state per
-  `functionCallId`).
+- A Save shows the surface's one pending state (`/ui/feedback`) while its
+  `ashAction` call is in flight, and the call's outcome settles it, as for
+  any other write. There is no per-cell pending state.
 - Not supported together with a `row_layout` (card rows render read-only
   meta values); every editable field must be a table field accepted by the
   update action (compile-time verified by

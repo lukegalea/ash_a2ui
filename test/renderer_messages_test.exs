@@ -150,16 +150,33 @@ defmodule AshA2ui.RendererMessagesTest do
       assert text =~ "Secret: s3cr3t"
     end
 
-    test "an action that writes no feedback still settles it to idle under the call's id" do
+    test "a quiet action (a query) leaves the feedback alone and answers an empty value" do
       call = Messages.call("query", "paginated", %{"query" => %{}}, id: "call-q")
 
       assert {:ok, messages} = ActionHandler.handle(Paginated, call)
       assert_all_valid(messages)
 
-      assert [%{"kind" => "", "message" => "", "functionCallId" => "call-q"} = idle] =
-               feedback_writes(messages)
+      assert feedback_writes(messages) == []
+      assert Messages.response(messages) == %{"functionCallId" => "call-q", "value" => %{}}
+    end
 
-      assert Messages.response(messages) == %{"functionCallId" => "call-q", "value" => idle}
+    test "a quiet action's failure still writes its feedback under the call's id" do
+      call =
+        Messages.call("query", "paginated", %{"query" => %{"sort" => "nope"}}, id: "call-qe")
+
+      assert {:error, messages} = ActionHandler.handle(Paginated, call)
+      assert_all_valid(messages)
+
+      assert [%{"kind" => "error", "functionCallId" => "call-qe"}] = feedback_writes(messages)
+      assert %{"error" => %{"code" => _code}} = Messages.response(messages)
+    end
+
+    test "the quiet actions are the ones the shipped hook writes no pending state for" do
+      source = File.read!("priv/js/ash_a2ui_protocol.js")
+      [_all, list] = Regex.run(~r/export const QUIET_ACTIONS = Object\.freeze\(\[([^\]]*)\]/, source)
+      names = Regex.scan(~r/"([a-z_]+)"/, list, capture: :all_but_first) |> List.flatten()
+
+      assert Enum.sort(names) == Enum.sort(ActionHandler.quiet_actions())
     end
 
     test "a plain action that writes no feedback leaves it alone and gets no response" do
@@ -410,6 +427,14 @@ defmodule AshA2ui.RendererMessagesTest do
         assert {:error, []} = ActionHandler.handle(KitchenSink, "submit_form")
         assert {:error, []} = ActionHandler.handle(KitchenSink, nil)
       end)
+    end
+
+    # RFC 3339 section 5.6: the "T" and "Z" may be written lowercase.
+    test "an action whose timestamp writes the date-time separator and zone lowercase is accepted" do
+      action = put_in(submit(), ["action", "timestamp"], "2026-01-01t00:00:00z")
+
+      assert_valid_renderer_message(action)
+      assert {:ok, _messages} = ActionHandler.handle(KitchenSink, action)
     end
 
     test "an action carrying renderer metadata extensions and a userMessage is accepted" do
