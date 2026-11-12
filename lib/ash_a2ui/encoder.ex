@@ -1241,7 +1241,7 @@ defmodule AshA2ui.Encoder do
     }
 
     sort =
-      %{"@path" => "#{table.query_path}/sort", "action" => action}
+      %{"path" => "#{table.query_path}/sort", "action" => action}
       |> maybe_put("reset", if(Map.get(table.query, :sort_reset, false), do: true))
 
     Map.put(grid, "sort", sort)
@@ -1260,7 +1260,7 @@ defmodule AshA2ui.Encoder do
     name = cells.name
 
     column
-    |> maybe_put("subtitle", cells.subtitle && %{"@path" => to_string(cells.subtitle)})
+    |> maybe_put("subtitle", cells.subtitle && %{"path" => to_string(cells.subtitle)})
     |> maybe_put("icon", cells.icon && icon_binding(name, cells))
     |> maybe_put("more", cells.more && more_binding(name, cells))
     |> maybe_put("detail", cells.detail && detail_binding(name, cells))
@@ -1273,7 +1273,7 @@ defmodule AshA2ui.Encoder do
   defp more_binding(name, cells) do
     values? = not is_nil(Map.get(cells, :more_values))
 
-    %{"@path" => to_string(cells.more), "textPath" => "_more_text_#{name}"}
+    %{"path" => to_string(cells.more), "textPath" => "_more_text_#{name}"}
     |> maybe_put("valuesPath", if(values?, do: "_more_values_#{name}"))
     |> maybe_put("captionPath", if(values?, do: "_more_caption_#{name}"))
     |> maybe_put("labelPath", if(values?, do: "_more_label_#{name}"))
@@ -1282,19 +1282,19 @@ defmodule AshA2ui.Encoder do
   # The third line: the caption field, read off the row, and the column's
   # words for it (`{date}` / `{value}` filled by the renderer).
   defp caption_binding(cells, l10n) do
-    %{"@path" => to_string(cells.caption)}
+    %{"path" => to_string(cells.caption)}
     |> maybe_put("text", translate_declared(l10n, Map.get(cells, :caption_text)))
   end
 
   defp icon_binding(name, cells) do
-    %{"@path" => "_icon_#{name}", "labelPath" => "_icon_label_#{name}"}
+    %{"path" => "_icon_#{name}", "labelPath" => "_icon_label_#{name}"}
     |> maybe_put("tonePath", if(cells.icon_tones != [], do: "_icon_tone_#{name}"))
   end
 
   defp detail_binding(name, cells) do
     icons? = cells.detail_icon_names != []
 
-    %{"@path" => "_detail_#{name}"}
+    %{"path" => "_detail_#{name}"}
     |> maybe_put("datePath", cells.detail_date && to_string(cells.detail_date))
     |> maybe_put("iconPath", if(icons?, do: "_detail_icon_#{name}"))
     |> maybe_put("iconTonePath", if(icons?, do: "_detail_icon_tone_#{name}"))
@@ -1325,7 +1325,7 @@ defmodule AshA2ui.Encoder do
   # tooltip the `_badge_help_<field>` key when `badge_help` is.
   defp put_column_badge(column, %{badge: field} = layout, field) do
     badge =
-      %{"@path" => "_badge_#{field}"}
+      %{"path" => "_badge_#{field}"}
       |> maybe_put("tonePath", if(layout.badge_tones != [], do: "_badge_tone_#{field}"))
       |> maybe_put(
         "helpPath",
@@ -1337,11 +1337,14 @@ defmodule AshA2ui.Encoder do
 
   defp put_column_badge(column, _layout, _field), do: column
 
-  # Linked fields bind their `_links` entry (row-relative in grids,
-  # absolute for detail/panel field displays).
+  # Linked fields name their `_links` entry (row-relative in grids,
+  # absolute for detail/panel field displays). The admin catalog's column
+  # and fieldDisplay descriptors (link, badge, icon, subtitle, more, detail,
+  # caption, sort) name data-model locations with plain `path` keys the
+  # admin renderer reads; they are not DynamicValue bindings.
   defp put_link_binding(component, view, field, path) do
     if AshA2ui.Links.link_field?(view.fields[field]),
-      do: Map.put(component, "link", %{"@path" => path}),
+      do: Map.put(component, "link", %{"path" => path}),
       else: component
   end
 
