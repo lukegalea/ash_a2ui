@@ -12,7 +12,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     import Phoenix.LiveViewTest
 
     alias AshA2ui.Test.LiveRendererFixtures, as: Fixtures
-    alias AshA2ui.Test.{Messages, MinimalUI, SchemaHelper}
+    alias AshA2ui.Test.{Messages, MinimalUI, SchemaHelper, Surface}
     alias Plug.Conn.Query
 
     @endpoint AshA2ui.Test.Endpoint
@@ -570,16 +570,16 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         assert_push_event(view, "a2ui:messages", %{messages: messages}, 1_000)
         Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
 
-        pushed = List.last(messages)["updateDataModel"]["value"]["records"]
+        pushed = Surface.data_model(messages)["records"]
 
         state = AshA2ui.Info.context_state_for(AshA2ui.Test.Links.PeopleUI, %{"person" => ada.id})
 
         built =
           AshA2ui.Test.Links.PeopleUI
           |> AshA2ui.Info.build_surface(context_state: state)
-          |> List.last()
+          |> Surface.data_model()
 
-        assert pushed == built["updateDataModel"]["value"]["records"]
+        assert pushed == built["records"]
         assert [%{"status" => "Open"}] = pushed["their_notes"]
 
         assert [%{"_links" => %{"note_title" => %{"surface" => "note"}}}] =

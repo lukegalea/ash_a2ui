@@ -48,11 +48,7 @@ defmodule AshA2ui.Board.BoardActionHandlerTest do
     # (gated on :claimed) is not.
     surface = AshA2ui.Info.build_surface(BoardTaskUI, authorize?: false)
 
-    initial =
-      Enum.find_value(surface, fn
-        %{"updateDataModel" => %{"path" => "/", "value" => value}} -> value
-        _other -> nil
-      end)
+    initial = AshA2ui.Test.Surface.data_model(surface)
 
     assert [open_row] = initial["records"]["board_open"]
     assert open_row["name"] == "card"

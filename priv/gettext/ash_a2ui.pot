@@ -11,11 +11,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Domain: ash_a2ui\n"
 
-#: lib/ash_a2ui/action_handler.ex:1663
+#: lib/ash_a2ui/action_handler.ex:1901
 msgid "%{action} completed."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:1668
+#: lib/ash_a2ui/action_handler.ex:1906
 msgid "%{action} is not available for this record."
 msgstr ""
 
@@ -25,7 +25,7 @@ msgid_plural "%{action}: %{ok} of %{selected} selected records done"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/ash_a2ui/action_handler.ex:1660
+#: lib/ash_a2ui/action_handler.ex:1898
 msgid "%{action}: done."
 msgstr ""
 
@@ -71,8 +71,8 @@ msgstr ""
 msgid "%{field} to"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2101
-#: lib/ash_a2ui/action_handler.ex:3327
+#: lib/ash_a2ui/action_handler.ex:2329
+#: lib/ash_a2ui/action_handler.ex:3485
 msgid "%{field}: %{message}"
 msgstr ""
 
@@ -80,8 +80,8 @@ msgstr ""
 msgid "%{first}, %{rest}"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2106
-#: lib/ash_a2ui/action_handler.ex:3507
+#: lib/ash_a2ui/action_handler.ex:2334
+#: lib/ash_a2ui/action_handler.ex:3665
 msgid "%{first}; %{rest}"
 msgstr ""
 
@@ -164,7 +164,7 @@ msgstr ""
 msgid "Create %{resource}"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:1414
+#: lib/ash_a2ui/action_handler.ex:1652
 msgid "Created successfully."
 msgstr ""
 
@@ -193,7 +193,7 @@ msgstr ""
 msgid "Export CSV"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2578
+#: lib/ash_a2ui/action_handler.ex:2783
 msgid "Exported %{filename} (%{count} rows)."
 msgid_plural "Exported %{filename} (%{count} rows)."
 msgstr[0] ""
@@ -254,7 +254,7 @@ msgstr ""
 msgid "Remove"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2444
+#: lib/ash_a2ui/action_handler.ex:2652
 msgid "Report complete: %{count} row."
 msgid_plural "Report complete: %{count} rows."
 msgstr[0] ""
@@ -288,7 +288,7 @@ msgstr ""
 msgid "Select"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2501
+#: lib/ash_a2ui/action_handler.ex:2709
 msgid "Select at least one column to export."
 msgstr ""
 
@@ -310,15 +310,16 @@ msgstr[1] ""
 msgid "Showing %{first}–%{last}"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:410
-#: lib/ash_a2ui/action_handler.ex:3430
-#: lib/ash_a2ui/action_handler.ex:3454
+#: lib/ash_a2ui/action_handler.ex:436
+#: lib/ash_a2ui/action_handler.ex:475
+#: lib/ash_a2ui/action_handler.ex:3588
+#: lib/ash_a2ui/action_handler.ex:3612
 msgid "The action failed."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:935
-#: lib/ash_a2ui/action_handler.ex:1217
-#: lib/ash_a2ui/action_handler.ex:1302
+#: lib/ash_a2ui/action_handler.ex:1173
+#: lib/ash_a2ui/action_handler.ex:1455
+#: lib/ash_a2ui/action_handler.ex:1540
 msgid "The selected option was not found."
 msgstr ""
 
@@ -326,7 +327,7 @@ msgstr ""
 msgid "This diagram is unavailable."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:271
+#: lib/ash_a2ui/action_handler.ex:317
 msgid "This view shows an earlier moment, so nothing on it can be changed. Return to now to make changes."
 msgstr ""
 
@@ -348,15 +349,15 @@ msgstr[1] ""
 msgid "True"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2684
+#: lib/ash_a2ui/action_handler.ex:2891
 msgid "Updated %{field}."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:1423
+#: lib/ash_a2ui/action_handler.ex:1661
 msgid "Updated successfully."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3433
+#: lib/ash_a2ui/action_handler.ex:3591
 msgid "Validation failed. Please review the field errors."
 msgstr ""
 
@@ -380,6 +381,6 @@ msgstr ""
 msgid "Week"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3311
+#: lib/ash_a2ui/action_handler.ex:3469
 msgid "You are not authorized to perform this action."
 msgstr ""

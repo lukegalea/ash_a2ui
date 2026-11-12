@@ -64,8 +64,6 @@ defmodule AshA2uiTest do
              %{"updateDataModel" => %{"path" => "/_empty_visible", "value" => []}},
              %{"updateDataModel" => %{"path" => "/form", "value" => %{}}},
              %{"updateDataModel" => %{"path" => "/errors", "value" => %{}}},
-             %{"updateDataModel" => %{"path" => "/ui/action_result", "value" => %{}}},
-             %{"updateDataModel" => %{"path" => "/ui/feedback/resultText", "value" => ""}},
              %{"updateDataModel" => %{"path" => "/ui/intent", "value" => "browse"}},
              %{"updateDataModel" => %{"path" => "/ui/panel", "value" => %{"visible" => []}}},
              %{

@@ -6,7 +6,7 @@ defmodule AshA2ui.Wave4ReferralTest do
   row actions (Modal + `prompt`/`invoke "values"` wire contract), conditional
   row-action visibility (rendering + mandatory handler enforcement), and the
   multi-key calc sort. Every message is validated against the vendored
-  v0.9.1 schemas.
+  A2UI 1.0 schemas.
   """
 
   use ExUnit.Case, async: false
@@ -14,7 +14,7 @@ defmodule AshA2ui.Wave4ReferralTest do
   import AshA2ui.Test.SchemaHelper
 
   alias AshA2ui.ActionHandler
-  alias AshA2ui.Test.{Author, Referral}
+  alias AshA2ui.Test.{Author, Referral, Surface}
 
   setup do
     referrer = Ash.create!(Author, %{name: "Rita Referrer", email: "rita@referrals.test"})
@@ -90,18 +90,15 @@ defmodule AshA2ui.Wave4ReferralTest do
   defp codes(rows), do: rows |> Enum.map(& &1["code"]) |> Enum.sort()
 
   defp components do
-    [_create, %{"updateComponents" => %{"components" => components}}, _data] =
-      AshA2ui.Info.build_surface(Referral, authorize?: false)
-
-    Map.new(components, &{&1["id"], &1})
+    Referral
+    |> AshA2ui.Info.build_surface(authorize?: false)
+    |> Surface.components_by_id()
   end
 
   defp initial_data_model do
-    [_create, _components, %{"updateDataModel" => %{"value" => value}} = message] =
-      AshA2ui.Info.build_surface(Referral, authorize?: false)
-
+    [message] = AshA2ui.Info.build_surface(Referral, authorize?: false)
     assert_valid_agent_message(message)
-    value
+    Surface.data_model(message)
   end
 
   # --- relationship-path search ----------------------------------------------
@@ -212,7 +209,7 @@ defmodule AshA2ui.Wave4ReferralTest do
       picker = components()["query_preset_picker"]
 
       assert picker["component"] == "ChoicePicker"
-      assert picker["value"] == %{"path" => "/query/preset"}
+      assert picker["value"] == %{"@path" => "/query/preset"}
 
       assert Enum.map(picker["options"], & &1["value"]) ==
                ["active", "pending", "closed", "deleted"]
@@ -362,12 +359,14 @@ defmodule AshA2ui.Wave4ReferralTest do
       # The trigger dispatches "prompt" so the server can pre-fill.
       trigger = components["row_action_decline_button"]
 
-      assert trigger["action"]["event"]["name"] == "prompt"
-
-      assert trigger["action"]["event"]["context"] == %{
-               "action" => "decline",
-               "recordId" => %{"path" => "id"},
-               "component" => "table"
+      assert Surface.event(trigger) == %{
+               "name" => "prompt",
+               "sourceComponentId" => "row_action_decline_button",
+               "context" => %{
+                 "action" => "decline",
+                 "recordId" => %{"@path" => "id"},
+                 "component" => "table"
+               }
              }
 
       assert components["row_action_decline_prompt"]["children"] == [
@@ -377,24 +376,26 @@ defmodule AshA2ui.Wave4ReferralTest do
                "row_action_decline_confirm_button"
              ]
 
-      assert components["row_action_decline_prompt_title"]["text"] == "Decline referral"
+      assert components["row_action_decline_prompt_title"]["text"] == "### Decline referral"
 
       input = components["row_action_decline_prompt_input_notes"]
       assert input["component"] == "TextField"
-      assert input["value"] == %{"path" => "/prompt/values/decline/notes"}
+      assert input["value"] == %{"@path" => "/prompt/values/decline/notes"}
 
       error = components["row_action_decline_prompt_error_notes"]
-      assert error["text"] == %{"path" => "/errors/notes"}
+      assert error["text"] == %{"@path" => "/errors/notes"}
 
       confirm = components["row_action_decline_confirm_button"]
-      assert confirm["action"]["event"]["name"] == "invoke"
-
-      assert confirm["action"]["event"]["context"] == %{
-               "action" => "decline",
-               "recordId" => %{"path" => "id"},
-               "component" => "table",
-               "values" => %{"path" => "/prompt/values/decline"},
-               "query" => %{"path" => "/query"}
+      assert Surface.event(confirm) == %{
+               "name" => "invoke",
+               "sourceComponentId" => "row_action_decline_confirm_button",
+               "context" => %{
+                 "action" => "decline",
+                 "recordId" => %{"@path" => "id"},
+                 "component" => "table",
+                 "values" => %{"@path" => "/prompt/values/decline"},
+                 "query" => %{"@path" => "/query"}
+               }
              }
     end
 
