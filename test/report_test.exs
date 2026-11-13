@@ -301,7 +301,7 @@ defmodule AshA2ui.ReportTest do
       create_word!("abcdef")
 
       [message] = AshA2ui.Info.build_surface(LabelledReportUI, authorize?: false)
-      assert_valid_server_message(message, :v1_0)
+      assert_valid_agent_message(message)
 
       %{components: Map.new(message["createSurface"]["components"], &{&1["id"], &1})}
     end
