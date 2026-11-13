@@ -425,6 +425,65 @@ defmodule AshA2ui.RendererMessagesTest do
     end
   end
 
+  describe "transport keys" do
+    # A browser telemetry client adds `_traceparent` (and its like) to the
+    # params of every LiveView event, so the hook's message arrives with it.
+    @traceparent "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+    test "a top-level _traceparent is ignored: the call dispatches and is answered" do
+      call =
+        Messages.call("submit_form", "kitchen_sink", %{"values" => %{"name" => "Traced"}},
+          id: "call-traced"
+        )
+
+      assert {:ok, messages} =
+               ActionHandler.handle(KitchenSink, Map.put(call, "_traceparent", @traceparent))
+
+      assert_all_valid(messages)
+      assert [%{name: "Traced"}] = Ash.read!(KitchenSink, authorize?: false)
+
+      assert %{"agentFunctionResponse" => %{"functionCallId" => "call-traced"}} =
+               List.last(messages)
+
+      # The handler answers exactly as it does for the message alone.
+      refute Enum.any?(messages, &(inspect(&1) =~ @traceparent))
+    end
+
+    test "underscore keys are dropped at the top level only" do
+      assert ActionHandler.drop_transport_keys(%{
+               "version" => "1.0",
+               "_traceparent" => @traceparent,
+               "_csrf" => "t",
+               "callAgentFunction" => %{"_kept" => true}
+             }) == %{"version" => "1.0", "callAgentFunction" => %{"_kept" => true}}
+
+      assert ActionHandler.drop_transport_keys(nil) == nil
+    end
+
+    test "an unknown key without the underscore is still refused" do
+      message =
+        Messages.call("submit_form", "kitchen_sink", %{"values" => %{"name" => "M"}})
+        |> Map.put("_traceparent", @traceparent)
+        |> Map.put("traceparent", @traceparent)
+
+      {result, log} = with_log(fn -> ActionHandler.handle(KitchenSink, message) end)
+      assert result == {:error, []}
+      assert log =~ "Refused an A2UI renderer message"
+      assert Ash.read!(KitchenSink, authorize?: false) == []
+    end
+
+    test "an underscore key inside the call is still refused" do
+      call = call_with(%{"_traceparent" => @traceparent}, id: "call-nested")
+
+      {{:error, messages}, _log} = with_log(fn -> ActionHandler.handle(KitchenSink, call) end)
+
+      assert %{"agentFunctionResponse" => %{"error" => %{"code" => "INVALID_FUNCTION_CALL"}}} =
+               List.last(messages)
+
+      assert Ash.read!(KitchenSink, authorize?: false) == []
+    end
+  end
+
   describe "rendererFunctionResponse" do
     defp respond(body, opts \\ []) do
       message = %{"version" => "1.0", "rendererFunctionResponse" => body}

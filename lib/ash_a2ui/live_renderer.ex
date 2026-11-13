@@ -27,7 +27,9 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     - `render/1` renders the hook container
       (`<div id="ash-a2ui-surface" phx-hook="AshA2ui" phx-update="ignore">`).
     - `handle_event("a2ui:message", message, socket)` takes one A2UI 1.0
-      renderer-to-agent message, verbatim, routes it through
+      renderer-to-agent message, verbatim (less any top-level key that
+      starts with `_`, which is the transport's: see
+      `AshA2ui.ActionHandler.drop_transport_keys/1`), routes it through
       `AshA2ui.ActionHandler.handle/3` and pushes the follow-up messages,
       for both `{:ok, messages}` and `{:error, messages}` results (an
       action's error messages carry validation feedback on the reserved
@@ -722,8 +724,14 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       """
     end
 
+    # Top-level `_` keys are the transport's (a browser telemetry client
+    # adds `_traceparent` to every event's params), never A2UI's: they are
+    # dropped here so routing, a custom `:action_fn` and the
+    # rendererFunctionResponse match all see the message alone.
     @doc false
     def handle_message(config, message, socket) do
+      message = AshA2ui.ActionHandler.drop_transport_keys(message)
+
       case message_surface(config, message) do
         nil -> handle_main_message(config, message, socket)
         surface -> handle_surface_message(config, surface, message, socket)

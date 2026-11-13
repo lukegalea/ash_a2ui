@@ -242,6 +242,36 @@ const INPUT_OVERRIDE_TAGS = {
   DateTimeInput: "ash-admin-datetimeinput",
 };
 
+/**
+ * The element that has focus inside `element`, whichever DOM it renders
+ * into, or null when focus is elsewhere.
+ *
+ * An element with its own shadow root (the @a2ui/lit 0.15.0 A2uiLitElement,
+ * or a plain custom element such as nb-calendar) keeps its focus in that
+ * root's `activeElement`. One rendered into light DOM (A2uiLitElement whose
+ * `createRenderRoot()` returns `this`, the upstream default after 0.15.0)
+ * has no shadow root: its focus is the `activeElement` of the root it sits
+ * in, the document or an enclosing shadow root, when that element is
+ * inside it.
+ */
+function focusedIn(element) {
+  if (!element) return null;
+  const renderRoot = element.renderRoot;
+  const own = renderRoot && renderRoot !== element ? renderRoot : element.shadowRoot;
+  if (own) return own.activeElement ?? null;
+  const active = element.getRootNode?.()?.activeElement ?? null;
+  return active && active !== element && element.contains(active) ? active : null;
+}
+
+/**
+ * The element that has focus in the root `element` sits in (its neighbours'
+ * root, not its own): the control that opened a dialog, say. Falls back to
+ * `document.activeElement`.
+ */
+function focusedAround(element) {
+  return element?.getRootNode?.()?.activeElement ?? document.activeElement ?? null;
+}
+
 // Responsive breakpoint: the DataGrid renders a real table at ≥ 48rem and a
 // card list below it (CSS container query on the grid host).
 const GRID_TABLE_MIN = "48rem";
@@ -2138,7 +2168,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
           rowIdentity: this.rowIdentity(rows[index], index),
           busy: false,
           error: "",
-          restoreFocus: this.shadowRoot?.activeElement || document.activeElement,
+          restoreFocus: focusedIn(this) || document.activeElement,
           focused: false,
         };
         const open = adminActionSpec(action.prompt.open);
@@ -2190,7 +2220,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
           // start guard, which does the same (onPromptGuardFocus).
           const last = this.lastPromptButton();
           if (!last) return;
-          const active = this.shadowRoot?.activeElement;
+          const active = focusedIn(this);
           const heading = this.renderRoot.querySelector("[data-prompt-heading]");
           if (!event.shiftKey && active === last) {
             event.preventDefault();
@@ -3924,7 +3954,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
       /** Sets only the attributes that differ (each write repaints the
        * grid), and keeps keyboard focus on the day that held it. */
       writeAttributes(element, attrs) {
-        const focused = element.shadowRoot?.activeElement?.dataset?.date;
+        const focused = focusedIn(element)?.dataset?.date;
         let changed = false;
         for (const [name, value] of Object.entries(attrs)) {
           const current = element.getAttribute(name);
@@ -4739,7 +4769,10 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         if (!changedProperties.has("open")) return;
 
         if (this.open) {
-          this._amRestoreFocus = document.activeElement;
+          // Read before the heading takes focus: the control that opened
+          // the dialog, from the root the dialog sits in (in shadow DOM,
+          // document.activeElement would be the outermost host).
+          this._amRestoreFocus = focusedAround(this);
           const heading = this.renderRoot?.querySelector("[data-dialog-heading]");
           if (heading) heading.focus();
         } else if (changedProperties.get("open") === true && this.isConnected) {
@@ -4750,8 +4783,10 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
       disconnectedCallback() {
         super.disconnectedCallback();
         // The DataGrid removes this element on confirm/cancel — restoring
-        // focus to the invoking row button is the closing act.
-        if (this.open) this.restoreFocus();
+        // focus to the invoking row button is the closing act. It sets
+        // `open = false` just before, and removal comes before that update
+        // runs, so the pending restore target is what says it was open.
+        if (this.open || this._amRestoreFocus) this.restoreFocus();
       }
 
       restoreFocus() {
@@ -4776,22 +4811,30 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
           return;
         }
         if (event.key === "Tab") {
-          // Focus trap: cycle within the dialog while it is open.
+          // Focus trap: cycle within the dialog while it is open, in light
+          // or shadow DOM (focusedIn). Tab past the last control wraps to
+          // the first and Shift+Tab before the first to the last; from the
+          // heading (tabindex -1, not in the cycle) or from anywhere outside
+          // the controls, focus is brought back inside.
           const focusables = [
             ...this.renderRoot.querySelectorAll(
               'button, [data-am-button], [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
             ),
-          ].filter((element) => !element.hasAttribute("disabled"));
+          ].filter(
+            (element, _index, all) =>
+              !element.hasAttribute("disabled") &&
+              // a design-system button host and its own <button> are one stop
+              !all.some((other) => other !== element && other.contains(element)),
+          );
           if (focusables.length === 0) return;
           const first = focusables[0];
           const last = focusables[focusables.length - 1];
-          // The dialog's own shadow root: from outside it, document.activeElement
-          // is the dialog host, never one of its buttons.
-          const active = this.renderRoot.activeElement;
-          if (event.shiftKey && active === first) {
+          const active = focusedIn(this);
+          const index = focusables.findIndex((element) => element === active || element.contains(active));
+          if (event.shiftKey && index <= 0) {
             event.preventDefault();
             last.focus();
-          } else if (!event.shiftKey && active === last) {
+          } else if (!event.shiftKey && (index === -1 || index === focusables.length - 1)) {
             event.preventDefault();
             first.focus();
           }
