@@ -138,6 +138,18 @@ changes is the wire format and the way a host wires the renderer.
   column and the CSV header. Contributed by @suedoh in #80, ported onto the
   A2UI 1.0 encoder.
 
+### Performance
+
+- **A facet over a field writes the field into SQL once.** `facet_counts`
+  counted every faceted filter with one filtered `count` per option, so a
+  filter over a calculation repeated the calculation's expression once per
+  option: a 12-option filter over an 18 KB calculation made one 177 KB
+  statement. A filter on a field of the resource (and a path filter naming
+  one field) is now one `list` aggregate of the field's values, tallied per
+  option; the counts are unchanged. A to-many path filter, an array field and
+  case-insensitive text keep one filtered count per option, the only way to
+  count them as the filter compares.
+
 ### Bug Fixes:
 
 - **A host passing its own assigns to `surface_container/1` renders.** A

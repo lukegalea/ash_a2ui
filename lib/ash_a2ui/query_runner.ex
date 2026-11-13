@@ -73,9 +73,12 @@ defmodule AshA2ui.QueryRunner do
   records per option value — search, ranges, the preset, the scope, the
   calendar window and every OTHER filter applied, not the filter's own
   selection — and per `filter_groups` group the sum of its leaves. Each
-  faceted filter is one `Ash.aggregate/3` call: one filtered `count` per
-  option, which a SQL data layer runs as one query. A failing count leaves
-  the filter's facets empty rather than failing the read.
+  faceted filter is one `Ash.aggregate/3` call. A field of the resource
+  (a filter, or a path filter naming one field) is one `list` aggregate of
+  its values, tallied per option, so its expression is written into the
+  statement once however many options it has; a to-many path filter is one
+  filtered `count` per option. A failing count leaves the filter's facets
+  empty rather than failing the read.
 
   ## Calendar windows
 
@@ -596,8 +599,8 @@ defmodule AshA2ui.QueryRunner do
   end
 
   # One filter's counts: the read with every other filter (and search,
-  # ranges, window) applied, one filtered count per option value, all in
-  # one aggregate call. Groups sum their leaves.
+  # ranges, window) applied, then counted per option value in one aggregate
+  # call (`count_options/4`). Groups sum their leaves.
   defp facet_counts(base, query, params, calendar, options, name) do
     others = Enum.reject(params.filters, fn {filter, _value} -> filter == name end)
 
@@ -610,6 +613,35 @@ defmodule AshA2ui.QueryRunner do
 
     values = facet_values(counted.resource, query, options, name)
 
+    case values != [] && count_options(counted, query, name, values) do
+      {:ok, leaf_counts} -> Map.merge(leaf_counts, group_counts(query, name, leaf_counts))
+      _none_or_error -> %{}
+    end
+  end
+
+  # A field of the resource itself (a filter, or a path filter naming one
+  # field) is counted from one `list` aggregate of its values, tallied
+  # here: the field is written into the statement once. A calculation can
+  # compile to a large expression, and a filtered count per option repeats
+  # it once per option (a 12-option filter over an 18 KB calculation made
+  # one 177 KB statement). A to-many path counts records with a related
+  # value among the option's, so it keeps one filtered count per option.
+  defp count_options(counted, query, name, values) do
+    case listed_field(counted.resource, query, name) do
+      nil -> count_each_option(counted, query, name, values)
+      field -> tally_values(counted, field, values)
+    end
+  end
+
+  defp tally_values(counted, field, values) do
+    with {:ok, %{a2ui_facet_values: found}} <-
+           Ash.aggregate(counted, [{:a2ui_facet_values, :list, field: field}]) do
+      tally = Enum.frequencies_by(found, &stringify/1)
+      {:ok, Map.new(values, &{stringify(&1), Map.get(tally, stringify(&1), 0)})}
+    end
+  end
+
+  defp count_each_option(counted, query, name, values) do
     aggregates =
       values
       |> Enum.with_index()
@@ -617,17 +649,36 @@ defmodule AshA2ui.QueryRunner do
         {facet_key(index), :count, query: [filter: filter_condition(query, name, value)]}
       end)
 
-    case aggregates != [] && Ash.aggregate(counted, aggregates) do
-      {:ok, counts} ->
-        leaf_counts =
-          values
-          |> Enum.with_index()
-          |> Map.new(fn {value, index} -> {stringify(value), counts[facet_key(index)] || 0} end)
+    with {:ok, counts} <- Ash.aggregate(counted, aggregates) do
+      {:ok,
+       values
+       |> Enum.with_index()
+       |> Map.new(fn {value, index} -> {stringify(value), counts[facet_key(index)] || 0} end)}
+    end
+  end
 
-        Map.merge(leaf_counts, group_counts(query, name, leaf_counts))
+  # The resource's own field a faceted filter compares, when its values can
+  # be tallied in Elixir exactly as the filter compares them: not an array
+  # (the filter compares whole arrays) and not case-insensitive text (the
+  # filter folds case, a tally would not).
+  defp listed_field(resource, query, name) do
+    field =
+      case Keyword.get(query.path_filters, name) do
+        nil -> name
+        field when is_atom(field) -> field
+        _path -> nil
+      end
 
-      _none_or_error ->
-        %{}
+    if field && tallied_type?(field_type(resource, field) |> elem(0)), do: field
+  end
+
+  defp tallied_type?({:array, _inner}), do: false
+
+  defp tallied_type?(type) do
+    case Ash.Type.get_type(type) do
+      {:array, _inner} -> false
+      Ash.Type.CiString -> false
+      _type -> true
     end
   end
 
