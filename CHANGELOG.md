@@ -132,6 +132,13 @@ changes is the wire format and the way a host wires the renderer.
 
 ### Bug Fixes:
 
+- **A host passing its own assigns to `surface_container/1` renders.** A
+  LiveView with an unrelated `@surface` (a record), `@id` or `@primary`
+  rendered `surface_container(assigns)` with those values, and a
+  struct-valued `surface` raised `Protocol.UndefinedError`. Only a string
+  `id` or `surface` and a literal `true` `primary` count now; anything else
+  renders the defaults.
+
 - **Dynamic specs with list rows, plain links, groups or a section note
   resolve.** The parser passed `trailing`, `expand`, `link_url`, `group_by`,
   `group_subtitle` and `section_note` through as strings, so a surface that
@@ -170,10 +177,21 @@ changes is the wire format and the way a host wires the renderer.
   no surface (a `callRendererFunction` without a `surfaceId`) go to the
   primary container. Before, every hook on a page took every
   `"a2ui:messages"` push, so two hooks drew the same surface. A page with
-  no `surface` and no `primary` routes as before. Building and pushing the
-  second surface's messages, and routing its `"a2ui:message"` calls by
-  `surfaceId` to `AshA2ui.ActionHandler.handle/3`, stay with the host; see
-  the LiveView usage rules.
+  no `surface` and no `primary` routes as before.
+
+- **`AshA2ui.LiveRenderer` hosts more than one surface.** A new `:surfaces`
+  option (`surfaces: [order_summary: [ui: OrderSummaryUI, context:
+  &summary_context/2]]`) lists surfaces the LiveView builds, pushes, answers
+  and refreshes beside the main one. Each is built in its own async task as
+  the same actor, tenant, `as_of` and locale, with `header: false`, its
+  context selection from the optional `(params, socket)` function and
+  rebuilt when `handle_params` changes it. `"a2ui:message"` calls are
+  routed by their `surfaceId` to the surface's UI, whose query and context state
+  are tracked apart from the main surface's. A PubSub refresh rebuilds
+  every surface. The host writes only the containers and the context
+  function, and no `handle_event` of its own. Without `:surfaces`, nothing
+  changes. See "Additional surfaces" in the moduledoc and the LiveView
+  usage rules.
 
 - **`param_placeholders` on a `:report` component.** A placeholder per report
   param (`param_placeholders search: "Search vendors"`), emitted as the param

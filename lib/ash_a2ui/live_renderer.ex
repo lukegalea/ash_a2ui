@@ -38,10 +38,13 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     - With `:pubsub` configured it subscribes on the connected mount and
       pushes debounced `AshA2ui.Info.build_data_model/2` refreshes when
       broadcasts arrive (see "PubSub live refresh" below).
+    - With `:surfaces` it does all of the above for more than one surface
+      on the page (see "Additional surfaces" below).
 
     All injected callbacks (`mount/3`, `render/1`, `handle_event/3`,
     `handle_info/2`, `handle_async/3`) are `defoverridable`. If you override
-    `handle_async/3`, delegate the `:ash_a2ui_surface` key to
+    `handle_async/3`, delegate the `:ash_a2ui_surface` key (and, with
+    `:surfaces`, the `{:ash_a2ui_surface, name}` keys) to
     `AshA2ui.LiveRenderer.handle_async/4` — it delivers the bootstrap
     messages; dropping it strands the client on the skeleton.
 
@@ -93,6 +96,11 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         `rendererFunctionResponse` body that answers a
         `callRendererFunction` this LiveView pushed. See "Renderer function
         calls".
+      * `:surfaces` (optional) — more surfaces this LiveView builds, pushes,
+        answers and refreshes beside the main one, as `name: [ui: module,
+        context: fun]`. `:ui` is required; `:context` is an optional
+        2-arity function `(params, socket) -> %{"<context>" => id} | nil`.
+        See "Additional surfaces".
       * `:pubsub` (optional) — enables live refresh:
         `pubsub: [module: MyApp.PubSub, topics: ["providers:created", ...]]`.
         Topics are explicit configuration: pass the topics your resource's
@@ -123,6 +131,59 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     scoping.
 
     Override `handle_info/2` if your LiveView receives unrelated messages.
+
+    ## Additional surfaces
+
+    A page can show more than one surface, say a small summary card above
+    the main one. List the others under `:surfaces`:
+
+        use AshA2ui.LiveRenderer,
+          ui: MyApp.UI.OrderUI,
+          actor_fn: & &1.assigns.current_user,
+          surfaces: [
+            order_summary: [
+              ui: MyApp.UI.OrderSummaryUI,
+              context: &MyAppWeb.OrderLive.summary_context/2
+            ]
+          ]
+
+        def summary_context(params, _socket), do: %{"order" => params["id"]}
+
+    For each one:
+
+      * **Build.** The connected mount starts its build in its own async
+        task (`{:ash_a2ui_surface, name}`), as the same actor, tenant,
+        `as_of` and locale/translator as the main surface, with `header:
+        false`. The result is pushed as `"a2ui:messages"`.
+      * **Selection.** `:context` is called with the mount's params and the
+        socket. The ids it returns are validated through
+        `AshA2ui.Info.context_state_for/3` (the same authorized reads a
+        deep link takes) and the surface is built with that context. With
+        no `:context`, or `nil` / `%{}`, it is built with none.
+        `handle_params/4` (injected by `deep_link`/`time_travel`, or called
+        by a host's own) calls it again and rebuilds the surface when the
+        selection changed.
+      * **Calls.** `"a2ui:message"` calls are routed by their
+        `surfaceId` (`callAgentFunction.surfaceId`): the surface's UI
+        answers through the same handler and options, and its follow-ups
+        (ending in the call's `agentFunctionResponse`) are pushed. Its query and
+        context state are tracked in `:ash_a2ui_surfaces` (by name), never in
+        the main surface's state or the URL. Everything else goes to the
+        main UI as before.
+      * **Refresh.** A PubSub refresh rebuilds every built surface's data
+        model with its own tracked state, in the same push as the main
+        one. The summary on a page usually shows the same records the
+        topics announce changes to, so it should not go stale. A surface
+        still bootstrapping is skipped.
+
+    The surface id is the UI's `surface_id`. `render/1` still renders the
+    one default container; a page with more surfaces renders its own
+    layout, with a container per surface and `primary` on the main one:
+
+        <AshA2ui.LiveRenderer.surface_container id="order-summary" surface="order_summary" />
+        <AshA2ui.LiveRenderer.surface_container id="order" surface="order" primary />
+
+    Without `:surfaces`, nothing changes.
 
     ## Renderer function calls
 
@@ -188,7 +249,9 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
     `mount/3` assigns `:ash_a2ui_ui`, `:ash_a2ui_actor`,
     `:ash_a2ui_tenant`, `:ash_a2ui_locale` and `:ash_a2ui_as_of` (always `nil` without
-    `time_travel: true`) on the socket.
+    `time_travel: true`) on the socket, and `:ash_a2ui_surfaces`: each
+    additional surface's `selection`, `query_state` and `context_state`, by
+    name (`%{}` without `:surfaces`).
 
     ## Test seams (not public API)
 
@@ -281,6 +344,10 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           )
         end
 
+        def handle_async({:ash_a2ui_surface, _name} = key, result, socket) do
+          AshA2ui.LiveRenderer.handle_async(__ash_a2ui_config__(), key, result, socket)
+        end
+
         defoverridable mount: 3, render: 1, handle_event: 3, handle_info: 2, handle_async: 3
       end
     end
@@ -299,6 +366,7 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         open_surface_url: Keyword.get(opts, :open_surface_url),
         on_function_response: Keyword.get(opts, :on_function_response),
         header: Keyword.get(opts, :header, true),
+        surfaces: normalize_surfaces(Keyword.get(opts, :surfaces, [])),
         locale_fn: Keyword.get(opts, :locale_fn) || fn _socket -> nil end,
         l10n:
           Keyword.take(opts, [:gettext_backend, :gettext_fn, :metadata_domain, :errors_domain]),
@@ -329,7 +397,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           ash_a2ui_context_state: nil,
           ash_a2ui_uri: nil,
           ash_a2ui_url_ctx: url_state.ctx,
-          ash_a2ui_pending_calls: %{}
+          ash_a2ui_pending_calls: %{},
+          ash_a2ui_surfaces: %{}
         )
 
       socket =
@@ -341,7 +410,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
           # now, the JS hook shows its skeleton, and the bootstrap messages
           # hydrate the surface when the task lands. URL-carried state is
           # validated inside the task (authorized context reads).
-          start_async(socket, :ash_a2ui_surface, fn ->
+          socket
+          |> start_async(:ash_a2ui_surface, fn ->
             opts =
               [actor: actor, tenant: tenant] ++
                 AshA2ui.AsOf.read_opt(as_of) ++ l10n_opts(config, locale)
@@ -353,11 +423,83 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
                 link_button_opts(config) ++ header_opts(config)
             )
           end)
+          |> start_surfaces(config, params)
         else
           socket
         end
 
       {:ok, socket}
+    end
+
+    # The additional surfaces (`:surfaces`): each built in its own async
+    # task, as the same actor/tenant/as_of/l10n as the main surface, with its
+    # context selection from the host's `context` function.
+    defp start_surfaces(socket, config, params) do
+      Enum.reduce(config.surfaces, socket, fn surface, socket ->
+        start_surface(socket, config, surface, surface_selection(surface, params, socket))
+      end)
+    end
+
+    defp start_surface(socket, config, surface, selection) do
+      opts = call_opts(socket)
+
+      socket
+      |> put_surface_state(surface.name, %{
+        selection: selection,
+        built?: false,
+        query_state: nil,
+        context_state: nil
+      })
+      |> start_async({:ash_a2ui_surface, surface.name}, fn ->
+        context =
+          if selection == %{},
+            do: [],
+            else: [context_state: AshA2ui.Info.context_state_for(surface.ui, selection, opts)]
+
+        config.surface_fn.(
+          surface.ui,
+          opts ++ context ++ link_button_opts(config) ++ [header: false]
+        )
+      end)
+    end
+
+    defp surface_selection(%{context: nil}, _params, _socket), do: %{}
+
+    defp surface_selection(%{context: context}, params, socket) do
+      case context.(params, socket) do
+        selection when is_map(selection) ->
+          for {key, id} <- selection, is_binary(id) and id != "", into: %{} do
+            {to_string(key), id}
+          end
+
+        _none ->
+          %{}
+      end
+    end
+
+    # A params change (live navigation, back/forward) that changes an extra
+    # surface's selection rebuilds that surface.
+    defp restart_changed_surfaces(socket, config, params) do
+      Enum.reduce(config.surfaces, socket, fn surface, socket ->
+        name = surface.name
+        selection = surface_selection(surface, params, socket)
+
+        case socket.assigns.ash_a2ui_surfaces do
+          %{^name => %{selection: ^selection}} -> socket
+          _changed -> start_surface(socket, config, surface, selection)
+        end
+      end)
+    end
+
+    defp put_surface_state(socket, name, state) do
+      assign(socket, :ash_a2ui_surfaces, Map.put(socket.assigns.ash_a2ui_surfaces, name, state))
+    end
+
+    defp update_surface_state(socket, name, fun) do
+      case socket.assigns.ash_a2ui_surfaces do
+        %{^name => state} -> put_surface_state(socket, name, fun.(state))
+        _unknown -> socket
+      end
     end
 
     # The URL's ctx/q params (anything else — including a LiveView not
@@ -434,7 +576,8 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     current URI (the base for context `push_patch`es) and — on browser
     back/forward to different `ctx` params — re-applies the URL's context
     selections (validated like the mount's) and pushes the refreshed data
-    model.
+    model. An additional surface (`:surfaces`) whose `:context` selection
+    changed with the params is rebuilt.
     """
     def handle_params(config, params, uri, socket) do
       first? = is_nil(socket.assigns[:ash_a2ui_uri])
@@ -450,6 +593,15 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         url_as_of(config, params) != socket.assigns[:ash_a2ui_as_of] ->
           {:noreply, push_navigate(socket, to: request_path(uri))}
 
+        true ->
+          socket
+          |> restart_changed_surfaces(config, params)
+          |> apply_url_context(config, ctx)
+      end
+    end
+
+    defp apply_url_context(socket, config, ctx) do
+      cond do
         not config.deep_link ->
           {:noreply, socket}
 
@@ -543,6 +695,22 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     )
 
     def surface_container(assigns) do
+      # A host that passes its own assigns through (`surface_container(assigns)`)
+      # may hold an unrelated `@surface`, `@id` or `@primary` (a struct, a map):
+      # only a string id or surface and a literal `true` count, anything else
+      # renders as the default rather than crashing the render.
+      attrs = [
+        id: if(is_binary(assigns[:id]), do: assigns.id, else: "ash-a2ui-surface"),
+        surface: if(is_binary(assigns[:surface]), do: assigns.surface),
+        primary: assigns[:primary] == true
+      ]
+
+      # assign/2 keeps change tracking in a template; a hand call has none to keep.
+      assigns =
+        if Map.has_key?(assigns, :__changed__),
+          do: assign(assigns, attrs),
+          else: Map.merge(assigns, Map.new(attrs))
+
       ~H"""
       <div
         id={@id}
@@ -556,6 +724,49 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
 
     @doc false
     def handle_message(config, message, socket) do
+      case message_surface(config, message) do
+        nil -> handle_main_message(config, message, socket)
+        surface -> handle_surface_message(config, surface, message, socket)
+      end
+    end
+
+    # A message from an extra surface (`:surfaces`), by the `surfaceId` it
+    # names; anything else (a rendererFunctionResponse names none) is the
+    # main surface's.
+    defp message_surface(%{surfaces: []}, _message), do: nil
+
+    defp message_surface(config, message) do
+      case message_surface_id(message) do
+        surface_id when is_binary(surface_id) ->
+          Enum.find(config.surfaces, &(&1.surface_id == surface_id))
+
+        _none ->
+          nil
+      end
+    end
+
+    defp message_surface_id(%{"callAgentFunction" => %{"surfaceId" => surface_id}}),
+      do: surface_id
+
+    defp message_surface_id(%{"action" => %{"surfaceId" => surface_id}}), do: surface_id
+    defp message_surface_id(%{"error" => %{"surfaceId" => surface_id}}), do: surface_id
+    defp message_surface_id(_message), do: nil
+
+    # The extra surface's UI answers, with the same call options; its
+    # follow-ups are tracked in its own state and never touch the main
+    # surface's query/context state or the URL.
+    defp handle_surface_message(config, surface, message, socket) do
+      {outcome, messages} = config.action_fn.(surface.ui, message, call_opts(socket))
+
+      socket =
+        socket
+        |> update_surface_state(surface.name, &track_states(&1, messages))
+        |> push_messages(messages)
+
+      maybe_open_surface(config, outcome, message, socket)
+    end
+
+    defp handle_main_message(config, message, socket) do
       {outcome, messages} = config.action_fn.(config.ui, message, call_opts(socket))
 
       case {outcome, message} do
@@ -694,6 +905,19 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
       exit(reason)
     end
 
+    def handle_async(_config, {:ash_a2ui_surface, name}, {:ok, messages}, socket) do
+      socket =
+        update_surface_state(socket, name, fn state ->
+          state |> track_states(messages) |> Map.put(:built?, true)
+        end)
+
+      {:noreply, push_messages(socket, messages)}
+    end
+
+    def handle_async(_config, {:ash_a2ui_surface, _name}, {:exit, reason}, _socket) do
+      exit(reason)
+    end
+
     @doc false
     def handle_notification(config, message, socket)
 
@@ -706,7 +930,9 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         |> track_query_state([data_model])
         |> track_context_state([data_model])
 
-      {:noreply, push_messages(socket, [data_model])}
+      {socket, surface_models} = refresh_surfaces(config, socket)
+
+      {:noreply, push_messages(socket, [data_model | surface_models])}
     end
 
     def handle_notification(%{pubsub: nil}, _message, socket) do
@@ -719,6 +945,26 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     # the next scheduled refresh.
     def handle_notification(config, _message, socket) do
       {:noreply, schedule_refresh(config, socket)}
+    end
+
+    # The extra surfaces refresh with the main one, each with its own tracked
+    # query/context state. One still bootstrapping is skipped: its build is
+    # already reading the changed data.
+    defp refresh_surfaces(config, socket) do
+      Enum.reduce(config.surfaces, {socket, []}, fn surface, {socket, models} ->
+        name = surface.name
+
+        case socket.assigns.ash_a2ui_surfaces do
+          %{^name => %{built?: true} = state} ->
+            model = config.data_model_fn.(surface.ui, state_opts(call_opts(socket), state))
+
+            {update_surface_state(socket, surface.name, &track_states(&1, [model])),
+             models ++ [model]}
+
+          _not_built ->
+            {socket, models}
+        end
+      end)
     end
 
     defp subscribe(nil), do: :ok
@@ -769,40 +1015,59 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     # so PubSub refreshes can re-run the user's current query instead of the
     # declared defaults.
     defp track_query_state(socket, messages) do
-      state =
-        Enum.reduce(messages, socket.assigns.ash_a2ui_query_state, fn
-          %{"updateDataModel" => %{"path" => "/query", "value" => value}}, _acc
-          when is_map(value) ->
-            value
+      assign(
+        socket,
+        :ash_a2ui_query_state,
+        fold_query_state(socket.assigns.ash_a2ui_query_state, messages)
+      )
+    end
 
-          # Multi-table surfaces scope follow-ups per table
-          # (/query/<component_name>); fold them into the tracked keyed map.
-          %{"updateDataModel" => %{"path" => "/query/" <> table, "value" => value}}, acc
-          when is_map(value) ->
-            Map.put((is_map(acc) && acc) || %{}, table, value)
+    defp fold_query_state(state, messages) do
+      Enum.reduce(messages, state, fn
+        %{"updateDataModel" => %{"path" => "/query", "value" => value}}, _acc
+        when is_map(value) ->
+          value
 
-          message, acc ->
-            root_value(message, "query", acc)
-        end)
+        # Multi-table surfaces scope follow-ups per table
+        # (/query/<component_name>); fold them into the tracked keyed map.
+        %{"updateDataModel" => %{"path" => "/query/" <> table, "value" => value}}, acc
+        when is_map(value) ->
+          Map.put((is_map(acc) && acc) || %{}, table, value)
 
-      assign(socket, :ash_a2ui_query_state, state)
+        message, acc ->
+          root_value(message, "query", acc)
+      end)
     end
 
     # Same for the last /context state (surface contexts): a context change
     # rewrites /context wholesale; the full data model carries it under
     # "context".
     defp track_context_state(socket, messages) do
-      state =
-        Enum.reduce(messages, socket.assigns.ash_a2ui_context_state, fn
-          %{"updateDataModel" => %{"path" => "/context", "value" => value}}, _acc
-          when is_map(value) ->
-            value
+      assign(
+        socket,
+        :ash_a2ui_context_state,
+        fold_context_state(socket.assigns.ash_a2ui_context_state, messages)
+      )
+    end
 
-          message, acc ->
-            root_value(message, "context", acc)
-        end)
+    defp fold_context_state(state, messages) do
+      Enum.reduce(messages, state, fn
+        %{"updateDataModel" => %{"path" => "/context", "value" => value}}, _acc
+        when is_map(value) ->
+          value
 
-      assign(socket, :ash_a2ui_context_state, state)
+        message, acc ->
+          root_value(message, "context", acc)
+      end)
+    end
+
+    # An extra surface's tracked query/context state.
+    defp track_states(state, messages) do
+      %{
+        state
+        | query_state: fold_query_state(state.query_state, messages),
+          context_state: fold_context_state(state.context_state, messages)
+      }
     end
 
     # `key` of a whole data model: createSurface's inline dataModel, or a
@@ -833,15 +1098,38 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
     defp l10n_opts(config, locale), do: [{:locale, locale} | config.l10n]
 
     defp refresh_opts(socket) do
+      state_opts(call_opts(socket), %{
+        query_state: socket.assigns.ash_a2ui_query_state,
+        context_state: socket.assigns.ash_a2ui_context_state
+      })
+    end
+
+    defp state_opts(opts, state) do
       opts =
-        case socket.assigns.ash_a2ui_query_state do
-          nil -> call_opts(socket)
-          state -> Keyword.put(call_opts(socket), :query_state, state)
+        case state.query_state do
+          nil -> opts
+          query_state -> Keyword.put(opts, :query_state, query_state)
         end
 
-      case socket.assigns.ash_a2ui_context_state do
+      case state.context_state do
         nil -> opts
-        state -> Keyword.put(opts, :context_state, state)
+        context_state -> Keyword.put(opts, :context_state, context_state)
+      end
+    end
+
+    defp normalize_surfaces(surfaces) do
+      for {name, opts} <- surfaces do
+        opts = Keyword.validate!(opts, [:ui, :context])
+        ui = Keyword.fetch!(opts, :ui)
+        context = Keyword.get(opts, :context)
+
+        unless is_nil(context) or is_function(context, 2) do
+          raise ArgumentError,
+                "the #{inspect(name)} surface's :context must be a 2-arity function " <>
+                  "(params, socket) -> selection map, got: #{inspect(context)}"
+        end
+
+        %{name: name, ui: ui, surface_id: AshA2ui.ResolvedView.surface_id(ui), context: context}
       end
     end
 
