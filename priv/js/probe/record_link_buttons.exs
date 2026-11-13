@@ -40,12 +40,19 @@ write.("link_buttons_payload.json", AshA2ui.Info.build_surface(NotesUI, link_but
     NotesUI,
     %{
       "version" => "1.0",
-      "action" => %{
-        "name" => "context_select",
+      "callAgentFunction" => %{
         "surfaceId" => "notes",
-        "sourceComponentId" => "data_grid",
-        "timestamp" => "2026-10-17T00:00:00Z",
-        "context" => %{"context" => "note", "value" => kickoff.id}
+        "functionCallId" => "probe-call",
+        "callFunction" => %{
+          "@call" => "ashAction",
+          "catalogId" => AshA2ui.Encoder.ash_catalog_id(),
+          "args" => %{
+            "name" => "context_select",
+            "sourceComponentId" => "data_grid",
+            "context" => %{"context" => "note", "value" => kickoff.id
+          }
+        }
+      }
       }
     }
   )

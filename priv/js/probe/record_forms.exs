@@ -18,12 +18,19 @@ open = fn ui, surface ->
       ui,
       %{
         "version" => "1.0",
-        "action" => %{
-          "name" => "start_create",
+        "callAgentFunction" => %{
           "surfaceId" => surface,
-          "sourceComponentId" => "create_button",
-          "timestamp" => "2026-11-12T00:00:00Z",
-          "context" => %{}
+          "functionCallId" => "probe-call",
+          "callFunction" => %{
+            "@call" => "ashAction",
+            "catalogId" => AshA2ui.Encoder.ash_catalog_id(),
+            "args" => %{
+              "name" => "start_create",
+              "sourceComponentId" => "create_button",
+              "context" => %{
+            }
+          }
+        }
         }
       },
       authorize?: false

@@ -1623,7 +1623,8 @@ defmodule AshA2ui.ActionHandler do
             {:ok,
              view
              |> linked_record_values(record, fields, ash_opts)
-             |> Map.merge(ResolvedView.detail_badge_data(view, record, fields))}
+             |> Map.merge(ResolvedView.detail_badge_data(view, record, fields))
+             |> Map.merge(ResolvedView.detail_steps_data(view, record, fields))}
 
           # The selection was just validated; a raced-away record renders empty.
           :not_found ->

@@ -172,8 +172,12 @@ defmodule AshA2ui.Experience do
   pagination page sizes and the extended ChoicePicker/TextField keys;
   1.13 added plain links (`{href, label}` with no surface); 1.14 added
   grouped list rows (column placements `group`/`groupSubtitle`, the
-  dataGrid's `groupIcon`, column `emptyText`). 2.0 includes every 1.x
-  addition.
+  dataGrid's `groupIcon`, column `emptyText`); 1.15 added document rows
+  (the `leading` placement) and table footers (`footerNote`, `footerLink`);
+  1.16 added card rows (`layout: "cards"`), the `expandLabel` disclosure
+  label and labeled `pairs` columns; 1.17 added the fieldDisplay `steps`
+  stepper; 1.18 added a table card's own `heading` and `description`. 2.0
+  includes every 1.x addition.
   """
   @spec admin_catalog_version() :: String.t()
   def admin_catalog_version, do: "2.0.0"

@@ -82,7 +82,9 @@ changes is the wire format and the way a host wires the renderer.
   names its contract's major version.
 - The admin catalog contract is 2.0.0
   (`AshA2ui.Experience.admin_catalog_version/0`) and includes 1.13 (plain
-  links) and 1.14 (grouped list rows and section notes), both below.
+  links), 1.14 (grouped list rows and section notes), 1.15 (document rows
+  and table footers), 1.16 (card rows), 1.17 (step fields) and 1.18 (table
+  card headers), all below.
   Its version and changelog live under `metadata.extensions.ash_a2ui`, the
   prefixed extension key the 1.0 spec asks for. It declares `filterPicker`,
   the query filter picker admin surfaces emit, and the `more` tag's
@@ -158,6 +160,21 @@ changes is the wire format and the way a host wires the renderer.
 
 ### Features:
 
+- **More than one surface on a page.** `AshA2ui.LiveRenderer.surface_container/1`
+  takes optional `id` (default `"ash-a2ui-surface"`), `surface` (rendered as
+  `data-a2ui-surface`) and `primary` (`data-a2ui-primary`) attrs; the
+  defaults render the same markup as before. The JS hook reads them: a
+  container with a `surface` takes only that surface's messages and binds
+  only that surface, an `agentFunctionResponse` goes to the hook that sent
+  the `callAgentFunction` with its `functionCallId`, and messages that name
+  no surface (a `callRendererFunction` without a `surfaceId`) go to the
+  primary container. Before, every hook on a page took every
+  `"a2ui:messages"` push, so two hooks drew the same surface. A page with
+  no `surface` and no `primary` routes as before. Building and pushing the
+  second surface's messages, and routing its `"a2ui:message"` calls by
+  `surfaceId` to `AshA2ui.ActionHandler.handle/3`, stay with the host; see
+  the LiveView usage rules.
+
 - **`param_placeholders` on a `:report` component.** A placeholder per report
   param (`param_placeholders search: "Search vendors"`), emitted as the param
   TextField's `"placeholder"` under the admin catalog, as `search_placeholder`
@@ -170,9 +187,69 @@ changes is the wire format and the way a host wires the renderer.
   `query` or `report` call it sent is unanswered; a host that runs a report's rows
   on arrival brackets the fetch with the same messages.
 
+- **Admin catalog 1.18: table card headers.** A table's `heading` is the
+  header of its own card ("Order lines") and its `description` a one-line
+  caption under it, above the rows ("Each line on this order, newest
+  first."). Both are static text translated in the metadata domain. The
+  admin dataGrid carries them as `heading` and `description`, present only
+  when declared: `label` still names the table's section and always rides
+  on the grid (it falls back to the resource or component name), so a
+  renderer could not tell a declared card header from that default. Several
+  tables under one `section` heading can each carry their own. The stock
+  renderer draws the grid as one card with the header on top, in every
+  layout and above the empty state; the basic catalog draws them as a
+  level-3 Markdown heading Text and a caption Text just before the table. Verified: tables only, and not
+  on a board. The `Component` struct gains `heading` and `description`.
+
+- **Admin catalog 1.17: step fields.** A field's `steps true` marks a value
+  that is a list of steps (`label`, optional `text` and `note`, and a
+  `state`: `complete`, `current`, `upcoming` or `overdue`), drawn on
+  `:detail` cards as a numbered stepper: an order's fulfilment, Placed →
+  Packed → Shipped → Delivered. The detail data carries the normalized steps
+  at `_steps_<field>` (`number`, `label`, `text`, `note`, `state`,
+  `stateLabel` — the state in words, translated — and `line`, the whole
+  step as one line), and the admin `fieldDisplay` binds them as `steps`. The
+  stock renderer draws an ordered list with each step's state written out;
+  the basic catalog draws one Text row per step. A step without a label is
+  left out and the rest are numbered 1..n; a missing or unknown state reads
+  as `upcoming`. Verified: `steps` does not combine with `pairs`, a badge or
+  a link. The `Field` struct gains `steps`; the library catalog gains
+  "Complete", "Current", "Upcoming" and "Overdue".
+
+- **Admin catalog 1.16: card rows.** `display :cards` on a table draws one
+  card per row: the `row_layout`'s title and badge head it, its `meta`
+  fields are labeled rows and its `expand` fields fold under a disclosure
+  whose words are the layout's `expand_label` (translated). A field's
+  `pairs true` marks a value that is a list of `{term, value}` maps, drawn
+  as one labeled row each. The dataGrid carries `"layout": "cards"` and
+  `expandLabel`, and the column `"pairs": true`. A row layout's badge that
+  is a string already in words (it has a space or a capital) is now shown
+  as written instead of humanized ("AI review" no longer becomes "Ai
+  review"); identifier-like strings are still humanized. Verified:
+  `display :cards` needs a `row_layout`, `expand_label` needs `expand`
+  fields. The `RowLayout` struct gains `expand_label`, the `Field` struct
+  `pairs`.
+
+- **Admin catalog 1.15: document rows and table footers.** A `row_layout`'s
+  `leading :field` draws a short code before the row's title (a file's type);
+  its dataGrid column carries `"placement": "leading"`, and the basic card
+  keeps it in its metadata grid. A `field`'s `download true` (only with
+  `link_url`) marks its plain link as a file to download: the link entry
+  carries `"download": true` and the stock renderer draws `<a download>`. A
+  table's `footer_note :field` (a field of its context record, read and
+  refreshed like a `section_note`) and `footer_link href: ..., label: ...`
+  draw under its rows, in its card: the dataGrid carries `footerNote` (a
+  binding, `{"@path": "/detail/<context>/<field>"}`) and `footerLink` (`{href, label}`,
+  the label translated). The basic catalog leaves the footer out. Verified:
+  `download` only with `link_url`; footers only on tables; a footer note
+  from one context whose resource has it. The `RowLayout` struct gains
+  `leading`, the `Field` struct `download`, the `Component` struct
+  `footer_note` and `footer_link`, and `ResolvedView` reads both kinds of
+  note through one `notes` list (it was `section_notes`).
+
 - **Admin catalog 1.14: grouped list rows and section notes.** A
   `row_layout`'s `group_by :field` heads each run of consecutive rows sharing
-  that value with one header (a property over its contract lines), with
+  that value with one header (a warehouse over an order's items), with
   `group_subtitle :field` under it (taken from the group's first row) and
   `group_icon "home"` for the headers. The admin dataGrid's columns carry
   `"placement": "group" | "groupSubtitle"` and the grid `groupIcon`; the basic

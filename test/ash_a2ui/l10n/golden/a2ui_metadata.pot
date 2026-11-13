@@ -32,6 +32,11 @@ msgstr ""
 msgid "All"
 msgstr ""
 
+#: test/support/document_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
+msgid "All visits"
+msgstr ""
+
 #: test/support/links.ex:135
 #: test/support/links.ex:230
 #: test/support/links.ex:267
@@ -51,6 +56,7 @@ msgstr ""
 #: test/support/appointment_page_ui.ex:1
 #: test/support/appointments_ui.ex:1
 #: test/support/linked_visits_ui.ex:1
+#: test/support/visit_progress_ui.ex:1
 #: test/support/word_report_ui.ex:78
 msgid "Appointment"
 msgstr ""
@@ -305,6 +311,7 @@ msgstr ""
 msgid "Clinic"
 msgstr ""
 
+#: test/support/card_visits_ui.ex:1
 #: test/support/grouped_visits_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 msgid "Clinic id"
@@ -348,7 +355,9 @@ msgstr ""
 #: test/support/board_task_ui.ex:188
 #: test/support/board_task_ui.ex:52
 #: test/support/board_task_ui.ex:87
+#: test/support/document_visits_ui.ex:1
 #: test/support/grouped_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 #: test/support/linked_visits_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 #: test/support/record_page_ui.ex:1
@@ -468,6 +477,7 @@ msgstr ""
 msgid "Destroy"
 msgstr ""
 
+#: test/support/card_visits_ui.ex:1
 #: test/support/owner_overview_ui.ex:1
 #: test/support/promotion.ex:1
 msgid "Details"
@@ -534,6 +544,10 @@ msgstr ""
 
 #: test/support/column_task.ex:1
 msgid "Due {date}"
+msgstr ""
+
+#: test/support/headed_visits_ui.ex:1
+msgid "Each visit for this owner. Details come from the latest."
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
@@ -864,6 +878,10 @@ msgstr ""
 msgid "No results"
 msgstr ""
 
+#: test/support/visit_progress_ui.ex:1
+msgid "No steps yet"
+msgstr ""
+
 #: test/support/experience_ui.ex:61
 msgid "No update"
 msgstr ""
@@ -976,7 +994,10 @@ msgid "Overview"
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
+#: test/support/card_visits_ui.ex:1
+#: test/support/document_visits_ui.ex:1
 #: test/support/grouped_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 #: test/support/owner_overview_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 #: test/support/record_page_ui.ex:1
@@ -1081,6 +1102,10 @@ msgstr ""
 
 #: test/support/canvas.ex:172
 msgid "Product"
+msgstr ""
+
+#: test/support/visit_progress_ui.ex:1
+msgid "Progress"
 msgstr ""
 
 #: test/support/bulk_tasks_ui.ex:1
@@ -1204,11 +1229,14 @@ msgid "Role"
 msgstr ""
 
 #: test/support/appointment_page_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 msgid "Schedule"
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
+#: test/support/document_visits_ui.ex:1
 #: test/support/grouped_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 #: test/support/linked_visits_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 #: test/support/record_page_ui.ex:1
@@ -1224,7 +1252,9 @@ msgstr ""
 
 #: test/support/appointment_page_ui.ex:1
 #: test/support/appointments_ui.ex:1
+#: test/support/document_visits_ui.ex:1
 #: test/support/grouped_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 msgid "Scheduled for"
 msgstr ""
@@ -1253,6 +1283,10 @@ msgstr ""
 
 #: test/support/table_displays.ex:78
 msgid "Seen at"
+msgstr ""
+
+#: test/support/card_visits_ui.ex:1
+msgid "Seen by"
 msgstr ""
 
 #: test/support/appointments_ui.ex:1
@@ -1304,6 +1338,10 @@ msgstr ""
 
 #: test/support/article.ex:1
 msgid "Shout title"
+msgstr ""
+
+#: test/support/card_visits_ui.ex:1
+msgid "Show clinic"
 msgstr ""
 
 #: test/support/table_displays.ex:101
@@ -1373,7 +1411,9 @@ msgstr ""
 #: test/support/captioned_task.ex:1
 #: test/support/column_task.ex:1
 #: test/support/diagram_flow.ex:114
+#: test/support/document_visits_ui.ex:1
 #: test/support/grouped_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 #: test/support/hub_ui.ex:1
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
@@ -1510,8 +1550,11 @@ msgstr ""
 #: test/support/calendar_event.ex:216
 #: test/support/calendar_event.ex:80
 #: test/support/captioned_task.ex:1
+#: test/support/card_visits_ui.ex:1
 #: test/support/column_task.ex:1
+#: test/support/document_visits_ui.ex:1
 #: test/support/grouped_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 #: test/support/linked_filters_ui.ex:1
 #: test/support/linked_visits_ui.ex:1
 #: test/support/links.ex:135
@@ -1531,6 +1574,7 @@ msgstr ""
 #: test/support/sort_only_ui.ex:1
 #: test/support/submission.ex:1
 #: test/support/tabbed_presets_ui.ex:1
+#: test/support/visit_progress_ui.ex:1
 #: test/support/word_report_ui.ex:78
 msgid "Title"
 msgstr ""
@@ -1608,7 +1652,12 @@ msgstr ""
 msgid "Visit card"
 msgstr ""
 
+#: test/support/headed_visits_ui.ex:1
+msgid "Visit history"
+msgstr ""
+
 #: test/support/grouped_visits_ui.ex:1
+#: test/support/headed_visits_ui.ex:1
 #: test/support/owner_overview_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
 msgid "Visits"

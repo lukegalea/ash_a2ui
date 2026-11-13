@@ -10,7 +10,11 @@
       "ash_a2ui": {
         "version": "2.0.0",
         "changelog": {
-          "2.0.0": "Breaking: the A2UI 1.0 wire (protocolVersion \"1.0\"). Bindings are {\"@path\": ...} and function calls {\"@call\": ...}; an admin surface names this catalog as its catalogId and its basic components carry the basic catalog's id as @catalogId; every envelope (row actions, row click, sort, pagination, calendar window) is sent as the ash_a2ui catalog's ashAction function. The catalogId moves to https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2, and this contract metadata moves under metadata.extensions.ash_a2ui. New: filterPicker, a query filter's picker (the ChoicePicker with hint, counts, dynamicOptions and grouped options). dataGrid columns' more declares textPath, captionPath and labelPath (the server-written tag text, list caption and accessible label). 2.0.0 includes every 1.x addition, up to and including 1.12 (record pages), 1.13 (plain links) and 1.14 (grouped list rows).",
+          "2.0.0": "Breaking: the A2UI 1.0 wire (protocolVersion \"1.0\"). Bindings are {\"@path\": ...} and function calls {\"@call\": ...}; an admin surface names this catalog as its catalogId and its basic components carry the basic catalog's id as @catalogId; every envelope (row actions, row click, sort, pagination, calendar window) is sent as the ash_a2ui catalog's ashAction function. The catalogId moves to https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2, and this contract metadata moves under metadata.extensions.ash_a2ui. New: filterPicker, a query filter's picker (the ChoicePicker with hint, counts, dynamicOptions and grouped options). dataGrid columns' more declares textPath, captionPath and labelPath (the server-written tag text, list caption and accessible label). 2.0.0 includes every 1.x addition, up to and including 1.12 (record pages), 1.13 (plain links), 1.14 (grouped list rows), 1.15 (document rows and table footers), 1.16 (card rows), 1.17 (step fields) and 1.18 (table card headers).",
+          "1.18.0": "Additive: table card headers. dataGrid gains an optional heading (the header of the table's own card, translated, present only when the table declares one; label stays the collection's accessible name and is not a heading) and an optional description (a one-line caption under the heading, above the rows, translated). A renderer draws both inside the table's card in every layout, and above the empty state when there are no rows. Renderers that ignore them leave them out. The catalogId is unchanged.",
+          "1.17.0": "Additive: step fields. fieldDisplay gains an optional steps (a binding to a steps field's steps, /detail/<context>/_steps_<field>: a list of {number, label, text?, note?, state, stateLabel, line} objects, state one of complete, current, upcoming or overdue and stateLabel its words, translated), drawn as a numbered stepper. Renderers that ignore it draw the value. The catalogId is unchanged.",
+          "1.16.0": "Additive: card rows. dataGrid layout gains cards (one card per row: the title and badge head it, the other columns are labeled rows, and expand columns fold under a disclosure), the dataGrid an optional expandLabel (the words on that disclosure, translated) and columns an optional pairs (true: the value is a list of {term, value} objects, drawn as one labeled row each). Renderers that ignore them draw the grid. The catalogId is unchanged.",
+          "1.15.0": "Additive: document rows and table footers. dataGrid columns gain the placement leading (a short code drawn before the row's title, such as a file's type); a plain link object may carry download: true (the address is a file to download, not a page to open); the dataGrid gains an optional footerNote (a binding to a line of text drawn under the rows, inside the table's card) and footerLink ({href, label}: a link beside it). Renderers that ignore them draw the column as any other, follow the link, and leave the footer out. The catalogId is unchanged.",
           "1.14.0": "Additive: grouped list rows. dataGrid columns gain the placements group (the value heading a group of consecutive rows) and groupSubtitle (the line under that heading, from the group's first row), and the dataGrid an optional groupIcon (an icon name for the group headers, resolved in the renderer's own icon set). Columns gain an optional emptyText (the field's empty_text: the muted words a list-rows renderer shows when the row's value is empty). A list-rows renderer starts a new group wherever the group value changes; renderers that ignore them draw the columns as any other. The catalogId is unchanged.",
           "1.13.0": "Additive: plain links. A link object may be {href, label} with no surface (a field's link_url): a page or address, followed as an ordinary link rather than opened as a surface. Renderers that require a surface skip it and draw the plain value. The catalogId is unchanged.",
           "1.12.0": "Additive: record pages. fieldDisplay gains optional badge, badgeTone and badgeHelp (bindings to the field's _badge_<field>, _badge_tone_<field> and _badge_help_<field> under its /detail/<context> path: the value drawn as a pill with that tone and one-line tooltip), note (a few words beside the label saying how the value came to be), emptyText (the muted words shown when the value is empty) and hideWhenEmpty (true: an empty value draws no row at all). dataGrid gains an optional layout (rows: list rows instead of a grid) and columns an optional placement (trailing or expand: where a list-rows renderer draws them). Renderers that ignore them draw the plain value and the grid. The catalogId is unchanged.",
@@ -85,7 +89,7 @@
               },
               "link": {
                 "type": "object",
-                "description": "Row-relative binding ({path: \"_links/<field>\"}) to the cell's reference link(s): a link object {surface, recordId, label[, href]}, or (1.13) a plain link {href, label} with no surface, or a list of them (multi-valued links). Absent on a row = no link for that row (pruned per actor). Activating a link invokes the openSurface function with {surface, recordId}; a plain link is followed.",
+                "description": "Row-relative binding ({path: \"_links/<field>\"}) to the cell's reference link(s): a link object {surface, recordId, label[, href]}, or (1.13) a plain link {href, label} with no surface (1.15: with download: true when the address is a file to download), or a list of them (multi-valued links). Absent on a row = no link for that row (pruned per actor). Activating a link invokes the openSurface function with {surface, recordId}.",
                 "properties": {"path": {"type": "string"}},
                 "required": ["path"],
                 "additionalProperties": false
@@ -163,14 +167,18 @@
                 "enum": ["desc"],
                 "description": "Optional (1.11): the direction a sortable header's first click sorts in when it is not ascending."
               },
+              "pairs": {
+                "type": "boolean",
+                "description": "Optional (1.16): true when the value is a list of {term, value} objects: a renderer draws one labeled row per pair."
+              },
               "emptyText": {
                 "type": "string",
                 "description": "Optional (1.14): the muted words a list-rows renderer shows for the column when a row's value is empty (the field's empty_text)."
               },
               "placement": {
                 "type": "string",
-                "enum": ["trailing", "expand", "group", "groupSubtitle"],
-                "description": "Optional (1.12): where a list-rows renderer (layout rows) draws the column: trailing at the row's end, right-aligned; expand only when the row is opened. 1.14: group heads each run of consecutive rows sharing its value; groupSubtitle sits under that heading. Grids draw it as any other column."
+                "enum": ["trailing", "expand", "group", "groupSubtitle", "leading"],
+                "description": "Optional (1.12): where a list-rows renderer (layout rows) draws the column: trailing at the row's end, right-aligned; expand only when the row is opened. 1.14: group heads each run of consecutive rows sharing its value; groupSubtitle sits under that heading. 1.15: leading is a short code drawn before the row's title. Grids draw it as any other column."
               },
               "caption": {
                 "type": "object",
@@ -190,8 +198,31 @@
         },
         "layout": {
           "type": "string",
-          "enum": ["rows"],
-          "description": "Optional (1.12): rows asks for list rows instead of a grid: no header, each row its title (and subtitle), badge, trailing columns, and a disclosure opening its expand columns. Renderers that ignore it draw the grid."
+          "enum": ["rows", "cards"],
+          "description": "Optional (1.12): rows asks for list rows instead of a grid: no header, each row its title (and subtitle), badge, trailing columns, and a disclosure opening its expand columns. 1.16: cards asks for one card per row, headed by its title and badge, its other columns as labeled rows and its expand columns under a disclosure. Renderers that ignore it draw the grid."
+        },
+        "heading": {
+          "type": "string",
+          "description": "Optional (1.18): the header of the table's own card (\"Order lines\"), translated; present only when the table declares one. Drawn above the rows (or the empty state), inside the card, in every layout."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional (1.18): a one-line caption under the card's heading, above the rows (or the empty state), muted; translated."
+        },
+        "expandLabel": {
+          "type": "string",
+          "description": "Optional (1.16): the words on the disclosure that opens a row's expand columns (\"Show notes\"), translated."
+        },
+        "footerNote": {
+          "$ref": "common_types.json#/$defs/DataBinding",
+          "description": "Optional (1.15): binding to a line of text a renderer draws under the rows, inside the table's card (a field of the table's context record, at /detail/<context>/<field>)."
+        },
+        "footerLink": {
+          "type": "object",
+          "description": "Optional (1.15): a link a renderer draws beside the footer note: {href, label}.",
+          "properties": {"href": {"type": "string"}, "label": {"type": "string"}},
+          "required": ["href", "label"],
+          "additionalProperties": false
         },
         "groupIcon": {
           "type": "string",
@@ -403,7 +434,7 @@
         },
         "link": {
           "$ref": "common_types.json#/$defs/DataBinding",
-          "description": "Optional (1.1): binding to the field's reference link(s) — a link object {surface, recordId, label[, href]}, or (1.13) a plain link {href, label} with no surface, or a list of them (e.g. {\"@path\": \"/detail/<context>/_links/<field>\"}). When present the value renders as link(s) activating the openSurface function (a plain link is followed); when the bound value is absent the plain value renders."
+          "description": "Optional (1.1): binding to the field's reference link(s) — a link object {surface, recordId, label[, href]}, or (1.13) a plain link {href, label} with no surface (1.15: with download: true when the address is a file to download), or a list of them (e.g. {\"@path\": \"/detail/<context>/_links/<field>\"}). When present the value renders as link(s) activating the openSurface function (a plain link is followed); when the bound value is absent the plain value renders."
         },
         "badge": {
           "$ref": "common_types.json#/$defs/DataBinding",
@@ -419,7 +450,11 @@
         },
         "note": {"type": "string", "description": "Optional (1.12): a few words beside the label saying how the value came to be (\"Calculated\"), translated."},
         "emptyText": {"type": "string", "description": "Optional (1.12): the muted words shown in place of an empty value (null or \"\"), translated."},
-        "hideWhenEmpty": {"type": "boolean", "description": "Optional (1.12): true when an empty value (null or \"\") draws no row at all."}
+        "hideWhenEmpty": {"type": "boolean", "description": "Optional (1.12): true when an empty value (null or \"\") draws no row at all."},
+        "steps": {
+          "$ref": "common_types.json#/$defs/DataBinding",
+          "description": "Optional (1.17): binding to a steps field's steps (/detail/<context>/_steps_<field>), a list of {number, label, text?, note?, state, stateLabel, line}: number is the step's place (from 1), text the line under the label, note a smaller line, state one of complete, current, upcoming or overdue, stateLabel the state in words (translated) and line the whole step as one line of text. When present the value draws as a numbered stepper with each step's state written out, not only coloured; an empty list is an empty value (emptyText, hideWhenEmpty)."
+        }
       },
       "required": ["component", "label", "value"]
     },

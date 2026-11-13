@@ -30,8 +30,19 @@ write.("links_payload.json", AshA2ui.Info.build_surface(NotesUI))
 {:ok, select} =
   AshA2ui.ActionHandler.handle(NotesUI, %{
     "version" => "1.0",
-    "action" => %{"name" => "context_select", "surfaceId" => "notes", "sourceComponentId" => "data_grid",
-      "timestamp" => "2026-10-12T00:00:00Z", "context" => %{"context" => "note", "value" => kickoff.id}}
+    "callAgentFunction" => %{
+      "surfaceId" => "notes",
+      "functionCallId" => "probe-call",
+      "callFunction" => %{
+        "@call" => "ashAction",
+        "catalogId" => AshA2ui.Encoder.ash_catalog_id(),
+        "args" => %{
+          "name" => "context_select",
+          "sourceComponentId" => "data_grid",
+          "context" => %{"context" => "note", "value" => kickoff.id}
+        }
+      }
+    }
   })
 
 write.("links_select_payload.json", select)

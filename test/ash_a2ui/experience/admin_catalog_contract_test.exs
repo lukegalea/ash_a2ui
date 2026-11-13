@@ -109,6 +109,59 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     assert Map.has_key?(changelog(catalog), "1.3.0")
   end
 
+  test "catalog 1.18 is additive: table card headers" do
+    catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
+
+    assert changelog(catalog)["1.18.0"] =~ "table card headers"
+    assert changelog(catalog)["2.0.0"] =~ "1.18"
+
+    grid = catalog["components"]["dataGrid"]["properties"]
+    assert grid["heading"]["type"] == "string"
+    assert grid["description"]["type"] == "string"
+
+    source = File.read!(@renderer_asset_path)
+    assert source =~ "heading: Str.optional()"
+    assert source =~ ~s(<header class="grid-heading")
+  end
+
+  test "catalog 1.17 is additive: step fields" do
+    catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
+
+    assert changelog(catalog)["1.17.0"] =~ "step fields"
+    assert changelog(catalog)["2.0.0"] =~ "1.17"
+
+    steps = catalog["components"]["fieldDisplay"]["properties"]["steps"]
+    assert steps["$ref"] == "common_types.json#/$defs/DataBinding"
+
+    source = File.read!(@renderer_asset_path)
+    assert source =~ "steps: DynamicValueSchema.nullable().optional()"
+    assert source =~ ~s(<ol class="field-steps")
+  end
+
+  test "catalog 1.16 is additive: card rows" do
+    catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
+
+    assert changelog(catalog)["1.16.0"] =~ "card rows"
+    assert changelog(catalog)["2.0.0"] =~ "1.16"
+
+    grid = catalog["components"]["dataGrid"]["properties"]
+    assert grid["layout"]["enum"] == ["rows", "cards"]
+    assert grid["expandLabel"]["type"] == "string"
+    assert grid["columns"]["items"]["properties"]["pairs"]["type"] == "boolean"
+  end
+
+  test "catalog 1.15 is additive: document rows and table footers" do
+    catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
+
+    assert changelog(catalog)["1.15.0"] =~ "document rows and table footers"
+    assert changelog(catalog)["2.0.0"] =~ "1.15"
+
+    grid = catalog["components"]["dataGrid"]["properties"]
+    assert grid["footerNote"]["$ref"] == "common_types.json#/$defs/DataBinding"
+    assert grid["footerLink"]["required"] == ["href", "label"]
+    assert "leading" in grid["columns"]["items"]["properties"]["placement"]["enum"]
+  end
+
   test "catalog 1.14 is additive: grouped list rows" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
@@ -119,16 +172,11 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     assert grid["groupIcon"]["type"] == "string"
     assert grid["columns"]["items"]["properties"]["emptyText"]["type"] == "string"
 
-    assert grid["columns"]["items"]["properties"]["placement"]["enum"] == [
-             "trailing",
-             "expand",
-             "group",
-             "groupSubtitle"
-           ]
+    assert ["trailing", "expand", "group", "groupSubtitle" | _later] =
+             grid["columns"]["items"]["properties"]["placement"]["enum"]
 
     source = File.read!(@renderer_asset_path)
     assert source =~ "groupIcon: Str.optional()"
-    assert source =~ ~s{placement: EnumOf(["trailing", "expand", "group", "groupSubtitle"])}
   end
 
   test "catalog 1.13 is additive: plain links" do
@@ -156,7 +204,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     assert field["properties"]["hideWhenEmpty"]["type"] == "boolean"
 
     grid = catalog["components"]["dataGrid"]["properties"]
-    assert grid["layout"]["enum"] == ["rows"]
+    assert ["rows" | _later] = grid["layout"]["enum"]
 
     assert ["trailing", "expand" | _later] =
              grid["columns"]["items"]["properties"]["placement"]["enum"]

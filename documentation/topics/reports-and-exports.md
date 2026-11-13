@@ -3,7 +3,8 @@
 Two features for surfaces that are *not* projections of resource rows:
 `:report` components render the computed rows of a generic Ash action
 (group-bys, aggregates, cross-resource stats), and `export` blocks deliver
-server-generated CSV files through the v1.0 `callFunction` channel.
+server-generated CSV files as a `callRendererFunction` of the ash_a2ui
+catalog's `downloadFile`.
 
 ## `:report` components — aggregate/report queries
 

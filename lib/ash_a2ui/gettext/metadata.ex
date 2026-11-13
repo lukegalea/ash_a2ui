@@ -121,12 +121,24 @@ defmodule AshA2ui.Gettext.Metadata do
         layout_texts(component.row_layout, resource) ++
         primary_texts(component.primary_action) ++
         query_texts(table.query) ++
-        edited_texts(component)
+        edited_texts(component) ++
+        card_texts(component)
 
     Enum.each(texts, fn
       {context, text} -> Label.translate(l10n, text, context)
       text -> Label.translate(l10n, text)
     end)
+  end
+
+  # The card's header and caption, and a footer link (admin catalog only).
+  defp card_texts(component) do
+    footer =
+      case Map.get(component, :footer_link) do
+        [_ | _] = link -> [link[:label]]
+        _none -> []
+      end
+
+    Enum.filter([component.heading, component.description], &is_binary/1) ++ footer
   end
 
   # A detail card's badge fields: their texts and help show only once a record
@@ -189,6 +201,7 @@ defmodule AshA2ui.Gettext.Metadata do
 
     Keyword.values(layout.badge_text) ++
       Keyword.values(Map.get(layout, :badge_help, [])) ++
+      List.wrap(Map.get(layout, :expand_label)) ++
       unlabeled
   end
 

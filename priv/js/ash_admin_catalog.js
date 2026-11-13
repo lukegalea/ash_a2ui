@@ -471,16 +471,29 @@ export function buildSchemas(basicCatalog = null) {
           sortFirst: EnumOf(["desc"]).optional(),
           // 1.12: where a list-rows renderer draws the column (a row
           // layout's trailing or expand fields).
-          // 1.14: group / groupSubtitle head a run of rows sharing the value.
-          placement: EnumOf(["trailing", "expand", "group", "groupSubtitle"]).optional(),
+          // 1.14: group / groupSubtitle head a run of rows sharing the value;
+          // 1.15: leading is a short code before the row's title.
+          placement: EnumOf(["trailing", "expand", "group", "groupSubtitle", "leading"]).optional(),
+          // 1.16: the value is a list of {term, value} pairs.
+          pairs: Bool.optional(),
           // 1.14: the field's empty_text, for a list-rows renderer.
           emptyText: Str.optional(),
         }),
       ),
       // 1.12: "rows" asks for list rows instead of a grid (display :rows).
-      layout: EnumOf(["rows"]).optional(),
+      // 1.16: "cards", one card per row.
+      layout: EnumOf(["rows", "cards"]).optional(),
+      // 1.16: the words on the disclosure opening the expand columns.
+      expandLabel: Str.optional(),
+      // 1.18: the header of the table's own card and the caption under it,
+      // present only when declared (label stays the accessible name).
+      heading: Str.optional(),
+      description: Str.optional(),
       // 1.14: the icon name for a list-rows renderer's group headers.
       groupIcon: Str.optional(),
+      // 1.15: the line under the rows (a binding) and the link beside it.
+      footerNote: DynamicValueSchema.optional(),
+      footerLink: RecordAny.optional(),
       // Row arrays / a "/rows" binding / a function call — DynamicValue's
       // union covers the literal array, the {path} binding and the
       // {call} envelope, so the whole prop classifies DYNAMIC like the
@@ -590,6 +603,8 @@ export function buildSchemas(basicCatalog = null) {
       note: Str.optional(),
       emptyText: Str.optional(),
       hideWhenEmpty: Bool.optional(),
+      // 1.17: a steps field's normalized steps, drawn as a numbered stepper.
+      steps: DynamicValueSchema.nullable().optional(),
       weight: Num.optional(),
     }),
 
@@ -945,8 +960,11 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
     const label = str(link.label) || str(link.recordId) || str(link.href);
 
     // 1.13: a plain link (no surface) is a page or address: the browser follows it.
+    // 1.15: one marked download fetches the file instead.
     if (!link.surface) {
-      return html`<a class="am-link" href=${link.href}>${label}</a>`;
+      return link.download
+        ? html`<a class="am-link" href=${link.href} download>${label}</a>`
+        : html`<a class="am-link" href=${link.href}>${label}</a>`;
     }
 
     const activate = (event) => {
@@ -1456,6 +1474,40 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
             gap: var(--am-space-2xs);
             margin-top: var(--am-space-m);
           }
+          /* 1.18: a declared heading frames the grid as one card, the
+           * header on top; the frame inside it drops its own edge. */
+          .grid-card {
+            border: var(--am-border-width) solid var(--am-border);
+            border-radius: var(--am-grid-radius);
+            background: var(--am-surface);
+            box-shadow: var(--am-grid-shadow);
+          }
+          .grid-heading {
+            display: grid;
+            gap: var(--am-space-2xs);
+            padding: var(--am-space-m) var(--am-space-l);
+          }
+          .grid-heading-title {
+            margin: 0;
+            font-size: var(--am-font-size-l);
+            font-weight: var(--am-font-weight-bold);
+            color: var(--am-text);
+          }
+          .grid-heading-description {
+            margin: 0;
+            font-size: var(--am-font-size-s);
+            color: var(--am-text-muted);
+          }
+          .grid-card .grid-frame,
+          .grid-card .grid-empty {
+            border: 0;
+            border-top: var(--am-border-width) solid var(--am-border);
+            border-radius: 0 0 var(--am-grid-radius) var(--am-grid-radius);
+            box-shadow: none;
+          }
+          .grid-card .grid-cards {
+            padding: 0 var(--am-space-l) var(--am-space-l);
+          }
           .grid-empty {
             display: grid;
             place-items: center;
@@ -1592,22 +1644,25 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         const label = str(props.label);
         const {empty, pagination, prompts, rest} = this.partitionChildren();
 
+        const body =
+          rows.length === 0
+            ? html`
+                <div class="grid-empty">
+                  ${empty.length > 0
+                    ? empty.map((ref) => html`${this.renderNode(ref)}`)
+                    : html`<p class="no-records">
+                        ${label ? `${label}: no records` : "No records"}
+                      </p>`}
+                </div>
+              `
+            : html`
+                ${this.renderTable(columns, rows, rowActions, label)}
+                ${this.renderCards(columns, rows, rowActions, label)}
+              `;
+
         return html`
           <div class="grid-root">
-            ${rows.length === 0
-              ? html`
-                  <div class="grid-empty">
-                    ${empty.length > 0
-                      ? empty.map((ref) => html`${this.renderNode(ref)}`)
-                      : html`<p class="no-records">
-                          ${label ? `${label}: no records` : "No records"}
-                        </p>`}
-                  </div>
-                `
-              : html`
-                  ${this.renderTable(columns, rows, rowActions, label)}
-                  ${this.renderCards(columns, rows, rowActions, label)}
-                `}
+            ${this.renderCardHeader(props, body)}
             ${pagination.length > 0
               ? html`<div class="grid-pagination">
                   ${pagination.map((ref) => html`${this.renderNode(ref)}`)}
@@ -1620,6 +1675,28 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         // The ConfirmDialog is mounted imperatively in updated() — dynamic
         // tag names cannot appear in Lit templates without unsafeStatic,
         // which is not part of this factory's deps contract.
+      }
+
+      /**
+       * 1.18: a declared heading and caption make the grid one card: the
+       * header on top, then the rows (table or card list) or the empty
+       * state. Without them the body draws as before.
+       */
+      renderCardHeader(props, body) {
+        const heading = str(props.heading);
+        const description = str(props.description);
+        if (!heading && !description) return body;
+        return html`
+          <section class="grid-card" part="card">
+            <header class="grid-heading" part="heading">
+              ${heading ? html`<h3 class="grid-heading-title">${heading}</h3>` : nothing}
+              ${description
+                ? html`<p class="grid-heading-description">${description}</p>`
+                : nothing}
+            </header>
+            ${body}
+          </section>
+        `;
       }
 
       renderTable(columns, rows, rowActions, label) {
@@ -2968,6 +3045,69 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
           .field-value-boolean.is-false::before {
             background: var(--am-border-strong);
           }
+          /* 1.17: a steps field, an ordered list drawn as a stepper. Each
+             step's number, label and state are text; the marker colour only
+             repeats the state. */
+          .field-steps {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: var(--am-space-xs);
+          }
+          .field-step {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0 var(--am-space-xs);
+            align-items: baseline;
+          }
+          .field-step-number {
+            display: inline-grid;
+            place-items: center;
+            min-width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            font-size: var(--am-font-size-xs);
+            font-weight: var(--am-font-weight-semibold);
+            border: var(--am-border-width) solid var(--am-border-strong);
+            color: var(--am-text-muted);
+          }
+          .field-step[data-state="complete"] .field-step-number {
+            border-color: var(--am-success);
+            color: var(--am-success);
+          }
+          .field-step[data-state="current"] .field-step-number {
+            border-color: var(--am-primary);
+            color: var(--am-primary);
+          }
+          .field-step[data-state="overdue"] .field-step-number {
+            border-color: var(--am-error);
+            color: var(--am-error);
+          }
+          .field-step-body {
+            display: grid;
+            gap: 0.125rem;
+            min-width: 0;
+          }
+          .field-step-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: var(--am-space-2xs);
+          }
+          .field-step-label {
+            font-weight: var(--am-font-weight-medium);
+          }
+          .field-step[data-state="current"] .field-step-label {
+            font-weight: var(--am-font-weight-semibold);
+          }
+          .field-step-text {
+            font-size: var(--am-font-size-s);
+          }
+          .field-step-note {
+            font-size: var(--am-font-size-xs);
+            color: var(--am-text-muted);
+          }
           @container (max-width: 29.99rem) {
             .field {
               grid-template-columns: 1fr;
@@ -2992,7 +3132,9 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
 
         const isBoolean = props.format === "boolean";
         const links = linkEntries(props.link);
-        const empty = props.value == null || props.value === "";
+        // 1.17: a steps field is empty when it has no steps.
+        const steps = props.steps === undefined ? null : stepEntries(props.steps);
+        const empty = steps ? steps.length === 0 : props.value == null || props.value === "";
 
         // 1.12: an empty field the surface hides draws nothing.
         this.hidden = Boolean(props.hideWhenEmpty) && empty;
@@ -3018,6 +3160,15 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
                 <span class="am-badge" data-tone=${tone} title=${help || nothing}
                   aria-description=${help || nothing}>${badge}</span>
               </dd>
+            </dl>
+          `;
+        }
+
+        if (steps) {
+          return html`
+            <dl class="field">
+              <dt class="field-label">${str(props.label)}${props.note ? html` <span class="field-note">${str(props.note)}</span>` : nothing}</dt>
+              <dd class="field-value">${renderSteps(steps)}</dd>
             </dl>
           `;
         }
@@ -3055,6 +3206,53 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
     }
 
     customElements.define(tag, AshAdminFieldDisplay);
+  }
+
+  // 1.17: the steps a steps field binds, each {number, label, text?, note?,
+  // state, stateLabel}; anything that is not a step with a label is skipped.
+  function stepEntries(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((step) => step && typeof step === "object" && str(step.label));
+  }
+
+  const STEP_STATES = ["complete", "current", "upcoming", "overdue"];
+  const STEP_TONES = {
+    complete: "success",
+    current: "info",
+    upcoming: "neutral",
+    overdue: "danger",
+  };
+
+  // An ordered list: the number, label and state are text (the state is not
+  // only a colour: its words sit in a badge beside the label), the current
+  // step is aria-current, and text and note follow on their own lines.
+  function renderSteps(steps) {
+    return html`
+      <ol class="field-steps" role="list">
+        ${steps.map((step, index) => {
+          const state = STEP_STATES.includes(step.state) ? step.state : "upcoming";
+          const number = step.number ?? index + 1;
+          const stateLabel = str(step.stateLabel) || state;
+          return html`
+            <li
+              class="field-step"
+              data-state=${state}
+              aria-current=${state === "current" ? "step" : nothing}
+            >
+              <span class="field-step-number">${number}</span>
+              <span class="field-step-body">
+                <span class="field-step-head">
+                  <span class="field-step-label">${str(step.label)}</span>
+                  <span class="am-badge" data-tone=${STEP_TONES[state]}>${stateLabel}</span>
+                </span>
+                ${str(step.text) ? html`<span class="field-step-text">${str(step.text)}</span>` : nothing}
+                ${str(step.note) ? html`<span class="field-step-note">${str(step.note)}</span>` : nothing}
+              </span>
+            </li>
+          `;
+        })}
+      </ol>
+    `;
   }
 
   // --- FormSection: labeled field grouping ----------------------------------

@@ -146,6 +146,43 @@ defmodule AshA2ui do
         Table/detail only.
         """
       ],
+      pairs: [
+        type: :boolean,
+        doc: """
+        The field's value is a list of `%{"term" => _, "value" => _}` maps (a
+        `{:array, :map}` calculation): labeled values whose labels vary per
+        record, such as a record's extracted terms. Its admin dataGrid column
+        carries `"pairs": true` (admin catalog 1.16), and a renderer draws one
+        labeled row per pair; renderers that ignore it show the raw list.
+        """
+      ],
+      steps: [
+        type: :boolean,
+        doc: """
+        The field's value is a list of steps (an `{:array, :map}` calculation),
+        drawn on `:detail` cards as a numbered stepper: an order's fulfilment
+        "Placed → Packed → Shipped → Delivered". Each step is a map with a
+        `label` (required), an optional `text` (the line under the label: a
+        date, "Not yet"), an optional `note` (a smaller line) and a `state`,
+        one of `"complete"`, `"current"`, `"upcoming"` or `"overdue"` (atom or
+        string keys and values). The step's place in the list gives its
+        number. A step without a label is left out (the others are numbered
+        without it); a missing or unknown state reads as `"upcoming"`; a value
+        that is not a list draws no steps. The record carries the normalized
+        steps at `_steps_<field>`, and the admin `fieldDisplay` binds them as
+        `steps` (admin catalog 1.17); the basic catalog draws one Text row per
+        step. Tables and panels show the raw value. Cannot be combined with
+        `pairs`, a badge or a link.
+        """
+      ],
+      download: [
+        type: :boolean,
+        doc: """
+        With `link_url`: the link downloads its address (a file) instead of
+        opening it. The link entry carries `"download" => true` (admin catalog
+        1.15); the stock renderer draws an `<a download>`. Only with `link_url`.
+        """
+      ],
       link_label: [
         type: :atom,
         doc: """
@@ -1267,8 +1304,8 @@ defmodule AshA2ui do
         type: {:list, :atom},
         doc: """
         The fields rendered in the card's labeled metadata grid, in order.
-        Defaults to the table's fields minus `title`, `badge`, `trailing`,
-        `expand`, `group_by` and `group_subtitle`.
+        Defaults to the table's fields minus `title`, `badge`, `leading`,
+        `trailing`, `expand`, `group_by` and `group_subtitle`.
         """
       ],
       trailing: [
@@ -1293,11 +1330,29 @@ defmodule AshA2ui do
         basic card shows them in its metadata grid.
         """
       ],
+      expand_label: [
+        type: :string,
+        doc: """
+        The words on the disclosure that opens the `expand` fields ("Show
+        notes"). The admin dataGrid carries it as `expandLabel` (admin
+        catalog 1.16). Translated in the metadata domain. Only with `expand`
+        fields.
+        """
+      ],
+      leading: [
+        type: :atom,
+        doc: """
+        A field drawn before the title as a short code: a file's type
+        ("PDF"), a unit. The admin dataGrid's column for it carries
+        `"placement": "leading"` (admin catalog 1.15); the basic card shows it
+        in its metadata grid.
+        """
+      ],
       group_by: [
         type: :atom,
         doc: """
         A field whose value heads a group of rows: consecutive rows sharing
-        it render under one header (a property over its lines). Order the
+        it render under one header (a warehouse over its items). Order the
         rows so each group's rows are together (the table's read action or
         query sort). The admin dataGrid's column for it carries
         `"placement": "group"`; the basic card shows it in its metadata grid.
@@ -1306,7 +1361,7 @@ defmodule AshA2ui do
       group_subtitle: [
         type: :atom,
         doc: """
-        A field drawn under the group's header (a property's address), taken
+        A field drawn under the group's header (a warehouse's address), taken
         from the group's first row. Needs `group_by`. Its admin dataGrid
         column carries `"placement": "groupSubtitle"`.
         """
@@ -1723,11 +1778,56 @@ defmodule AshA2ui do
         metadata domain.
         """
       ],
+      heading: [
+        type: :string,
+        doc: """
+        The header of the table's own card ("Order lines"), drawn above its
+        rows, inside the card. Unlike `label`, which names the table's
+        section, it is drawn only when declared, so several tables under one
+        `section` heading can each carry their own card header. Translated in
+        the metadata domain. The admin dataGrid carries it as `heading`
+        (catalog 1.18); the basic catalog draws it as a Text before the
+        table. Tables only.
+        """
+      ],
+      description: [
+        type: :string,
+        doc: """
+        A one-line caption under the table's card header, above its rows
+        ("Each line on this order, newest first."). Static text, translated
+        in the metadata domain. The admin dataGrid carries it as
+        `description` (catalog 1.18); the basic catalog draws it as a caption
+        Text before the table. Tables only.
+        """
+      ],
+      footer_note: [
+        type: :atom,
+        doc: """
+        A field of the table's context record drawn inside the table's card,
+        under its rows ("2 versions on file. Details shown come from the
+        latest."): read and refreshed with that record, like `section_note`,
+        from the one context the table's `context_filter` names. The admin
+        dataGrid binds it as `footerNote` (catalog 1.15); the basic catalog
+        leaves it out. Tables only.
+        """
+      ],
+      footer_link: [
+        type:
+          {:keyword_list,
+           [href: [type: :string, required: true], label: [type: :string, required: true]]},
+        doc: """
+        A link drawn beside the `footer_note` (or alone) under the table's
+        rows: `footer_link href: "#history", label: "All versions"`. The label
+        translates in the metadata domain. The admin dataGrid carries it as
+        `footerLink` (`{href, label}`, catalog 1.15); the basic catalog leaves
+        it out. Tables only.
+        """
+      ],
       section_note: [
         type: :atom,
         doc: """
         A field of the component's context record drawn under its section's
-        heading, muted ("3 contract lines · 2 properties"): a `:detail`'s
+        heading, muted ("12 items · 3 warehouses"): a `:detail`'s
         `context`, or the one context a related table's `context_filter`
         names. Read with the context's record at `/detail/<context>/<field>`;
         the section's first component that declares one supplies it. Needs
@@ -1739,9 +1839,10 @@ defmodule AshA2ui do
         doc: """
         The heading this component's section is shown under: a table's
         heading on multi-table surfaces, a `:detail` or `:report` card's
-        heading. Defaults to the humanized component name (`:contract_value`
-        reads "Contract value"), which cannot say "Properties & pricing".
-        Translated in the metadata domain like a field's `label`.
+        heading. Defaults to the humanized component name (`:order_total`
+        reads "Order total"), which cannot say "Products & pricing".
+        Translated in the metadata domain like a field's `label`. A table's
+        own card header is `heading`, not this.
         """
       ],
       as: [
@@ -1835,7 +1936,7 @@ defmodule AshA2ui do
         """
       ],
       display: [
-        type: {:one_of, [:list, :rows, :board, :calendar, :timeline, :matrix]},
+        type: {:one_of, [:list, :rows, :cards, :board, :calendar, :timeline, :matrix]},
         default: :list,
         doc: """
         How a `:table` lays out its records. `:list` (default) renders rows
@@ -1844,7 +1945,12 @@ defmodule AshA2ui do
         — and requires a `row_layout`: the admin dataGrid carries
         `"layout": "rows"`, which renderers may draw as list rows (title and
         subtitle, badge, trailing values, an opening detail); renderers that
-        ignore it draw the grid. `:board` renders a
+        ignore it draw the grid. `:cards` draws each record as its own card
+        and also requires a `row_layout`: the layout's title and badge head
+        the card, its `meta` fields are labeled rows, and its `expand` fields
+        fold under a disclosure named by `expand_label`. The admin dataGrid
+        carries `"layout": "cards"`; renderers that ignore it draw the grid.
+        `:board` renders a
         sectioned table's sections side by side as lanes, each with its
         heading and total, card list and pagination; it requires a
         `sections` block and a `row_layout`, and cards move between lanes

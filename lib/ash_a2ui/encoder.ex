@@ -1144,11 +1144,14 @@ defmodule AshA2ui.Encoder do
         "children" => ["empty_state#{sfx}" | pagination_children] ++ prompt_ids
       }
       |> put_row_click(view, table)
-      |> maybe_put("layout", if(table.component.display == :rows, do: "rows"))
+      |> maybe_put("layout", grid_layout(table.component.display))
+      |> maybe_put("expandLabel", expand_label(view, table.component.row_layout))
       |> maybe_put(
         "groupIcon",
         table.component.row_layout && table.component.row_layout.group_icon
       )
+      |> put_grid_header(view, table.component)
+      |> put_grid_footer(view, table.component)
       |> put_grid_sort(view, table)
       |> drop_inline_duplicate(view, table)
 
@@ -1266,6 +1269,7 @@ defmodule AshA2ui.Encoder do
       |> put_column_presentation(view, table.resource, field)
       |> put_column_badge(layout, field)
       |> put_column_placement(layout, field)
+      |> put_column_pairs(view, field)
       |> put_empty_text(view, field)
       |> put_link_binding(view, field, "_links/#{field}")
       |> put_column_sortable(table, field, columns[field])
@@ -1273,14 +1277,99 @@ defmodule AshA2ui.Encoder do
     end)
   end
 
+  # Catalog 1.12 list rows and 1.16 cards: a layout the admin dataGrid draws
+  # instead of its grid.
+  defp grid_layout(:rows), do: "rows"
+  defp grid_layout(:cards), do: "cards"
+  defp grid_layout(_display), do: nil
+
+  # Catalog 1.16: the words on the disclosure that opens the expand fields.
+  defp expand_label(view, %{expand_label: label}) when is_binary(label),
+    do: Label.translate(view.l10n, label)
+
+  defp expand_label(_view, _layout), do: nil
+
+  # Catalog 1.16: a field whose value is a list of {term, value} pairs.
+  defp put_column_pairs(column, view, field) do
+    case view.fields[field] do
+      %{pairs: true} -> Map.put(column, "pairs", true)
+      _other -> column
+    end
+  end
+
+  # Catalog 1.18: the table card's own header and the caption under it, above
+  # the rows. Only when declared: `label` names the section and always rides
+  # on the grid, so a renderer could not tell it from the default.
+  defp put_grid_header(grid, view, component) do
+    grid
+    |> maybe_put("heading", card_text(view, Map.get(component, :heading)))
+    |> maybe_put("description", card_text(view, Map.get(component, :description)))
+  end
+
+  defp card_text(view, text) when is_binary(text), do: Label.translate(view.l10n, text)
+  defp card_text(_view, _none), do: nil
+
+  # The basic catalog has no card header: the heading and caption are Texts
+  # drawn just before the table's collection.
+  defp card_header_ids(component, sfx) do
+    child_if(Map.get(component, :heading), "table#{sfx}_card_heading") ++
+      child_if(Map.get(component, :description), "table#{sfx}_card_description")
+  end
+
+  defp card_header_components(view, component, sfx) do
+    heading =
+      with text when is_binary(text) <- Map.get(component, :heading) do
+        %{
+          "id" => "table#{sfx}_card_heading",
+          "component" => "Text",
+          "text" => heading(3, Label.translate(view.l10n, text))
+        }
+      end
+
+    description =
+      with text when is_binary(text) <- Map.get(component, :description) do
+        %{
+          "id" => "table#{sfx}_card_description",
+          "component" => "Text",
+          "text" => Label.translate(view.l10n, text),
+          "variant" => "caption"
+        }
+      end
+
+    Enum.reject([heading, description], &is_nil/1)
+  end
+
+  # Catalog 1.15: the line under a table's rows, in its card: the context
+  # record's footer_note and a footer_link.
+  defp put_grid_footer(grid, view, component) do
+    note =
+      with field when not is_nil(field) <- Map.get(component, :footer_note),
+           context when not is_nil(context) <- AshA2ui.Component.note_context(component) do
+        %{"@path" => "/detail/#{context}/#{field}"}
+      end
+
+    link =
+      case Map.get(component, :footer_link) do
+        [_ | _] = link ->
+          %{"href" => link[:href], "label" => Label.translate(view.l10n, link[:label])}
+
+        _none ->
+          nil
+      end
+
+    grid |> maybe_put("footerNote", note) |> maybe_put("footerLink", link)
+  end
+
   # Catalog 1.12: a row layout's trailing and expand fields say where a
-  # list-rows renderer draws them; 1.14 adds the group's header fields.
+  # list-rows renderer draws them; 1.14 adds the group's header fields, 1.15
+  # the leading code.
   defp put_column_placement(column, nil, _field), do: column
 
   defp put_column_placement(column, layout, field) do
     cond do
       field in layout.trailing -> Map.put(column, "placement", "trailing")
       field in layout.expand -> Map.put(column, "placement", "expand")
+      field == layout.leading -> Map.put(column, "placement", "leading")
       field == layout.group_by -> Map.put(column, "placement", "group")
       field == layout.group_subtitle -> Map.put(column, "placement", "groupSubtitle")
       true -> column
@@ -1306,7 +1395,9 @@ defmodule AshA2ui.Encoder do
           [layout.title, layout.badge]
           |> Enum.reject(&is_nil/1)
           |> Kernel.++(layout.meta ++ layout.trailing ++ layout.expand)
-          |> Kernel.++(Enum.reject([layout.group_by, layout.group_subtitle], &is_nil/1))
+          |> Kernel.++(
+            Enum.reject([layout.leading, layout.group_by, layout.group_subtitle], &is_nil/1)
+          )
           |> Enum.uniq()
       end
 
@@ -1830,6 +1921,7 @@ defmodule AshA2ui.Encoder do
         |> maybe_put("format", display_format(view, resource, field))
         |> put_link_binding(view, field, "/detail/#{detail.context}/_links/#{field}")
         |> put_detail_badge(view, field, "/detail/#{detail.context}/")
+        |> put_detail_steps(view, field, "/detail/#{detail.context}/")
         |> put_empty_text(view, field)
         |> put_field_note(view, field)
         |> maybe_put("hideWhenEmpty", field in detail.component.hide_empty || nil)
@@ -1861,6 +1953,15 @@ defmodule AshA2ui.Encoder do
     if ResolvedView.badge_field?(declared),
       do: put_badge_bindings(display, declared, base),
       else: display
+  end
+
+  # Catalog 1.17: a steps field draws its value as a numbered stepper,
+  # bound to the normalized `_steps_<field>` list (see AshA2ui.Steps).
+  defp put_detail_steps(display, view, field, base) do
+    case view.fields[field] do
+      %{steps: true} -> Map.put(display, "steps", %{"@path" => "#{base}_steps_#{field}"})
+      _other -> display
+    end
   end
 
   defp put_badge_bindings(display, %{name: field, badge_tones: tones, badge_help: help}, base) do
@@ -1949,6 +2050,7 @@ defmodule AshA2ui.Encoder do
       create_button_ids(view, table, sfx) ++
       child_if(AshA2ui.Bulk.enabled?(table), AshA2ui.Bulk.toolbar_id(sfx)) ++
       child_if(AshA2ui.Calendar.calendar?(table), "calendar#{sfx}") ++
+      card_header_ids(component, sfx) ++
       [collection_id(table, sfx)] ++
       empty_state_ids(view, table, sfx) ++
       child_if(table.query, "query#{sfx}_pagination") ++
@@ -2074,7 +2176,7 @@ defmodule AshA2ui.Encoder do
         "component" => "Text",
         "text" => heading(2, heading)
       }
-      | collection_components(table, sfx)
+      | card_header_components(view, table.component, sfx) ++ collection_components(table, sfx)
     ] ++ bulk_toolbar_components(view, table, sfx)
   end
 
@@ -3353,11 +3455,11 @@ defmodule AshA2ui.Encoder do
       ] ++ badge ++ meta_components
   end
 
-  # The basic card has no trailing slot, disclosure or group header: the
-  # group's fields, trailing and expand fields join its metadata grid.
+  # The basic card has no leading or trailing slot, disclosure or group
+  # header: those fields join its metadata grid.
   defp card_meta_fields(layout) do
     Enum.uniq(
-      Enum.reject([layout.group_by, layout.group_subtitle], &is_nil/1) ++
+      Enum.reject([layout.leading, layout.group_by, layout.group_subtitle], &is_nil/1) ++
         layout.meta ++ layout.trailing ++ layout.expand
     )
   end
@@ -4483,17 +4585,7 @@ defmodule AshA2ui.Encoder do
 
     field_rows =
       Enum.flat_map(detail.fields, fn field ->
-        {value_id, value_components} =
-          linked_value(
-            detail,
-            field,
-            %{
-              "id" => "#{base}_value_#{field}",
-              "component" => "Text",
-              "text" => %{"@path" => detail_value_path(view, detail, field)}
-            },
-            "/detail/#{detail.context}/"
-          )
+        {value_id, value_components} = detail_value(view, detail, base, field)
 
         [
           %{
@@ -4525,6 +4617,50 @@ defmodule AshA2ui.Encoder do
       }
       | heading ++ field_rows
     ]
+  end
+
+  # A steps field (catalog 1.17) falls back to one plain Text row per step,
+  # templated over the normalized `_steps_<field>` list: each row is the
+  # step's whole `line` ("1. Placed · Complete · 3 Nov 2026").
+  defp detail_value(view, detail, base, field) do
+    case view.fields[field] do
+      %{steps: true} -> steps_value(detail, base, field)
+      _other -> plain_detail_value(view, detail, base, field)
+    end
+  end
+
+  defp steps_value(detail, base, field) do
+    value_id = "#{base}_value_#{field}"
+
+    {value_id,
+     [
+       %{
+         "id" => value_id,
+         "component" => "Column",
+         "children" => %{
+           "componentId" => "#{base}_step_#{field}",
+           "path" => "/detail/#{detail.context}/_steps_#{field}"
+         }
+       },
+       %{
+         "id" => "#{base}_step_#{field}",
+         "component" => "Text",
+         "text" => %{"@path" => "line"}
+       }
+     ]}
+  end
+
+  defp plain_detail_value(view, detail, base, field) do
+    linked_value(
+      detail,
+      field,
+      %{
+        "id" => "#{base}_value_#{field}",
+        "component" => "Text",
+        "text" => %{"@path" => detail_value_path(view, detail, field)}
+      },
+      "/detail/#{detail.context}/"
+    )
   end
 
   # A detail card's heading: its label, else its humanized name — none when
