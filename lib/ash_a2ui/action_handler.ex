@@ -61,6 +61,10 @@ defmodule AshA2ui.ActionHandler do
 
   Anything else (a `version` other than `"1.0"`, a missing or extra
   top-level key, a malformed body) returns `{:error, []}` and is logged.
+  Top-level keys that start with `_` are not part of the message: a
+  transport or a browser telemetry client adds them (a `_traceparent`, say)
+  to every event it sends, so `handle/3` drops them before it validates
+  (`drop_transport_keys/1`). Every other key is still checked strictly.
   The `surfaceId` on every follow-up always comes from the resolved view,
   never from the incoming message.
 
@@ -347,6 +351,29 @@ defmodule AshA2ui.ActionHandler do
   def quiet_actions, do: @quiet_actions
 
   @doc """
+  Drops the top-level keys of a renderer-to-agent message that start with
+  `_`.
+
+  A2UI gives no top-level key a leading underscore, and transports use that
+  prefix for their own metadata: a browser telemetry client, for one, adds
+  `_traceparent` to the params of every LiveView event it sees. Such a key
+  is not part of the message, so `handle/3` drops it before validating;
+  only the top level is cleaned, and every other undeclared key is still
+  refused. Anything that is not a map is returned unchanged.
+
+      iex> AshA2ui.ActionHandler.drop_transport_keys(%{"version" => "1.0", "_traceparent" => "00-abc-def-01"})
+      %{"version" => "1.0"}
+  """
+  @spec drop_transport_keys(term) :: term
+  def drop_transport_keys(message) when is_map(message),
+    do: Map.reject(message, fn {key, _value} -> transport_key?(key) end)
+
+  def drop_transport_keys(message), do: message
+
+  defp transport_key?(key) when is_binary(key), do: String.starts_with?(key, "_")
+  defp transport_key?(_key), do: false
+
+  @doc """
   Handles one A2UI 1.0 renderer-to-agent message for the surface declared on
   `resource_or_ui_module` (an `Ash.Resource` using the `AshA2ui` extension,
   or an `AshA2ui.Standalone` UI module).
@@ -355,8 +382,9 @@ defmodule AshA2ui.ActionHandler do
   follow-ups. An action outcome's messages carry the reserved
   `/errors/<field>` and `/ui/feedback` writes, and a function call's end with
   its `agentFunctionResponse`. A `rendererFunctionResponse` or an `error`
-  returns `{:ok, []}`; a malformed message returns `{:error, []}`. See the
-  moduledoc for the accepted messages and the follow-ups.
+  returns `{:ok, []}`; a malformed message returns `{:error, []}`. Top-level
+  keys that start with `_` are dropped first (`drop_transport_keys/1`). See
+  the moduledoc for the accepted messages and the follow-ups.
 
   ## Options
 
@@ -385,7 +413,7 @@ defmodule AshA2ui.ActionHandler do
   @spec handle(module | Spark.Dsl.t(), message :: map, opts :: keyword) ::
           {:ok, [map]} | {:error, [map]}
   def handle(resource_or_ui_module, message, opts \\ []) do
-    case parse(message) do
+    case message |> drop_transport_keys() |> parse() do
       {:call, call_id, name, context} ->
         run(resource_or_ui_module, name, context, call_id, opts)
 

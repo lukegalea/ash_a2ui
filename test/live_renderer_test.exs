@@ -137,6 +137,25 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
         Enum.each(messages, &SchemaHelper.assert_valid_agent_message/1)
       end
 
+      test "a transport's _-prefixed keys are dropped before action_fn sees the message",
+           %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/live-renderer/stubbed")
+        envelope = Fixtures.action_envelope()
+
+        render_hook(
+          view,
+          "a2ui:message",
+          Map.put(
+            envelope,
+            "_traceparent",
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+          )
+        )
+
+        assert_receive {:action_fn, MinimalUI, ^envelope, _opts}
+        assert_push_event(view, "a2ui:messages", %{messages: [_ | _]})
+      end
+
       test "an error tuple from action_fn also pushes its messages", %{conn: conn} do
         {:ok, view, _html} = live(conn, "/live-renderer/stubbed")
         envelope = Fixtures.action_envelope("invoke", %{"fail" => true})
@@ -374,6 +393,24 @@ if Code.ensure_loaded?(Phoenix.LiveView) do
                )
 
         assert %{"search" => "x"} = :sys.get_state(view.pid).socket.assigns.ash_a2ui_query_state
+      end
+
+      test "a traced call (a _traceparent in the event params) round-trips with the real handler",
+           %{conn: conn} do
+        {:ok, view, _html} = live(conn, "/live-renderer/query")
+        assert_push_event(view, "a2ui:messages", %{messages: _initial}, 1_000)
+
+        call =
+          Messages.call("query", "paginated", %{"query" => %{"search" => "y"}}, id: "fc_traced")
+
+        render_hook(view, "a2ui:message", Map.put(call, "_traceparent", "00-abc-def-01"))
+
+        assert_push_event(view, "a2ui:messages", %{messages: messages})
+
+        assert %{"agentFunctionResponse" => %{"functionCallId" => "fc_traced", "value" => %{}}} =
+                 List.last(messages)
+
+        assert %{"search" => "y"} = :sys.get_state(view.pid).socket.assigns.ash_a2ui_query_state
       end
 
       test "a malformed message pushes nothing", %{conn: conn} do

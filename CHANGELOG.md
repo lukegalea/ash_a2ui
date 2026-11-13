@@ -152,6 +152,28 @@ changes is the wire format and the way a host wires the renderer.
 
 ### Bug Fixes:
 
+- **A traced page's controls work.** A browser telemetry client adds keys
+  such as `_traceparent` to the params of every LiveView event, and
+  `AshA2ui.ActionHandler.handle/3` refused any message with an extra
+  top-level key, so every control on the page stopped working. Top-level
+  keys that start with `_` are now dropped before the message is validated
+  (`AshA2ui.ActionHandler.drop_transport_keys/1`), by the handler and by
+  `AshA2ui.LiveRenderer` before it routes the event or calls a custom
+  `:action_fn`. Every other undeclared key, and an `_` key anywhere below
+  the top level, is still refused.
+- **The admin dialogs keep focus in light DOM.** The upstream @a2ui/lit
+  after 0.15.0 renders custom-catalog elements into light DOM, where an
+  element has no shadow root of its own. The ConfirmDialog's focus trap
+  read `renderRoot.activeElement` and the DataGrid's prompt dialog read
+  `shadowRoot?.activeElement`, so in light DOM Tab left the open dialog and
+  the prompt lost the control to restore focus to. Both now read the
+  focused element from the element's own shadow root when it has one and
+  from the root it sits in otherwise. The ConfirmDialog trap also brings
+  focus back from its heading (Shift+Tab from the heading went outside the
+  dialog in either DOM mode), and focus returns to the row button that
+  opened the dialog on cancel: the grid removed the dialog before its
+  close update ran, so it never restored.
+
 - **A host passing its own assigns to `surface_container/1` renders.** A
   LiveView with an unrelated `@surface` (a record), `@id` or `@primary`
   rendered `surface_container(assigns)` with those values, and a
