@@ -46,7 +46,9 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
              @admin_catalog_path |> File.read!() |> Jason.decode()
 
     assert catalog["catalogId"] == Experience.admin_catalog_id()
-    assert Map.keys(catalog["components"]) |> Enum.sort() == Enum.sort(@kinds ++ @additive_kinds)
+
+    assert Map.keys(catalog["components"]) |> Enum.sort() ==
+             Enum.sort(@kinds ++ @additive_kinds ++ Experience.admin_basic_kinds())
 
     Enum.each(@kinds, fn kind ->
       component = catalog["components"][kind]
@@ -210,14 +212,47 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
              grid["columns"]["items"]["properties"]["placement"]["enum"]
   end
 
+  test "catalog 3.0 declares the basic kinds it renders itself, under a new id" do
+    catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
+    basic = "priv/a2ui/v1_0/catalogs/basic/v1/catalog.json" |> File.read!() |> Jason.decode!()
+
+    assert contract(catalog)["version"] == "3.0.0"
+    assert Experience.admin_catalog_version() == "3.0.0"
+    assert changelog(catalog)["3.0.0"] =~ "Breaking"
+    assert catalog["catalogId"] == "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3"
+    assert catalog["$id"] == catalog["catalogId"]
+
+    owned = Experience.admin_basic_kinds()
+    assert Enum.sort(owned) == ~w(CheckBox ChoicePicker DateTimeInput Modal TextField)
+
+    # each is the basic catalog's definition, verbatim (a catalog may not
+    # $ref into another one, so the definition is a copy), with the leaf
+    # $defs it refers to
+    for kind <- owned do
+      assert catalog["components"][kind] == basic["components"][kind], kind
+      assert %{"$ref" => "#/components/" <> kind} in catalog["$defs"]["anyComponent"]["oneOf"]
+    end
+
+    assert catalog["$defs"]["Weight"] == basic["$defs"]["Weight"]
+
+    # every basic kind it declares is one the renderer module draws itself
+    source = File.read!(@renderer_asset_path)
+    [_, list] = Regex.run(~r/const INPUT_OVERRIDE_KINDS = \[([^\]]*)\]/, source)
+    inputs = Regex.scan(~r/"(\w+)"/, list, capture: :all_but_first) |> List.flatten()
+    assert Enum.sort(inputs ++ ["Modal"]) == Enum.sort(owned)
+    assert source =~ "export const ADMIN_BASIC_KINDS = [...INPUT_OVERRIDE_KINDS, \"Modal\"]"
+    assert source =~ ~s(export const ADMIN_CATALOG_VERSION = "3.0.0")
+
+    # the functions state who may call them
+    for {name, function} <- catalog["functions"],
+        do: assert(function["allowedCallers"] == "rendererOnly", name)
+  end
+
   test "catalog 2.0 is the A2UI 1.0 wire: filterPicker, the more tag's words" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
-    assert contract(catalog)["version"] == "2.0.0"
-    assert Experience.admin_catalog_version() == "2.0.0"
     assert Map.has_key?(changelog(catalog), "2.0.0")
-
-    assert catalog["catalogId"] == "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2"
+    assert changelog(catalog)["3.0.0"] =~ "every 2.0.0 component"
 
     [checkable, picker] = catalog["components"]["filterPicker"]["allOf"]
     assert checkable == %{"$ref" => "common_types.json#/$defs/Checkable"}
@@ -233,7 +268,6 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
              ~w(captionPath labelPath path textPath valuesPath)
 
     source = File.read!(@renderer_asset_path)
-    assert source =~ ~s(export const ADMIN_CATALOG_VERSION = "2.0.0")
     assert source =~ ~s(filterPicker: "ash-admin-filter-picker")
   end
 

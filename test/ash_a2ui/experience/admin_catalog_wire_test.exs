@@ -1,14 +1,16 @@
 defmodule AshA2ui.Experience.AdminCatalogWireTest do
   @moduledoc """
   A2UI-101B/AC-10: an admin surface on the 1.0 wire — the admin catalogId,
-  the admin kinds and their bindings, the basic components qualified with
-  their own catalog, and the A2UI-101 ui state.
+  the admin kinds and their bindings, the basic kinds the admin catalog
+  renders itself unqualified, every other basic component qualified with the
+  basic catalog, and the A2UI-101 ui state.
   """
 
   use ExUnit.Case, async: false
 
   alias AshA2ui.Experience
   alias AshA2ui.Test.Experience.Task
+  alias AshA2ui.Test.SchemaHelper
 
   setup do
     Application.put_env(:ash_a2ui, :catalog, :admin_v1)
@@ -41,6 +43,23 @@ defmodule AshA2ui.Experience.AdminCatalogWireTest do
 
     # a basic component on the admin surface names the basic catalog
     assert comps["action_result_text"]["@catalogId"] == AshA2ui.Encoder.basic_catalog_id()
+
+    # the basic kinds the admin catalog renders itself (its accessible inputs
+    # and the prompt Modal) name no catalog: they resolve from the admin
+    # catalog, the surface's own; every other basic kind names the basic one
+    owned = Experience.admin_basic_kinds()
+    admin_kinds = Map.keys(admin_catalog()["components"]) -- owned
+
+    for %{"component" => kind} = component <- create["components"] do
+      cond do
+        kind in owned -> refute Map.has_key?(component, "@catalogId"), kind
+        kind in admin_kinds -> refute Map.has_key?(component, "@catalogId"), kind
+        true -> assert component["@catalogId"] == AshA2ui.Encoder.basic_catalog_id(), kind
+      end
+    end
+
+    assert %{"component" => "TextField"} = text_field = comps["form_input_name"]
+    refute Map.has_key?(text_field, "@catalogId")
 
     # bindings are @path bindings into the data model
     assert comps["status_banner"]["kind"] == %{"@path" => "/ui/feedback/kind"}
@@ -79,4 +98,73 @@ defmodule AshA2ui.Experience.AdminCatalogWireTest do
     for retired <- ["status", "response", "action_result", "action_result_text"],
         do: refute(Map.has_key?(ui, retired))
   end
+
+  test "every input kind and the prompt Modal resolve from the admin catalog" do
+    owned = Experience.admin_basic_kinds()
+
+    found =
+      for module <- surface_modules(),
+          [surface] = AshA2ui.Info.build_surface(module, authorize?: false, catalog: :admin_v1),
+          %{"component" => kind} = component <- surface["createSurface"]["components"],
+          kind in owned do
+        refute Map.has_key?(component, "@catalogId"),
+               "#{inspect(module)} #{component["id"]} (#{kind}) names a catalog"
+
+        kind
+      end
+
+    # the test support's admin surfaces draw every one of them (and each
+    # surface validates with the admin catalog as its own: see
+    # AshA2ui.SurfaceConformanceTest)
+    assert Enum.sort(Enum.uniq(found)) == Enum.sort(owned)
+  end
+
+  test "a basic function inside an admin-owned kind names the basic catalog" do
+    admin = Experience.admin_catalog_id()
+    basic = AshA2ui.Encoder.basic_catalog_id()
+
+    field = %{
+      "id" => "form_title",
+      "component" => "TextField",
+      "label" => %{"@call" => "formatString", "args" => %{"value" => "${/form/title}"}},
+      "value" => %{"@path" => "/form/title"}
+    }
+
+    qualified = AshA2ui.Encoder.with_catalog(field, admin)
+    refute Map.has_key?(qualified, "@catalogId")
+    assert qualified["label"]["catalogId"] == basic
+
+    # on a basic surface nothing is qualified
+    assert AshA2ui.Encoder.with_catalog(field, basic) == field
+
+    # openSurface is the admin catalog's: unqualified on an admin surface
+    open = %{"@call" => "openSurface", "args" => %{"surface" => "tasks"}}
+
+    button = %{
+      "id" => "b",
+      "component" => "Button",
+      "child" => "t",
+      "action" => %{"functionCall" => open}
+    }
+
+    qualified = AshA2ui.Encoder.with_catalog(button, admin)
+    assert qualified["@catalogId"] == basic
+    assert qualified["action"]["functionCall"] == open
+  end
+
+  # Every AshA2ui surface module the test support compiles.
+  defp surface_modules do
+    {:ok, modules} = :application.get_key(:ash_a2ui, :modules)
+
+    Enum.filter(modules, fn module ->
+      String.starts_with?(inspect(module), "AshA2ui.Test.") and
+        Code.ensure_loaded?(module) and
+        function_exported?(module, :spark_dsl_config, 0) and
+        AshA2ui in Spark.extensions(module) and
+        AshA2ui.Info.components(module) != []
+    end)
+  end
+
+  defp admin_catalog,
+    do: "priv/a2ui/admin_v1/catalog.json" |> File.read!() |> Jason.decode!()
 end

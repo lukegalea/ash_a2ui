@@ -1,7 +1,7 @@
 [
   {
     "createSurface": {
-      "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2",
+      "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3",
       "components": [
         {
           "children": [
@@ -227,7 +227,6 @@
           "id": "form_fields"
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "TextField",
           "id": "form_input_subject",
           "label": "Subject",
@@ -236,7 +235,6 @@
           }
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "ChoicePicker",
           "id": "form_input_author_id",
           "label": "Author id",
@@ -284,7 +282,6 @@
           "id": "nested_notes_row"
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "TextField",
           "id": "nested_notes_input_body",
           "label": "Body",
@@ -293,7 +290,6 @@
           }
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "TextField",
           "id": "nested_notes_input_rating",
           "label": "Rating",
@@ -454,7 +450,6 @@
           "text": "Remove"
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "ChoicePicker",
           "id": "nested_tags_picker",
           "label": "Add",

@@ -16,9 +16,9 @@ defmodule AshA2ui.Test.SchemaHelper do
     * messages the renderer sends: `assert_valid_renderer_message/2`,
       `validate_renderer_message/2`;
     * the catalogs a payload uses are `catalogs: [file, ...]`, paths relative
-      to `priv/a2ui/v1_0` (default: the basic and ash_a2ui catalogs, what
-      every ash_a2ui surface uses; an admin surface adds
-      `admin_catalogs/0`);
+      to `priv/a2ui/v1_0`, the surface's own catalog first (default: the
+      basic and ash_a2ui catalogs, what every ash_a2ui surface uses; an admin
+      surface uses `admin_catalogs/0`);
     * catalogs: `assert_valid_catalog/1`, `validate_catalog/1` (structure
       against `catalog_definition.json`, plus the UAX #31 identifier and
       restricted-`$ref`-target rules the upstream runner checks in code);
@@ -94,14 +94,14 @@ defmodule AshA2ui.Test.SchemaHelper do
   ## Catalogs
 
   @doc """
-  The catalog files an admin-catalog (`catalog: :admin_v1`) surface uses:
-  pass them as `catalogs:`.
+  The catalog files an admin-catalog (`catalog: :admin_v1`) surface uses,
+  the admin catalog (the surface's own) first: pass them as `catalogs:`.
   """
   def admin_catalogs,
     do: [
+      "../admin_v1/catalog.json",
       "catalogs/basic/v1/catalog.json",
-      "catalogs/ash_a2ui/catalog.json",
-      "../admin_v1/catalog.json"
+      "catalogs/ash_a2ui/catalog.json"
     ]
 
   @doc "Asserts `catalog` is a valid catalog definition. Returns it."
@@ -154,7 +154,8 @@ defmodule AshA2ui.Test.SchemaHelper do
   a conformance suite's `"catalog"` key does upstream. The default is the
   basic and ash_a2ui catalogs. A payload that mixes catalogs (`@catalogId`,
   `FunctionCall.catalogId`) validates against the list of every catalog it
-  uses. Built schemas are cached.
+  uses, the surface's own first: what names no catalog resolves there (see
+  `AshA2ui.Test.SchemaHelper.Resolver`). Built schemas are cached.
   """
   def spec_schema(file, opts \\ []) do
     catalogs = Keyword.get(opts, :catalogs)
@@ -256,10 +257,18 @@ defmodule AshA2ui.Test.SchemaHelper do
 
   defp message_components(_message), do: []
 
+  # The catalog a component resolves in, as a renderer resolves it: the one
+  # its `@catalogId` names, else the surface's own (the first file).
   defp validate_component(%{"component" => kind} = component, files, opts) when is_binary(kind) do
-    case Enum.find_index(files, &(&1 |> Resolver.read!() |> get_in(["components", kind]))) do
+    index =
+      case component["@catalogId"] do
+        nil -> 0
+        catalog_id -> Enum.find_index(files, &(Resolver.read!(&1)["catalogId"] == catalog_id))
+      end
+
+    case index && files |> Enum.at(index) |> Resolver.read!() |> get_in(["components", kind]) do
       nil ->
-        {:error, ["#: no catalog in use declares #{inspect(kind)}"]}
+        {:error, ["#: the catalog it resolves in does not declare #{inspect(kind)}"]}
 
       index ->
         uri = Resolver.base() <> Resolver.catalog_uri(files, index)

@@ -1,6 +1,7 @@
 // The admin catalog's focus handling (the ConfirmDialog trap, the prompt
-// dialog's trap and focus restore, the calendar keeping its focused day),
-// run once per DOM mode: catalogs.mjs builds the elements over the pinned
+// dialog's trap and focus restore, the calendar keeping its focused day) and
+// the elements an admin surface's inputs render as, run once per DOM mode:
+// catalogs.mjs builds the elements over the pinned
 // A2uiLitElement (its own shadow root), light_dom_catalogs.mjs over one whose
 // createRenderRoot() returns `this` (light DOM, the upstream default after
 // 0.15.0). Each mode is its own test file, so each runs in its own process
@@ -10,6 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {mountHook, sent} from "./harness.mjs";
+import {readJson} from "./support.mjs";
 import {feedback} from "../../priv/js/ash_a2ui_protocol.js";
 
 async function settle() {
@@ -94,6 +96,44 @@ export function focusCases({mode, admin, mergedCatalog}) {
     assert.ok(grid, "the grid renders");
     assert.equal(grid.renderRoot === grid, lightDom);
     assert.equal(grid.shadowRoot === null, lightDom);
+  });
+
+  test(`${mode}: an admin surface's TextField and ChoicePicker render as the admin elements`, async () => {
+    // The two inputs exactly as the encoder emits them on an admin surface
+    // (a recorded probe fixture): no @catalogId, so they resolve from the
+    // admin catalog, the surface's own.
+    const {messages} = readJson("priv/js/probe/fixtures/manifest_tasks_admin_payload.json");
+    const recorded = messages.find((message) => message.createSurface).createSurface;
+    const field = recorded.components.find((component) => component.component === "TextField");
+    const picker = recorded.components.find((component) => component.component === "ChoicePicker");
+    assert.equal("@catalogId" in field, false, "the encoder leaves the TextField unqualified");
+    assert.equal("@catalogId" in picker, false, "the encoder leaves the ChoicePicker unqualified");
+
+    const hook = mountHook({catalogs: [mergedCatalog, admin]});
+    hook.processMessages([
+      {
+        version: "1.0",
+        createSurface: {
+          surfaceId: "s1",
+          catalogId: admin.id,
+          components: [
+            {id: "root", component: "entityPage", title: "Tasks", children: [field.id, picker.id]},
+            field,
+            picker,
+          ],
+          dataModel: recorded.dataModel,
+        },
+      },
+    ]);
+    assert.deepEqual(sent(hook), [], "the surface applies");
+    const surface = await render(hook);
+
+    const textField = deep(surface, "ash-admin-textfield");
+    assert.ok(textField, "the TextField is the admin element");
+    assert.ok(deep(surface, "ash-admin-choicepicker"), "the ChoicePicker is the admin element");
+    assert.equal(deep(surface, "ash-a2ui-textfield"), null);
+    assert.equal(deep(surface, "ash-a2ui-choicepicker"), null);
+    assert.ok(textField.renderRoot.querySelector("label"), "the admin TextField draws a real label");
   });
 
   test(`${mode}: Tab and Shift+Tab stay inside the open ConfirmDialog, Escape restores focus`, async () => {

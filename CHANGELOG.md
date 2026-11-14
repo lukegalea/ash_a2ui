@@ -130,6 +130,39 @@ changes is the wire format and the way a host wires the renderer.
    with `AshA2ui.Info.build_surface/2` and `AshA2ui.ActionHandler.handle/3`
    (see Rendering Clients).
 
+### Breaking: admin catalog 3.0.0
+
+**An admin surface's inputs are the admin catalog's accessible ones.** The
+admin catalog renders TextField, CheckBox, ChoicePicker and DateTimeInput
+itself (a real `<label>`, the field's error beside the control, the aria
+wiring) and the Modal that closes a prompt on its outcome. Admin catalog
+2.0.0 did not declare them, and the encoder gave them the basic catalog's
+`@catalogId`, so a renderer that honours `@catalogId` drew the basic
+elements and the admin ones were unreachable.
+
+- The admin catalog declares those five kinds, with the basic catalog's
+  definitions unchanged (`AshA2ui.Experience.admin_basic_kinds/0`,
+  `ADMIN_BASIC_KINDS` in `ash_admin_catalog.js`). On an admin surface they
+  carry no `@catalogId` and resolve from the admin catalog. Every other
+  basic kind (Text, Button, Row, Column, Card, List, ...) still carries the
+  basic catalog's id and renders from the basic catalog.
+- A function call names the catalog of its function when that is not the
+  surface's: a basic function inside an admin-owned input still carries the
+  basic catalog's `catalogId` (`AshA2ui.Encoder.with_catalog/2`).
+- A renderer of 2.0.0 does not have those kinds in the admin catalog, so
+  the contract is 3.0.0 and the id moves to
+  `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3`. There is no
+  alias for the 2.0.0 id. A renderer that lists only the 2.0.0 id in
+  `supportedCatalogIds` gets basic surfaces from
+  `AshA2ui.Experience.catalog_for/1`.
+- `openSurface` states `allowedCallers: "rendererOnly"` (the default).
+
+**Migrating a host app**: a catalog built with `createAshAdminCatalog`
+carries the new id and registers the five kinds by itself; update the
+dependency. Replace the 2.0.0 id wherever the host writes it out
+(`supportedCatalogIds`, stored payloads, test fixtures), or read it from
+`AshA2ui.Experience.admin_catalog_id/0` and `catalog.id`.
+
 ### Features
 
 - **`activateLink` is exported from `ash_admin_catalog.js`.** A host that

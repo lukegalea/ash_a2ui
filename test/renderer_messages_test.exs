@@ -280,9 +280,9 @@ defmodule AshA2ui.RendererMessagesTest do
           "args" => %{"name" => "submit_form"}
         })
 
-      # The schema checks the call against every active catalog's functions
-      # at once, so only the agent can tell the catalog id is wrong.
-      assert_valid_renderer_message(call, catalogs: @catalogs)
+      # The call resolves in the catalog its catalogId names, which does not
+      # declare ashAction: the schema refuses it, and so does the agent.
+      assert invalid_message?(call)
       assert_refused(call, "UNKNOWN_FUNCTION")
     end
 

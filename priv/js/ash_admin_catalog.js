@@ -1,10 +1,10 @@
 /**
- * Ash admin catalog v2 — semantic Lit components for the `@a2ui/lit`
+ * Ash admin catalog v3 — semantic Lit components for the `@a2ui/lit`
  * renderer.
  *
  * `createAshAdminCatalog(deps)` builds a `@a2ui/web_core` Catalog
  * registered under the admin catalog id
- * (`https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2`) so a surface whose
+ * (`https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3`) so a surface whose
  * `createSurface.catalogId` matches resolves these components. The
  * renderer resolves a surface's catalog by exact id and renders every
  * component type with its catalog entry's element. The admin catalog is a
@@ -22,17 +22,24 @@
  *     });
  *     configureAshA2ui({MessageProcessor, Catalog, catalogs: [basicCatalog, adminCatalog]});
  *
- * The JS catalog carries every component of `deps.basicCatalog` (pass the
- * stock `basicCatalog` or the merged `createAshA2uiCatalog` result to
- * inherit its upgrades), so a basic component without `@catalogId` still
- * resolves on an admin surface, plus the semantic components:
+ * The catalog declares the semantic components:
  *
  *   entityPage, dataGrid, emptyState, pagination, recordPanel, fieldDisplay,
  *   formSection, actionBar, statusBanner, confirmDialog, calendarView,
- *   liveDiagram
+ *   liveDiagram, filterPicker
  *
- * (camelCase names are the wire contract, pinned by
- * `priv/a2ui/admin_v1/catalog.json`.)
+ * and the basic kinds it renders itself (ADMIN_BASIC_KINDS): TextField,
+ * CheckBox, ChoicePicker and DateTimeInput (the a11y-hardened inputs below)
+ * and Modal (the prompt Modal). On an admin surface those five carry no
+ * `@catalogId`, so they resolve here; every other basic kind carries the
+ * basic catalog's id as `@catalogId` and renders from the basic catalog
+ * the host registers under that id. (camelCase names and the five basic
+ * kinds are the wire contract, pinned by `priv/a2ui/admin_v1/catalog.json`.)
+ *
+ * The JS catalog also carries the rest of `deps.basicCatalog` (pass the
+ * stock `basicCatalog` or the merged `createAshA2uiCatalog` result to
+ * inherit its upgrades), so a renderer that ignores `@catalogId` still
+ * draws them. The wire never relies on it.
  *
  * ## Events
  *
@@ -71,9 +78,10 @@
  * ## A11y-hardened basic inputs
  *
  * This catalog REPLACES TextField, CheckBox, ChoicePicker and DateTimeInput
- * (for components resolved in the admin catalog only; the basic catalog
- * registered under its own id is untouched) with equivalent components that
- * associate a real `<label>`, read the AshA2ui form-error state
+ * (for components resolved in the admin catalog only, which on an admin
+ * surface is every one of them: they carry no `@catalogId`; the basic
+ * catalog registered under its own id is untouched) with equivalent
+ * components that associate a real `<label>`, read the AshA2ui form-error state
  * (`/errors/<field>`, derived from each input's `/form/<field>` value
  * binding), and render the error adjacent to the control with the aria
  * wiring. FormSection pairs the encoder's sibling `form_error_<field>`
@@ -167,10 +175,10 @@ import {
 } from "@a2ui/web_core/v1_0";
 
 /** The admin catalog id a surface must declare to resolve here. */
-const ADMIN_CATALOG_ID = "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2";
+const ADMIN_CATALOG_ID = "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3";
 
 /** The admin catalog contract version (minor versions are additive). */
-export const ADMIN_CATALOG_VERSION = "2.0.0";
+export const ADMIN_CATALOG_VERSION = "3.0.0";
 
 /**
  * The DOM event a reference-link activation raises when the host passed no
@@ -266,6 +274,14 @@ const TAGS = {
 
 /** Basic input kinds this catalog replaces with a11y-hardened elements. */
 const INPUT_OVERRIDE_KINDS = ["TextField", "CheckBox", "ChoicePicker", "DateTimeInput"];
+
+/**
+ * The basic kinds this catalog renders itself: the a11y-hardened inputs and
+ * the prompt Modal. The admin catalog document declares exactly these basic
+ * kinds, and on an admin surface they carry no `@catalogId`
+ * (`AshA2ui.Experience.admin_basic_kinds/0`).
+ */
+export const ADMIN_BASIC_KINDS = [...INPUT_OVERRIDE_KINDS, "Modal"];
 const INPUT_OVERRIDE_TAGS = {
   TextField: "ash-admin-textfield",
   CheckBox: "ash-admin-checkbox",

@@ -1,7 +1,7 @@
 [
   {
     "createSurface": {
-      "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2",
+      "catalogId": "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3",
       "components": [
         {
           "children": [
@@ -226,7 +226,6 @@
           "id": "form_fields"
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "TextField",
           "id": "form_input_subject",
           "label": "Subject",
@@ -269,7 +268,6 @@
           "id": "form_select_author_id_controls"
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "TextField",
           "id": "form_select_author_id_search_input",
           "label": "Search",
@@ -429,7 +427,6 @@
           "id": "nested_tags_controls"
         },
         {
-          "@catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
           "component": "TextField",
           "id": "nested_tags_search_input",
           "label": "Search",

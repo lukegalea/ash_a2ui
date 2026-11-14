@@ -88,7 +88,6 @@ defmodule AshA2ui.QueryHubTest do
       assert components["query_search_input"] == %{
                "id" => "query_search_input",
                "component" => "TextField",
-               "@catalogId" => AshA2ui.Encoder.basic_catalog_id(),
                "label" => "Search",
                "placeholder" => "Search contracts or vendors",
                "value" => %{"@path" => "/query/search"}

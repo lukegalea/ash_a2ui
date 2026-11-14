@@ -19,7 +19,7 @@ defmodule AshA2ui.Experience.CatalogNegotiationTest do
   alias AshA2ui.Test.Messages
   alias AshA2ui.Test.Surface
 
-  @admin "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2"
+  @admin "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3"
   @basic "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
   @ash "https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1"
 
