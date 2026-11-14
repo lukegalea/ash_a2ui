@@ -152,6 +152,14 @@ changes is the wire format and the way a host wires the renderer.
 
 ### Bug Fixes:
 
+- **A dataGrid's sort marks follow the sort the server writes.** The stock
+  admin dataGrid reads its header marks from the data model at `sort.path`,
+  a path in a static prop that its controller does not subscribe to. The
+  data model notifies only the subscribers of a path that changed, so when
+  the server's sort reply left the bound rows as they were (one row, or rows
+  already in that order) the grid never rendered again and kept the old
+  marks. The grid now subscribes to its sort path, and drops the
+  subscription when it leaves the page.
 - **A traced page's controls work.** A browser telemetry client adds keys
   such as `_traceparent` to the params of every LiveView event, and
   `AshA2ui.ActionHandler.handle/3` refused any message with an extra
