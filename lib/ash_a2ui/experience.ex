@@ -85,8 +85,11 @@ defmodule AshA2ui.Experience do
   @typedoc "The record task panel modes (`:hidden` for the closed state)."
   @type mode :: :create | :view | :edit | :hidden
 
-  @admin_catalog_id "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2"
+  @admin_catalog_id "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3"
   @feedback_kinds ["", "pending", "success", "warning", "error"]
+
+  # The basic kinds the admin catalog renders itself (see admin_basic_kinds/0).
+  @admin_basic_kinds ~w(TextField CheckBox ChoicePicker DateTimeInput Modal)
 
   @doc """
   The configured component catalog: `:basic` (default) or `:admin_v1`
@@ -160,8 +163,11 @@ defmodule AshA2ui.Experience do
 
   @doc """
   The admin catalog contract version (`metadata.extensions.ash_a2ui.version`
-  in `priv/a2ui/admin_v1/catalog.json`). 2.0 is the A2UI 1.0 wire: the new
-  `admin_catalog_id/0`, `@path`/`@call` bindings, envelopes sent as
+  in `priv/a2ui/admin_v1/catalog.json`). 3.0 moves the basic kinds the
+  admin catalog renders itself (`admin_basic_kinds/0`: the a11y-hardened
+  inputs and the prompt Modal) into the admin catalog, under a new
+  `admin_catalog_id/0`: on an admin surface they carry no `@catalogId`.
+  2.0 is the A2UI 1.0 wire: `@path`/`@call` bindings, envelopes sent as
   `ashAction`, and the `filterPicker` component. Minor versions are additive
   within one catalog id — 1.1 added the column presentation hints
   (format/align/mono/badge/link), `rowClick`, FieldDisplay `link` and the
@@ -177,10 +183,25 @@ defmodule AshA2ui.Experience do
   1.16 added card rows (`layout: "cards"`), the `expandLabel` disclosure
   label and labeled `pairs` columns; 1.17 added the fieldDisplay `steps`
   stepper; 1.18 added a table card's own `heading` and `description`. 2.0
-  includes every 1.x addition.
+  includes every 1.x addition, and 3.0 every 2.x one.
   """
   @spec admin_catalog_version() :: String.t()
-  def admin_catalog_version, do: "2.0.0"
+  def admin_catalog_version, do: "3.0.0"
+
+  @doc """
+  The basic-catalog component kinds the admin catalog declares and renders
+  itself: the a11y-hardened inputs (`TextField`, `CheckBox`, `ChoicePicker`,
+  `DateTimeInput`) and the `Modal` that closes a prompt on its outcome.
+
+  On an admin surface these kinds resolve from the admin catalog, the
+  surface's own, so they carry no `@catalogId`. Every other basic kind the
+  admin catalog has no element of its own for carries the basic catalog's id
+  as `@catalogId` and renders from the basic catalog. The admin catalog
+  declares these kinds with the basic catalog's definitions, verbatim: the
+  wire shape is the same, only the renderer differs.
+  """
+  @spec admin_basic_kinds() :: [String.t()]
+  def admin_basic_kinds, do: @admin_basic_kinds
 
   @doc """
   The zero-or-one visibility sentinel value: `[]` (hidden) or a one-item

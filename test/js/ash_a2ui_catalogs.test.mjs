@@ -100,6 +100,20 @@ test("the admin catalog declares what its catalog document declares", () => {
     assert.ok(admin.components.has(name), `basic component ${name} on admin surfaces`);
   }
 
+  // The basic kinds the document declares are the ones the module draws
+  // itself, under its own elements.
+  const basicKinds = Object.keys(ADMIN_JSON.components).filter((name) =>
+    basicCatalog.components.has(name),
+  );
+  assert.deepEqual(basicKinds.sort(), [...adminCatalog.ADMIN_BASIC_KINDS].sort());
+  for (const name of adminCatalog.ADMIN_BASIC_KINDS) {
+    assert.notEqual(
+      admin.components.get(name).tagName,
+      basicCatalog.components.get(name).tagName,
+      `${name} has the admin catalog's own element`,
+    );
+  }
+
   const openSurface = admin.functions.get("openSurface");
   assert.equal(openSurface.requiresUserActivation, true);
   assert.equal(openSurface.allowedCallers, undefined);
@@ -336,6 +350,53 @@ test("a filterPicker renders on an admin surface with its hint", async () => {
   const text = (picker.shadowRoot ?? picker).textContent;
   assert.match(text, /Statuses update nightly/);
   assert.match(text, /Open/);
+});
+
+// The element a component of a recorded surface is drawn with, resolved the
+// way the 1.0 renderer resolves it: in the catalog its @catalogId names,
+// else in the surface's own catalog.
+function resolvedTag(component, surfaceCatalogId, catalogs) {
+  const id = component["@catalogId"] ?? surfaceCatalogId;
+  const catalog = catalogs.find((candidate) => candidate.id === id);
+  assert.ok(catalog, `${component.id}: no catalog registered under ${id}`);
+  return catalog.components.get(component.component)?.tagName;
+}
+
+// The createSurface of a recorded probe fixture (priv/js/probe/record_*.exs:
+// the encoder's own output).
+function recordedSurface(name) {
+  const {messages} = readJson(`priv/js/probe/fixtures/${name}.json`);
+  return messages.find((message) => message.createSurface).createSurface;
+}
+
+test("an admin surface's inputs and prompt Modal resolve to the admin catalog's elements", () => {
+  const catalogs = [mergedCatalog, admin];
+  const tags = {};
+  for (const name of ["manifest_tasks_admin_payload", "adoption_prompt_board_admin_payload"]) {
+    const surface = recordedSurface(name);
+    assert.equal(surface.catalogId, admin.id, `${name} is an admin surface`);
+    for (const component of surface.components) {
+      (tags[component.component] ??= new Set()).add(
+        resolvedTag(component, surface.catalogId, catalogs),
+      );
+    }
+  }
+
+  assert.deepEqual([...tags.TextField], ["ash-admin-textfield"]);
+  assert.deepEqual([...tags.ChoicePicker], ["ash-admin-choicepicker"]);
+  assert.deepEqual([...tags.CheckBox], ["ash-admin-checkbox"]);
+  assert.deepEqual([...tags.Modal], [admin.components.get("Modal").tagName]);
+  // every other basic kind is drawn by the basic catalog
+  assert.deepEqual([...tags.Text], ["ash-a2ui-text"]);
+  assert.deepEqual([...tags.Button], ["ash-a2ui-button"]);
+  assert.deepEqual([...tags.dataGrid], ["ash-admin-data-grid"]);
+
+  // Admin catalog 2.0.0 put the basic catalog's id on them, so they were
+  // drawn by the basic catalog's elements.
+  const surface = recordedSurface("manifest_tasks_admin_payload");
+  const field = surface.components.find((component) => component.component === "TextField");
+  const v2 = {...field, "@catalogId": basicCatalog.id};
+  assert.equal(resolvedTag(v2, surface.catalogId, catalogs), "ash-a2ui-textfield");
 });
 
 // The admin calendarView over a month window, its windowAction a query.

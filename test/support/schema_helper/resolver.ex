@@ -17,8 +17,14 @@ defmodule AshA2ui.Test.SchemaHelper.Resolver do
   so that its relative `common_types.json` refs land on the vendored common
   types. Several files are the mixed-catalog case: each is served as
   `catalog_member_<n>.json`, and `catalog.json` is a composite whose
-  `anyComponent` and `anyFunction` are a `oneOf` over the members' own. A
-  component or function must then match exactly one catalog's definition.
+  `anyComponent` and `anyFunction` are a `oneOf` over the members' own,
+  each routed the way a renderer resolves a mixed surface. The first file is
+  the surface's catalog (its `createSurface.catalogId`): a component without
+  `@catalogId`, or a function call without `catalogId`, resolves there. A
+  component or call naming a catalog resolves in the member with that
+  `catalogId`. Two catalogs may then declare one name (the admin catalog
+  re-declares the basic kinds it renders itself), and a component or
+  function must still match exactly one catalog's definition.
 
   Anything else (the JSON Schema meta-schemas) falls through to the next
   resolver in the chain.
@@ -105,21 +111,39 @@ defmodule AshA2ui.Test.SchemaHelper.Resolver do
     do: {:normal, file |> read!() |> Map.put("$id", uri) |> translate_patterns()}
 
   defp composite(members, uri) do
-    any = fn def ->
+    any = fn def, key ->
       %{
         "oneOf" =>
           members
           |> Enum.with_index()
-          |> Enum.map(fn {_, n} -> %{"$ref" => "catalog_member_#{n}.json#/$defs/#{def}"} end)
+          |> Enum.map(fn {file, n} ->
+            %{
+              "allOf" => [
+                %{"$ref" => "catalog_member_#{n}.json#/$defs/#{def}"},
+                route(key, read!(file)["catalogId"], n == 0)
+              ]
+            }
+          end)
       }
     end
 
     %{
       "$schema" => "https://json-schema.org/draft/2020-12/schema",
       "$id" => uri,
-      "$defs" => %{"anyComponent" => any.("anyComponent"), "anyFunction" => any.("anyFunction")}
+      "$defs" => %{
+        "anyComponent" => any.("anyComponent", "@catalogId"),
+        "anyFunction" => any.("anyFunction", "catalogId")
+      }
     }
   end
+
+  # The surface's catalog takes what names no catalog or names it; any other
+  # catalog only what names it.
+  defp route(key, catalog_id, true = _surface?),
+    do: %{"properties" => %{key => %{"const" => catalog_id}}}
+
+  defp route(key, catalog_id, false = _surface?),
+    do: %{"required" => [key], "properties" => %{key => %{"const" => catalog_id}}}
 
   defp translate_patterns(%{} = schema) do
     Map.new(schema, fn

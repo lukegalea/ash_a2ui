@@ -48,7 +48,7 @@ Ids are stable URIs. They need not resolve. They are not under a2ui.org, which i
 spec's namespace.
 
 - `https://github.com/lukegalea/ash_a2ui/catalogs/ash_a2ui/v1`
-- `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v2`
+- `https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3`
 
 A host names its catalog under its own domain or repository.
 
@@ -82,26 +82,35 @@ surfaces carry the basic catalog's `@catalogId`.
 
 #### Where "admin draws basic X differently" goes
 
-On an admin surface the encoder gives every basic component the basic catalog's
-`@catalogId` (`AshA2ui.Encoder.with_catalog/2`). The renderer validates it against the basic
-schema, which is strict, and draws it with the catalog registered under the basic id. So:
-
 - **An extended variant**, a basic component with keys the basic schema lacks, becomes an
   admin component with its own name and schema. `filterPicker` is the precedent: a
   ChoicePicker with a hint, facet counts, dynamic options and grouped options. Extended keys
-  never ride on a basic component, and two catalogs never declare one name, because that
-  would make a mixed surface ambiguous.
-- **A pure redraw** keeps the basic schema and is a swap of the basic catalog (section 6).
-  `createAshA2uiCatalog` is one.
+  never ride on a basic component.
+- **A redraw the admin catalog owns** keeps the basic name and schema, and the admin
+  definition declares the kind with the basic catalog's definition, verbatim (a catalog may
+  not `$ref` into another catalog, so the definition is copied, and a test pins the copy).
+  On an admin surface such a component names no catalog, so it resolves from the admin
+  catalog, the surface's default. This is unambiguous: a renderer resolves a component by
+  its `@catalogId`, else by the surface's `catalogId`, never by searching catalogs for the
+  name. Admin catalog 3.0.0 owns TextField, CheckBox, ChoicePicker and DateTimeInput (the
+  accessible inputs: a real label, the field's error beside the control) and Modal (the
+  prompt Modal). `AshA2ui.Experience.admin_basic_kinds/0` and `ADMIN_BASIC_KINDS` in
+  `ash_admin_catalog.js` list them.
+- **Every other basic kind** on an admin surface carries the basic catalog's `@catalogId`
+  (`AshA2ui.Encoder.with_catalog/2`) and is drawn by the catalog registered under the basic
+  id. The admin catalog declares a basic kind only when it has its own element for it.
+- **A redraw for every surface** keeps the basic schema and is a swap of the basic catalog
+  (section 6). `createAshA2uiCatalog` is one.
 
-`createAshAdminCatalog` still carries every basic component, with its own TextField,
-CheckBox, ChoicePicker, DateTimeInput and Modal elements. Its definition declares none of
-them. On 1.0 they are bypassed: the encoder's basic components name the basic catalog, so
-these elements draw only a basic component that names no catalog on an admin surface, which
-the encoder does not emit. Each one becomes either a distinct admin component, if it extends
-the basic schema, or an opt-in swap of the basic catalog, if it only redraws. In 1.0 the
-basic TextField has `placeholder`, so TextField, CheckBox and DateTimeInput only redraw; the
-prompt-closing Modal already ships in `createAshA2uiCatalog`.
+A function call names its function's catalog when that is not the surface's: on an admin
+surface a basic function (`formatString`) inside an admin-owned TextField still carries the
+basic catalog's id.
+
+Admin catalog 2.0.0 declared none of the five. The encoder gave them the basic catalog's
+`@catalogId`, so a renderer honouring it drew the basic elements and the admin catalog's
+accessible inputs and prompt Modal were unreachable. 3.0.0 moved them into the admin
+definition. `createAshAdminCatalog` still carries the other basic components, so a renderer
+that ignores `@catalogId` draws them too; the wire never relies on it.
 
 ### 5. Where a catalog lives, and how a host registers one
 
@@ -201,10 +210,14 @@ two component keys can still make two of these ids equal.
 ### 8. Versioning
 
 - The id names the major version: the ash_a2ui catalog is `.../ash_a2ui/v1` and the admin
-  catalog, at 2.0.0, is `.../admin/v2`. The catalog's contract version sits in
+  catalog, at 3.0.0, is `.../admin/v3`. The catalog's contract version sits in
   `metadata.extensions.ash_a2ui`, with its changelog. The renderer module exports the same
-  version (`ADMIN_CATALOG_VERSION`). The admin catalog moves from 1.18.0 to 2.0.0 for the
-  A2UI 1.0 break, and its id moves as section 3 says.
+  version (`ADMIN_CATALOG_VERSION`). The admin catalog moved from 1.18.0 to 2.0.0 for the
+  A2UI 1.0 break, and its id moved as section 3 says. It moved to 3.0.0 (`.../admin/v3`)
+  when the basic kinds it renders itself moved into its definition (section 4): a 2.0.0
+  renderer does not declare them in the admin catalog, so the new wire would not render
+  there. A renderer that lists only `.../admin/v2` in `supportedCatalogIds` gets basic
+  surfaces from `AshA2ui.Experience.catalog_for/1`.
 - A minor change is additive: a new component or an optional prop. It bumps the version and
   adds a changelog entry.
 - **New wire keys are optional, ignorable, and lose no meaning when ignored.** A renderer or
@@ -240,9 +253,8 @@ Ask in this order:
 
 ## Follow-ups
 
-- Make `createAshAdminCatalog` match its definition: drop the basic components it carries,
-  and turn each of its TextField, CheckBox, ChoicePicker, DateTimeInput and Modal elements
-  into an admin component or an opt-in basic swap (section 4).
+- Make `createAshAdminCatalog` match its definition: drop the basic components it carries
+  beyond the five it renders itself (section 4).
 - Move the shipped elements off `this.context` to the controller's props (section 6).
 - A test that pins the stable component ids and checks they do not collide, and a
   compile-time check that rejects a component key that would make two of them equal, such as

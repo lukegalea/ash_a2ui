@@ -305,7 +305,7 @@ defmodule AshA2ui.Encoder do
   component tree and the initial data model, so the surface paints once.
 
   The surface's `catalogId` is the basic catalog, or the admin catalog for
-  a surface built with `catalog: :admin_v1`. Components from the other
+  a surface built with `catalog: :admin_v1`. Components from another
   catalog carry `@catalogId` (see `with_catalog/2`).
   """
   @spec encode_surface(ResolvedView.t(), [map] | map, keyword) :: [map]
@@ -492,48 +492,80 @@ defmodule AshA2ui.Encoder do
 
   @doc """
   Qualifies `component` for a surface whose default catalog is
-  `surface_catalog_id`. A component's catalog is the `@catalogId` it already
-  names, else the catalog declaring its kind: the admin catalog for the admin
-  components, the basic catalog for everything else. A component from
-  another catalog (a basic component on an admin surface) gets `@catalogId`,
-  and the function calls inside it that name no catalog get its catalog too,
-  because an unqualified call resolves against the surface's default. A
-  component from the surface's own catalog carries no `@catalogId`.
+  `surface_catalog_id`.
+
+  A component's catalog is the `@catalogId` it already names, else the
+  catalog declaring its kind on that surface: the admin catalog for the
+  admin components, and on an admin surface also for the basic kinds the
+  admin catalog renders itself (`AshA2ui.Experience.admin_basic_kinds/0`);
+  the basic catalog for everything else. A component from the surface's own
+  catalog carries no `@catalogId`; one from another catalog (a `Text` on an
+  admin surface) names it.
+
+  A function call that names no catalog resolves against the surface's
+  default, so it gets the catalog of its function when that is not the
+  surface's: `openSurface` is the admin catalog's; inside an admin-catalog
+  component every other call is the basic catalog's (`formatString`,
+  `formatDate`, a check's `required`), since the admin catalog declares no
+  other function; inside a component of another catalog a call is that
+  catalog's. A call that already names a catalog (`ashAction`) and the
+  system functions (`@index`) are left as they are.
   """
   @spec with_catalog(map, String.t()) :: map
   def with_catalog(%{"component" => kind} = component, surface_catalog_id) do
-    case component["@catalogId"] || component_catalog_id(kind) do
-      ^surface_catalog_id ->
-        Map.delete(component, "@catalogId")
+    catalog_id = component["@catalogId"] || component_catalog_id(kind, surface_catalog_id)
+    scope = {catalog_id, surface_catalog_id}
+    component = Map.new(component, fn {key, value} -> {key, qualify_calls(value, scope)} end)
 
-      catalog_id ->
-        component
-        |> Map.new(fn {key, value} -> {key, qualify_calls(value, catalog_id)} end)
-        |> Map.put("@catalogId", catalog_id)
+    if catalog_id == surface_catalog_id,
+      do: Map.delete(component, "@catalogId"),
+      else: Map.put(component, "@catalogId", catalog_id)
+  end
+
+  defp component_catalog_id(kind, _surface_catalog_id) when kind in @admin_components,
+    do: Experience.admin_catalog_id()
+
+  defp component_catalog_id(kind, surface_catalog_id) do
+    if surface_catalog_id == Experience.admin_catalog_id() and
+         kind in Experience.admin_basic_kinds(),
+       do: surface_catalog_id,
+       else: @basic_catalog_id
+  end
+
+  # `scope` is {the component's catalog, the surface's catalog}. System
+  # functions (`@index`) belong to no catalog.
+  defp qualify_calls(%{"@call" => "@" <> _} = call, _scope), do: call
+
+  defp qualify_calls(
+         %{"@call" => name} = call,
+         {component_catalog_id, surface_catalog_id} = scope
+       ) do
+    call = Map.new(call, fn {key, value} -> {key, qualify_calls(value, scope)} end)
+
+    case function_catalog_id(name, component_catalog_id) do
+      ^surface_catalog_id -> call
+      catalog_id -> Map.put_new(call, "catalogId", catalog_id)
     end
   end
 
-  defp component_catalog_id(kind) when kind in @admin_components,
+  defp qualify_calls(%{} = map, scope),
+    do: Map.new(map, fn {key, value} -> {key, qualify_calls(value, scope)} end)
+
+  defp qualify_calls(list, scope) when is_list(list),
+    do: Enum.map(list, &qualify_calls(&1, scope))
+
+  defp qualify_calls(other, _scope), do: other
+
+  # The catalog declaring a function called from a component of
+  # `component_catalog_id`.
+  defp function_catalog_id("openSurface", _component_catalog_id),
     do: Experience.admin_catalog_id()
 
-  defp component_catalog_id(_kind), do: @basic_catalog_id
-
-  # System functions (`@index`) belong to no catalog.
-  defp qualify_calls(%{"@call" => "@" <> _} = call, _catalog_id), do: call
-
-  defp qualify_calls(%{"@call" => _} = call, catalog_id) do
-    call
-    |> Map.new(fn {key, value} -> {key, qualify_calls(value, catalog_id)} end)
-    |> Map.put_new("catalogId", catalog_id)
+  defp function_catalog_id(_name, component_catalog_id) do
+    if component_catalog_id == Experience.admin_catalog_id(),
+      do: @basic_catalog_id,
+      else: component_catalog_id
   end
-
-  defp qualify_calls(%{} = map, catalog_id),
-    do: Map.new(map, fn {key, value} -> {key, qualify_calls(value, catalog_id)} end)
-
-  defp qualify_calls(list, catalog_id) when is_list(list),
-    do: Enum.map(list, &qualify_calls(&1, catalog_id))
-
-  defp qualify_calls(other, _catalog_id), do: other
 
   @doc """
   The `text` of a level-`level` heading `Text`: the 1.0 basic catalog's
