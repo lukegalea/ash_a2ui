@@ -20,6 +20,7 @@ msgstr ""
 
 #: test/support/diagram_flow.ex:114
 #: test/support/export_contract.ex:103
+#: test/support/export_contract.ex:164
 #: test/support/hub_ui.ex:1
 msgctxt "one_of:status"
 msgid "Active"
@@ -535,6 +536,7 @@ msgstr ""
 
 #: test/support/article.ex:1
 #: test/support/export_contract.ex:103
+#: test/support/export_contract.ex:164
 #: test/support/hub_ui.ex:1
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
@@ -633,6 +635,7 @@ msgstr ""
 
 #: test/support/export_contract.ex:103
 #: test/support/export_contract.ex:145
+#: test/support/export_contract.ex:164
 msgid "Export contract"
 msgstr ""
 
@@ -864,6 +867,7 @@ msgstr ""
 #: test/support/experience_ui.ex:61
 #: test/support/export_contract.ex:103
 #: test/support/export_contract.ex:145
+#: test/support/export_contract.ex:164
 #: test/support/hub_ui.ex:1
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
@@ -1450,6 +1454,7 @@ msgstr ""
 #: test/support/diagram_flow.ex:114
 #: test/support/document_visits_ui.ex:1
 #: test/support/export_contract.ex:103
+#: test/support/export_contract.ex:164
 #: test/support/grouped_visits_ui.ex:1
 #: test/support/headed_visits_ui.ex:1
 #: test/support/hub_ui.ex:1
@@ -1662,6 +1667,10 @@ msgstr ""
 
 #: test/support/manifest_task.ex:1
 msgid "Urgent"
+msgstr ""
+
+#: test/support/export_contract.ex:164
+msgid "Value"
 msgstr ""
 
 #: test/support/hub_ui.ex:1

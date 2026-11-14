@@ -474,8 +474,9 @@ create/edit), and a `statusBanner` bound to `/ui/feedback` — declared in
 topic. A `diagram` is a `liveDiagram` (catalog 1.4) that loads mermaid
 only when it appears; see the Live Diagrams topic. Advanced-feature
 subtrees (sections,
-reports, export, editable, nested forms, bulk actions, wizard steps,
-boards) stay basic-composed, and query states carry plain boolean
+reports, editable, nested forms, bulk actions, wizard steps,
+boards) stay basic-composed (a table's `export` keeps its `dataGrid`, its
+basic export controls after the grid), and query states carry plain boolean
 pagination props alongside the pagination sentinels. The default `:basic`
 catalog leaves the output unchanged. The Lit renderer registration ships
 separately in `priv/js/ash_admin_catalog.js`

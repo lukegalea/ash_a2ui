@@ -97,6 +97,13 @@ component :report, :usage do
 end
 ```
 
+Under the admin catalog (`config :ash_a2ui, :catalog, :admin_v1`) a table
+with an `export` block stays a `dataGrid` (or a `calendarView`). Its export
+controls are the basic ones, byte-equal: the `export_controls` Row (with a
+`_<table>` suffix on a multi-table surface) after the grid, holding the
+column CheckBoxes and the Export CSV Button. A host that swaps `Button` or
+`CheckBox` in its catalog draws them with its own elements.
+
 ### The frozen `downloadFile` wire contract
 
 A successful `"export"` action emits one `callRendererFunction` message,

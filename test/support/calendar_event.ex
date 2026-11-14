@@ -150,7 +150,7 @@ end
 
 defmodule AshA2ui.Test.Calendar.DayUI do
   @moduledoc """
-  A day calendar over `starts_at` to `ends_at`, with a CSV export (so the admin catalog keeps its basic composition).
+  A day calendar over `starts_at` to `ends_at`, with a CSV export (under the admin catalog, its controls follow the calendarView).
   """
 
   use AshA2ui.Standalone
