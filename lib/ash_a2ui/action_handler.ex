@@ -374,6 +374,69 @@ defmodule AshA2ui.ActionHandler do
   defp transport_key?(_key), do: false
 
   @doc """
+  The `callAgentFunction` message a renderer would send to run the
+  `ashAction` `name` with `context` on the surface of
+  `resource_or_ui_module`, for the server to put through `handle/3` itself.
+
+  Use it when the server runs an action nobody clicked: a LiveView replaying
+  the table query its URL names, a page running its reports on arrival, an
+  agent transport turning a client request into the call the renderer would
+  have made. The message goes through every check a renderer's call does
+  (allowlist, authorization, `:as_of`), and `handle/3` answers it the same
+  way, ending with an `agentFunctionResponse` (see
+  `agent_function_response?/1`).
+
+  The `surfaceId` is the one the surface is built with (its declared
+  `surface_id`, or the default), so a LiveView with extra `:surfaces`
+  routes the message to the right UI. The `functionCallId` is
+  `"server-<name>-<n>"`, unique within the node. The call has no
+  `sourceComponentId`, since no component sent it.
+
+      iex> call = AshA2ui.ActionHandler.ash_action_call(AshA2ui.Test.MinimalUI, "query", %{"query" => %{}})
+      iex> call["callAgentFunction"]["surfaceId"]
+      "minimal_standalone"
+      iex> call["callAgentFunction"]["callFunction"]["args"]
+      %{"name" => "query", "context" => %{"query" => %{}}}
+  """
+  @spec ash_action_call(module | Spark.Dsl.t(), String.t(), map) :: map
+  def ash_action_call(resource_or_ui_module, name, context)
+      when is_binary(name) and name != "" and is_map(context) do
+    %{
+      "version" => Encoder.version(),
+      "callAgentFunction" => %{
+        "surfaceId" => ResolvedView.surface_id(resource_or_ui_module),
+        "functionCallId" => "server-#{name}-#{System.unique_integer([:positive])}",
+        "callFunction" => %{
+          "@call" => @ash_action,
+          "catalogId" => Encoder.ash_catalog_id(),
+          "args" => %{"name" => name, "context" => context}
+        }
+      }
+    }
+  end
+
+  @doc """
+  Whether `message` is an `agentFunctionResponse`, the follow-up that
+  settles a call.
+
+  `handle/3` ends a call's follow-ups with one. A renderer waits on it. A
+  server that made its own call (`ash_action_call/3`) and pushes the
+  follow-ups to a renderer that never made that call drops it.
+
+      iex> AshA2ui.ActionHandler.agent_function_response?(
+      ...>   AshA2ui.Encoder.agent_function_response("call-1", {:ok, %{}})
+      ...> )
+      true
+      iex> AshA2ui.ActionHandler.agent_function_response?(
+      ...>   AshA2ui.Encoder.update_data_model("s", "/records", [])
+      ...> )
+      false
+  """
+  @spec agent_function_response?(term) :: boolean
+  def agent_function_response?(%{"agentFunctionResponse" => _response}), do: true
+  def agent_function_response?(_message), do: false
+
+  @doc """
   Handles one A2UI 1.0 renderer-to-agent message for the surface declared on
   `resource_or_ui_module` (an `Ash.Resource` using the `AshA2ui` extension,
   or an `AshA2ui.Standalone` UI module).

@@ -137,6 +137,16 @@ changes is the wire format and the way a host wires the renderer.
   "From date" end`) labels the param input, the row cell caption, the export
   column and the CSV header. Contributed by @suedoh in #80, ported onto the
   A2UI 1.0 encoder.
+- **A server can run an action nobody clicked.**
+  `AshA2ui.ActionHandler.ash_action_call/3` builds the `callAgentFunction`
+  a renderer would send for an `ashAction` (`name`, `context`) on a
+  surface's own `surfaceId`, under a `functionCallId` of the form
+  `"server-<name>-<n>"`. Hand it to `AshA2ui.ActionHandler.handle/3` like
+  any renderer message: a LiveView replaying the table query its URL names,
+  a page running its reports on arrival, an agent transport running the
+  call a client asked for. `AshA2ui.ActionHandler.agent_function_response?/1`
+  picks out the `agentFunctionResponse` that settles it, to drop when no
+  renderer call is waiting on it.
 
 ### Performance
 
