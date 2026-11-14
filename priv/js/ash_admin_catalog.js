@@ -206,6 +206,37 @@ function requestOpenSurface(deps, args, {surfaceId, source, href} = {}) {
   );
 }
 
+/**
+ * The stock reference-link activation, for a host element that draws a
+ * `_links` entry itself (a catalog swap drawing its own link element): call
+ * it from the link's click handler. A plain primary click on a link to a
+ * record (one with a `surface`) is handed to the host as an openSurface
+ * request (`deps.openSurface` when given, else OPEN_SURFACE_EVENT raised from
+ * `source`, which the shipped hook turns into the `"a2ui:open_surface"`
+ * LiveView event), and the browser's own navigation and the click's bubbling
+ * are stopped. A modified or middle click, and a plain link (`link_url`, no
+ * `surface`), keep the browser's own behaviour, so the server-built `href`
+ * still opens in a new tab. Returns whether the link was opened in place.
+ *
+ * @param {MouseEvent} event the click
+ * @param {object} link one entry of `linkEntries(row._links[field])`
+ * @param {{source?: Element, surfaceId?: string, deps?: object}} [options]
+ *   `source`: the element raising the event (inside the surface);
+ *   `surfaceId`: the surface it belongs to; `deps`: the catalog's deps, for
+ *   their `openSurface` callback
+ * @returns {boolean}
+ */
+export function activateLink(event, link, {source, surfaceId, deps} = {}) {
+  if (!link || typeof link.surface !== "string" || link.surface === "") return false;
+  if (event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return false;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  requestOpenSurface(deps, openSurfaceArgs(link), {surfaceId, source, href: link.href});
+  return true;
+}
+
 /** The openSurface args of a link object. */
 function openSurfaceArgs(link) {
   const args = {surface: String(link.surface)};
@@ -997,18 +1028,12 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         : html`<a class="am-link" href=${link.href}>${label}</a>`;
     }
 
-    const activate = (event) => {
-      if (event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      requestOpenSurface(deps, openSurfaceArgs(link), {
+    const activate = (event) =>
+      activateLink(event, link, {
         surfaceId: element.context?.dataContext?.surface?.id,
         source: element,
-        href: link.href,
+        deps,
       });
-    };
 
     if (typeof link.href === "string" && link.href !== "") {
       return html`<a class="am-link" href=${link.href} data-surface=${link.surface} @click=${activate}
