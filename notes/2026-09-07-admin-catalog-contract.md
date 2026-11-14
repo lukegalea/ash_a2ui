@@ -33,8 +33,13 @@ setting is ignored.
 
 The admin encoder upgrades the **core table + form + pagination + status**
 subtree to semantic components. Surfaces using advanced features — `sections`,
-`reports`, `export`, `editable`, `nested_form` — emit those parts with
+`reports`, `editable`, `nested_form` — emit those parts with
 **basic composition** (byte-equal to `:basic` output for those subtrees).
+A table's `export` block does not take the table out of the core subtree
+(#114): the table stays a `DataGrid` (or `calendarView`), and the export
+controls the basic surface draws — the `export<sfx>_controls` Row, the
+Export CSV Button dispatching `"export"`, and the column CheckBoxes under
+`column_select` — follow it in the page, byte-equal to the basic ones.
 Only the unsupported subtree stays basic-composed; the rest of the surface
 stays admin. Context pickers and query controls (search/filters/apply)
 always remain basic components inside `EntityPage`.

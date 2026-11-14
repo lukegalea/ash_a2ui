@@ -952,9 +952,10 @@ defmodule AshA2ui.Encoder do
   # formSection + actionBar), status → statusBanner, root → entityPage —
   # and keeps everything else basic: context pickers and query controls are
   # basic by contract, the create affordance stays a basic button, the
-  # action-result panel is untouched, and advanced-feature subtrees
-  # (dynamic sections, export, inline editing, nested forms, reports,
-  # details) emit their basic composition byte-equal (see
+  # action-result panel is untouched, a table's export controls sit after
+  # its dataGrid, and advanced-feature subtrees (dynamic sections, inline
+  # editing, nested forms, reports, details) emit their basic composition
+  # byte-equal (see
   # notes/2026-09-07-admin-catalog-contract.md). Action envelopes are the
   # exact A2UI-101 shapes — the handler learns nothing new.
   defp admin_components(view, options) do
@@ -1098,14 +1099,16 @@ defmodule AshA2ui.Encoder do
   defp card_children(_table_or_form), do: []
 
   # A table whose whole subtree upgrades to the semantic components: no
-  # dynamic sections, no export controls, no inline cell editing — the
+  # dynamic sections, no inline cell editing, no bulk selection — the
   # contract's advanced-feature list. Everything else (and the form's
   # nested_form case below) falls back to its byte-equal basic subtree.
   # Expanded section tables carry `section` (their template's `sections`
-  # key is gone), so both mark a dynamic table set.
+  # key is gone), so both mark a dynamic table set. An `export` block keeps
+  # the dataGrid: its controls (the basic export Row, byte-equal) sit after
+  # the grid, as they sit after the list on a basic surface.
   defp admin_core_table?(table) do
     is_nil(Map.get(table, :sections)) and is_nil(Map.get(table, :section)) and
-      is_nil(table.export) and is_nil(table.editable) and not AshA2ui.Bulk.enabled?(table) and
+      is_nil(table.editable) and not AshA2ui.Bulk.enabled?(table) and
       not AshA2ui.Timeline.timeline?(table) and not AshA2ui.Matrix.matrix?(table)
   end
 
@@ -1122,9 +1125,11 @@ defmodule AshA2ui.Encoder do
       {query_control_components(view, table, sfx) ++
          create_button_components(view, table, sfx) ++
          admin_calendar_components(view, table, sfx) ++
-         admin_data_grid_components(view, table, sfx),
+         admin_data_grid_components(view, table, sfx) ++
+         table_export_components(view, table, sfx),
        ((query_controls?(table) && ["query#{sfx}_controls"]) || []) ++
-         create_button_ids(view, table, sfx) ++ [admin_collection_id(table, sfx)]}
+         create_button_ids(view, table, sfx) ++
+         [admin_collection_id(table, sfx)] ++ child_if(table.export, "export#{sfx}_controls")}
     else
       {table_components(view, table, sfx) ++
          query_components(view, table, sfx) ++

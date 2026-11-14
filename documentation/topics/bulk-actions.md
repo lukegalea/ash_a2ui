@@ -80,7 +80,7 @@ cannot bind an absolute per-row path, and dynamic List children have no
 keys, so the selection travels with the row it belongs to.
 
 Under `catalog: :admin_v1` a table with bulk actions stays basic-composed,
-like tables with sections, exports or inline editing (see the admin catalog
+like tables with sections or inline editing (see the admin catalog
 contract note). A selectable `DataGrid` is not part of this release.
 
 ## Data model

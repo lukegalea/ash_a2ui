@@ -160,3 +160,29 @@ defmodule AshA2ui.Test.ExportContractMarginsUI do
     end
   end
 end
+
+defmodule AshA2ui.Test.ExportContractsSelectUI do
+  @moduledoc """
+  Fixture surface for a column-selectable table export: the export block of
+  `AshA2ui.Test.ExportContractsUI` with `column_select`, so the surface
+  carries a CheckBox per export column, bound to `/export/table/columns`.
+  """
+
+  use AshA2ui.Standalone
+
+  a2ui do
+    for_resource AshA2ui.Test.ExportContract
+    surface_id "export_contracts_select"
+
+    component :table do
+      fields [:name, :status]
+      read_action :active
+
+      export do
+        filename "contracts.csv"
+        columns [:name, :value, :status]
+        column_select true
+      end
+    end
+  end
+end

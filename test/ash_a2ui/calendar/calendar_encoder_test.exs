@@ -341,7 +341,7 @@ defmodule AshA2ui.Calendar.CalendarEncoderTest do
   end
 
   @tag ac: "A2UI-107/AC-4"
-  test "an exported calendar keeps the basic agenda under the admin catalog" do
+  test "an exported calendar stays a calendarView under the admin catalog (#114)" do
     Application.put_env(:ash_a2ui, :catalog, :admin_v1)
 
     assert [message] =
@@ -353,11 +353,16 @@ defmodule AshA2ui.Calendar.CalendarEncoderTest do
     by_id = components_by_id(message["createSurface"]["components"])
 
     assert by_id["root"]["component"] == "entityPage"
-    assert "calendar" in by_id["root"]["children"]
-    assert by_id["calendar"]["component"] == "Column"
-    assert by_id["calendar"]["children"] == ["calendar_nav"]
-    assert by_id["calendar_prev_button"]["component"] == "Button"
-    refute Enum.any?(Map.values(by_id), &(&1["component"] == "calendarView"))
+    assert by_id["calendar"]["component"] == "calendarView"
+    assert by_id["calendar"]["children"] == ["data_grid"]
+    refute Map.has_key?(by_id, "calendar_nav")
+
+    # the export controls follow the calendar, as they follow the list on
+    # a basic surface
+    assert Enum.take(by_id["root"]["children"], -3) ==
+             ["calendar", "export_controls", "action_result_panel"]
+
+    assert by_id["export_button"]["action"]["functionCall"]["args"]["name"] == "export"
   end
 
   test "without a carried anchor the window holds today" do

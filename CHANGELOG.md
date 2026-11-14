@@ -165,6 +165,19 @@ dependency. Replace the 2.0.0 id wherever the host writes it out
 
 ### Features
 
+- **An admin table with an `export` block stays a `dataGrid`** (#114). On
+  an admin surface, declaring `export` used to drop the table to the basic
+  composition: a `List`, a `## Table` heading and the export Row. The table
+  now keeps its `dataGrid` (or `calendarView`), and the export controls the
+  basic surface draws follow it in the page, byte-equal: the
+  `export<sfx>_controls` Row, the translated Export CSV Button dispatching
+  the same `"export"` action (query state, active contexts and the
+  `/export/<name>/columns` selection) and, under `column_select`, a
+  CheckBox per column. The admin catalog's contract is unchanged (Row,
+  Button and Text are basic kinds; CheckBox is admin-owned since 3.0.0). A
+  host that swaps `Button` or `CheckBox` in its catalog draws the controls
+  with its own elements. Sections, inline editing, bulk actions, timelines
+  and matrices still keep a table basic-composed.
 - **`activateLink` is exported from `ash_admin_catalog.js`.** A host that
   swaps a catalog element and draws a `_links` entry with its own link
   element can now open a record in place as the stock link does: a plain
