@@ -140,6 +140,14 @@ call is for.
   Cells go through the standard row serialization, so the CSV matches what
   the table renders. On dynamic table sets each expanded section exports
   its own rows, with the section label suffixed into the filename.
+- **Columns the table does not show**: a table export's `columns` may name
+  any public attribute, calculation or aggregate of the table's resource,
+  not only the table's `fields`. Such a column is loaded for the export
+  read only, so the table's own query and the rows the surface sends are
+  unchanged; the read keeps the search, filters, preset, sort, actor,
+  tenant and authorization. Its header is the humanized name, or the
+  `label` of a `field` override. A cell the actor's field policies forbid
+  is exported empty.
 - **Reports**: the export re-runs the generic action with the carried
   params and exports the serialized rows.
 - **Column selection**: with `column_select true`, one checkbox per

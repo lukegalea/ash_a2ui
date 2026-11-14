@@ -72,7 +72,7 @@ msgid "%{field} to"
 msgstr ""
 
 #: lib/ash_a2ui/action_handler.ex:2426
-#: lib/ash_a2ui/action_handler.ex:3582
+#: lib/ash_a2ui/action_handler.ex:3586
 msgid "%{field}: %{message}"
 msgstr ""
 
@@ -81,7 +81,7 @@ msgid "%{first}, %{rest}"
 msgstr ""
 
 #: lib/ash_a2ui/action_handler.ex:2431
-#: lib/ash_a2ui/action_handler.ex:3762
+#: lib/ash_a2ui/action_handler.ex:3766
 msgid "%{first}; %{rest}"
 msgstr ""
 
@@ -201,7 +201,7 @@ msgstr ""
 msgid "Export CSV"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2880
+#: lib/ash_a2ui/action_handler.ex:2884
 msgid "Exported %{filename} (%{count} rows)."
 msgid_plural "Exported %{filename} (%{count} rows)."
 msgstr[0] ""
@@ -328,8 +328,8 @@ msgstr ""
 
 #: lib/ash_a2ui/action_handler.ex:562
 #: lib/ash_a2ui/action_handler.ex:598
-#: lib/ash_a2ui/action_handler.ex:3685
-#: lib/ash_a2ui/action_handler.ex:3709
+#: lib/ash_a2ui/action_handler.ex:3689
+#: lib/ash_a2ui/action_handler.ex:3713
 msgid "The action failed."
 msgstr ""
 
@@ -373,7 +373,7 @@ msgstr ""
 msgid "Upcoming"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2988
+#: lib/ash_a2ui/action_handler.ex:2992
 msgid "Updated %{field}."
 msgstr ""
 
@@ -381,7 +381,7 @@ msgstr ""
 msgid "Updated successfully."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3688
+#: lib/ash_a2ui/action_handler.ex:3692
 msgid "Validation failed. Please review the field errors."
 msgstr ""
 
@@ -409,6 +409,6 @@ msgstr ""
 msgid "Working…"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3566
+#: lib/ash_a2ui/action_handler.ex:3570
 msgid "You are not authorized to perform this action."
 msgstr ""

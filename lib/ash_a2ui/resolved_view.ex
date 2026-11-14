@@ -557,6 +557,7 @@ defmodule AshA2ui.ResolvedView do
   end
 
   defp json_safe(%Ash.NotLoaded{}), do: nil
+  defp json_safe(%Ash.ForbiddenField{}), do: nil
   defp json_safe(%Decimal{} = decimal), do: Decimal.to_string(decimal)
   defp json_safe(%Date{} = date), do: Date.to_iso8601(date)
   defp json_safe(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
@@ -776,7 +777,7 @@ defmodule AshA2ui.ResolvedView do
         select_context: component.select_context,
         sections: resolve_sections(component.sections, resource),
         editable: resolve_editable(resource, component.editable),
-        export: resolve_export(component, component.fields || public_attribute_names(resource)),
+        export: resolve_table_export(component, resource, fields),
         calendar: AshA2ui.Calendar.resolve(component, resource),
         timeline: AshA2ui.Timeline.resolve(component, resource),
         matrix: AshA2ui.Matrix.resolve(component)
@@ -799,6 +800,23 @@ defmodule AshA2ui.ResolvedView do
       column_select: export.column_select,
       limit: export.limit
     }
+  end
+
+  # A table export also carries `loads`: the Ash.Query.load statement for its
+  # columns the table does not show (calculations and aggregates of the
+  # table's resource, a hidden field's `source` path). Only the export's
+  # read adds them; the table's own query and rows are unchanged.
+  defp resolve_table_export(component, resource, fields) do
+    shown = component.fields || public_attribute_names(resource)
+
+    case resolve_export(component, shown) do
+      nil ->
+        nil
+
+      export ->
+        extra = Enum.reject(export.columns, &(&1 in shown))
+        Map.put(export, :loads, field_loads(resource, extra, fields))
+    end
   end
 
   defp public_attribute_names(resource) do

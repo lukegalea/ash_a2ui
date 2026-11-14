@@ -88,6 +88,7 @@ defmodule AshA2ui.Gettext.Metadata do
 
       AshA2ui.Encoder.encode_surface(view, no_records(view), [])
       Enum.each(view.tables, &collect_table(&1, view.l10n))
+      Enum.each(view.tables, &collect_export(&1, view))
       Enum.each(view.reports, &collect_report(&1, view.l10n))
       Enum.each(view.details, &collect_detail(&1, view))
     end
@@ -129,6 +130,18 @@ defmodule AshA2ui.Gettext.Metadata do
       text -> Label.translate(l10n, text)
     end)
   end
+
+  # A table export's CSV headers for the columns the table does not show
+  # (the shown ones are the table's own labels): made only when the export
+  # runs. A column with a `field` override was labelled at resolve time.
+  defp collect_export(%{export: %{columns: columns}, component: component}, view) do
+    for column <- columns,
+        column not in component.fields,
+        not Map.has_key?(view.fields, column),
+        do: Label.resolve(view.l10n, nil, column)
+  end
+
+  defp collect_export(_table, _view), do: []
 
   # The card's header and caption, and a footer link (admin catalog only).
   defp card_texts(component) do
