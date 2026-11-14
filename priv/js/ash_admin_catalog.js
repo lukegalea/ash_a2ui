@@ -1573,6 +1573,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
       willUpdate(changedProperties) {
         super.willUpdate(changedProperties);
         applyWeight(this, this.controller?.props);
+        this.watchSort(this.controller?.props);
       }
 
       updated(changedProperties) {
@@ -1594,9 +1595,44 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
       disconnectedCallback() {
         super.disconnectedCallback();
         dropActionBusySubscriptions(this);
+        this.unwatchSort();
         if (this._confirmEl && this._confirmEl.parentNode) {
           this._confirmEl.parentNode.removeChild(this._confirmEl);
         }
+      }
+
+      /**
+       * The header marks its sort from the data model at `sort.path`, a path
+       * in a static prop rather than a bound one, so the controller does not
+       * subscribe to it. The data model notifies only the subscribers of a
+       * path that changed: when the server's sort reply leaves the bound rows
+       * as they were (one row, or rows already in that order), nothing else
+       * renders the grid again and the old marks stay. The grid subscribes
+       * to the sort path itself.
+       */
+      watchSort(props) {
+        const path = typeof props?.sort?.path === "string" ? props.sort.path : null;
+        const dataModel = this.surface?.dataModel;
+        if (!path || !dataModel || typeof dataModel.subscribe !== "function") {
+          this.unwatchSort();
+          return;
+        }
+        if (this._amSort?.path === path && this._amSort.dataModel === dataModel) return;
+        this.unwatchSort();
+        this._amSort = {
+          path,
+          dataModel,
+          subscription: dataModel.subscribe(path, () => this.requestUpdate()),
+        };
+      }
+
+      unwatchSort() {
+        try {
+          this._amSort?.subscription?.unsubscribe();
+        } catch {
+          // The data model may already be gone (surface torn down).
+        }
+        this._amSort = null;
       }
 
       onActionSettled() {
