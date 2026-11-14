@@ -2828,11 +2828,15 @@ defmodule AshA2ui.ActionHandler do
         {:ok, []}
 
       {:ok, scope} ->
-        case read_export_table(table, scope, env) do
+        # Columns the table does not show are loaded for this read only.
+        export_table = %{table | loads: Enum.uniq(table.loads ++ table.export.loads)}
+        fields = Enum.uniq(table_fields(table) ++ table.export.columns)
+
+        case read_export_table(export_table, scope, env) do
           # Raw values, not the table's display rows: a CSV export carries
           # stored enum values (as report exports do), not their labels.
           {:ok, records} ->
-            {:ok, Enum.map(records, &record_values(view, &1, table_fields(table)))}
+            {:ok, Enum.map(records, &record_values(view, &1, fields))}
 
           {:error, error} ->
             {:error, error_messages(view, error)}
@@ -3903,6 +3907,9 @@ defmodule AshA2ui.ActionHandler do
   # A calculation/aggregate that slipped past `loads` must not leak an
   # inspect()-ed struct onto the wire.
   defp json_value(%Ash.NotLoaded{}), do: nil
+  # A field the actor's field policies forbid serializes as empty, never as
+  # the inspected placeholder struct.
+  defp json_value(%Ash.ForbiddenField{}), do: nil
   defp json_value(%Ash.CiString{} = value), do: to_string(value)
   defp json_value(%Decimal{} = value), do: Decimal.to_string(value)
   defp json_value(%Date{} = value), do: Date.to_iso8601(value)

@@ -1692,6 +1692,12 @@ defmodule AshA2ui do
         filename "misspellings.csv"
         column_select true
       end
+      """,
+      """
+      export do
+        filename "contracts.csv"
+        columns [:name, :value, :status, :currency]
+      end
       """
     ],
     target: AshA2ui.Export,
@@ -1703,8 +1709,13 @@ defmodule AshA2ui do
       columns: [
         type: {:list, :atom},
         doc: """
-        The exportable columns (header order). Each must be one of the
-        component's fields. Defaults to all of the component's fields.
+        The exportable columns (header order). Defaults to all of the
+        component's fields. On a `:report`, each must be one of the report's
+        fields. On a `:table`, each is one of the table's fields or any
+        public attribute, calculation or aggregate of the table's resource:
+        a column the table does not show is loaded for the export read only
+        and headed with its humanized name (or its `field` override's
+        `label`).
         """
       ],
       column_select: [

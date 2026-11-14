@@ -19,6 +19,7 @@ msgid "Active"
 msgstr ""
 
 #: test/support/diagram_flow.ex:114
+#: test/support/export_contract.ex:103
 #: test/support/hub_ui.ex:1
 msgctxt "one_of:status"
 msgid "Active"
@@ -399,6 +400,10 @@ msgstr ""
 msgid "Contract status"
 msgstr ""
 
+#: test/support/export_contract.ex:103
+msgid "Contract value"
+msgstr ""
+
 #: test/support/hub_ui.ex:1
 msgid "Contracts you add show here."
 msgstr ""
@@ -428,6 +433,10 @@ msgstr ""
 
 #: test/support/board_task_ui.ex:132
 msgid "Critical"
+msgstr ""
+
+#: test/support/export_contract.ex:103
+msgid "Currency"
 msgstr ""
 
 #: test/support/referral.ex:1
@@ -525,6 +534,7 @@ msgid "Draft"
 msgstr ""
 
 #: test/support/article.ex:1
+#: test/support/export_contract.ex:103
 #: test/support/hub_ui.ex:1
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
@@ -619,6 +629,11 @@ msgstr ""
 
 #: test/support/adoption.ex:295
 msgid "Explode"
+msgstr ""
+
+#: test/support/export_contract.ex:103
+#: test/support/export_contract.ex:145
+msgid "Export contract"
 msgstr ""
 
 #: test/support/table_displays.ex:101
@@ -754,6 +769,7 @@ msgstr ""
 msgid "Letters"
 msgstr ""
 
+#: test/support/export_contract.ex:103
 #: test/support/hub_ui.ex:1
 msgid "Line count"
 msgstr ""
@@ -794,6 +810,11 @@ msgstr ""
 #: test/support/manifest_task.ex:1
 msgctxt "one_of:priority"
 msgid "Low"
+msgstr ""
+
+#: test/support/export_contract.ex:103
+#: test/support/export_contract.ex:145
+msgid "Margin"
 msgstr ""
 
 #: test/support/manifest_task.ex:1
@@ -841,6 +862,8 @@ msgstr ""
 #: test/support/experience_ui.ex:101
 #: test/support/experience_ui.ex:136
 #: test/support/experience_ui.ex:61
+#: test/support/export_contract.ex:103
+#: test/support/export_contract.ex:145
 #: test/support/hub_ui.ex:1
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
@@ -1086,6 +1109,10 @@ msgstr ""
 #: test/support/kitchen_sink.ex:1
 #: test/support/kitchen_sink_v1_ui.ex:1
 msgid "Price"
+msgstr ""
+
+#: test/support/export_contract.ex:103
+msgid "Priced name"
 msgstr ""
 
 #: test/support/prompt_scope.ex:132
@@ -1422,6 +1449,7 @@ msgstr ""
 #: test/support/column_task.ex:1
 #: test/support/diagram_flow.ex:114
 #: test/support/document_visits_ui.ex:1
+#: test/support/export_contract.ex:103
 #: test/support/grouped_visits_ui.ex:1
 #: test/support/headed_visits_ui.ex:1
 #: test/support/hub_ui.ex:1

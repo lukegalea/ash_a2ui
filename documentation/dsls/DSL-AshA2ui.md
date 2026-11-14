@@ -924,6 +924,14 @@ end
 
 ```
 
+```
+export do
+  filename "contracts.csv"
+  columns [:name, :value, :status, :currency]
+end
+
+```
+
 
 
 
@@ -932,7 +940,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`filename`](#a2ui-component-export-filename){: #a2ui-component-export-filename } | `String.t` |  | The downloaded file's name. Defaults to "<component name>.csv". |
-| [`columns`](#a2ui-component-export-columns){: #a2ui-component-export-columns } | `list(atom)` |  | The exportable columns (header order). Each must be one of the component's fields. Defaults to all of the component's fields. |
+| [`columns`](#a2ui-component-export-columns){: #a2ui-component-export-columns } | `list(atom)` |  | The exportable columns (header order). Defaults to all of the component's fields. On a `:report`, each must be one of the report's fields. On a `:table`, each is one of the table's fields or any public attribute, calculation or aggregate of the table's resource: a column the table does not show is loaded for the export read only and headed with its humanized name (or its `field` override's `label`). |
 | [`column_select`](#a2ui-component-export-column_select){: #a2ui-component-export-column_select } | `boolean` | `false` | Render one checkbox per exportable column (bound to the reserved `/export/<name>/columns/<field>` paths); the export includes only the checked columns. |
 | [`limit`](#a2ui-component-export-limit){: #a2ui-component-export-limit } | `pos_integer` | `10000` | Row cap of a table export (the export read's page size — a table export ignores the on-screen pagination but keeps search, filters and preset). Ignored on reports. |
 

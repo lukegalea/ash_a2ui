@@ -172,6 +172,16 @@ dependency. Replace the 2.0.0 id wherever the host writes it out
   or the `"a2ui:open_surface"` LiveView event through the hook), and a
   modified or middle click, or a plain `link_url` link, is left to the
   browser. The stock link uses it too, so the rule lives in one place.
+- **A table export can carry columns the table does not show.** An
+  `export` block's `columns` on a `:table` may name any public attribute,
+  calculation or aggregate of the table's resource, not only the table's
+  `fields` (#109). The export read loads them and keeps the table's search,
+  filters, preset, sort, actor, tenant and authorization; the table's own
+  query and the rows the surface sends are unchanged. The header is the
+  humanized name, translated in the metadata domain (and extracted by
+  `mix ash_a2ui.gettext.extract_metadata`), or a `field` override's
+  `label`. An unknown name or a relationship still fails at compile time.
+  A report's `columns` must still be among its `fields`.
 - A report input or column can take a declared label: a `field` override
   naming a `:report` component's param or row key (`field :from do label
   "From date" end`) labels the param input, the row cell caption, the export
@@ -202,6 +212,10 @@ dependency. Replace the 2.0.0 id wherever the host writes it out
 
 ### Bug Fixes:
 
+- **A field the actor's field policies forbid serializes as empty.** A
+  rendered value, a refreshed row or a CSV cell holding an `Ash.ForbiddenField`
+  came out as its inspected struct (`#Ash.ForbiddenField<...>`); it is now
+  `null` on the wire and an empty CSV cell.
 - **A dataGrid's sort marks follow the sort the server writes.** The stock
   admin dataGrid reads its header marks from the data model at `sort.path`,
   a path in a static prop that its controller does not subscribe to. The

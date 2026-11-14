@@ -5603,6 +5603,7 @@ defmodule AshA2ui.Encoder do
   # A calculation/aggregate that slipped past `loads` must not leak an
   # inspect()-ed struct onto the wire.
   defp json_safe(%Ash.NotLoaded{}), do: nil
+  defp json_safe(%Ash.ForbiddenField{}), do: nil
   defp json_safe(%Ash.CiString{} = ci), do: to_string(ci)
   defp json_safe(%Decimal{} = decimal), do: Decimal.to_string(decimal)
   defp json_safe(%Date{} = date), do: Date.to_iso8601(date)
