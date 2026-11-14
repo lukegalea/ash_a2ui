@@ -132,6 +132,13 @@ changes is the wire format and the way a host wires the renderer.
 
 ### Features
 
+- **`activateLink` is exported from `ash_admin_catalog.js`.** A host that
+  swaps a catalog element and draws a `_links` entry with its own link
+  element can now open a record in place as the stock link does: a plain
+  click becomes an openSurface request (the host's `openSurface` callback,
+  or the `"a2ui:open_surface"` LiveView event through the hook), and a
+  modified or middle click, or a plain `link_url` link, is left to the
+  browser. The stock link uses it too, so the rule lives in one place.
 - A report input or column can take a declared label: a `field` override
   naming a `:report` component's param or row key (`field :from do label
   "From date" end`) labels the param input, the row cell caption, the export
