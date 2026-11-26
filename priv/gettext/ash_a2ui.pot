@@ -11,11 +11,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Domain: ash_a2ui\n"
 
-#: lib/ash_a2ui/action_handler.ex:3052
+#: lib/ash_a2ui/action_handler.ex:3068
 msgid "%{action} completed."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3057
+#: lib/ash_a2ui/action_handler.ex:3073
 msgid "%{action} is not available for this record."
 msgstr ""
 
@@ -29,8 +29,8 @@ msgid_plural "%{action}: %{ok} of %{selected} selected records done"
 msgstr[0] ""
 msgstr[1] ""
 
-#: lib/ash_a2ui/action_handler.ex:2864
-#: lib/ash_a2ui/action_handler.ex:3049
+#: lib/ash_a2ui/action_handler.ex:2880
+#: lib/ash_a2ui/action_handler.ex:3065
 msgid "%{action}: done."
 msgstr ""
 
@@ -76,8 +76,8 @@ msgstr ""
 msgid "%{field} to"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3480
-#: lib/ash_a2ui/action_handler.ex:4640
+#: lib/ash_a2ui/action_handler.ex:3496
+#: lib/ash_a2ui/action_handler.ex:4656
 msgid "%{field}: %{message}"
 msgstr ""
 
@@ -85,8 +85,8 @@ msgstr ""
 msgid "%{first}, %{rest}"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3485
-#: lib/ash_a2ui/action_handler.ex:4820
+#: lib/ash_a2ui/action_handler.ex:3501
+#: lib/ash_a2ui/action_handler.ex:4836
 msgid "%{first}; %{rest}"
 msgstr ""
 
@@ -182,7 +182,7 @@ msgstr ""
 msgid "Create %{resource}"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:1897
+#: lib/ash_a2ui/action_handler.ex:1899
 msgid "Created successfully."
 msgstr ""
 
@@ -211,7 +211,7 @@ msgstr ""
 msgid "Edit %{resource}"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2373
+#: lib/ash_a2ui/action_handler.ex:2375
 msgid "Editing is not available for this record."
 msgstr ""
 
@@ -223,7 +223,7 @@ msgstr ""
 msgid "Export CSV"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3938
+#: lib/ash_a2ui/action_handler.ex:3954
 msgid "Exported %{filename} (%{count} rows)."
 msgid_plural "Exported %{filename} (%{count} rows)."
 msgstr[0] ""
@@ -289,7 +289,7 @@ msgstr ""
 msgid "Not reviewed"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:2239
+#: lib/ash_a2ui/action_handler.ex:2241
 msgid "Nothing to save."
 msgstr ""
 
@@ -326,7 +326,7 @@ msgstr ""
 msgid "Remove"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3803
+#: lib/ash_a2ui/action_handler.ex:3819
 msgid "Report complete: %{count} row."
 msgid_plural "Report complete: %{count} rows."
 msgstr[0] ""
@@ -366,7 +366,7 @@ msgstr ""
 msgid "Select"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:3860
+#: lib/ash_a2ui/action_handler.ex:3876
 msgid "Select at least one column to export."
 msgstr ""
 
@@ -392,16 +392,16 @@ msgstr ""
 msgid "Showing %{first}–%{last}"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:647
-#: lib/ash_a2ui/action_handler.ex:683
-#: lib/ash_a2ui/action_handler.ex:4743
-#: lib/ash_a2ui/action_handler.ex:4767
+#: lib/ash_a2ui/action_handler.ex:649
+#: lib/ash_a2ui/action_handler.ex:685
+#: lib/ash_a2ui/action_handler.ex:4759
+#: lib/ash_a2ui/action_handler.ex:4783
 msgid "The action failed."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:1397
-#: lib/ash_a2ui/action_handler.ex:1679
-#: lib/ash_a2ui/action_handler.ex:1764
+#: lib/ash_a2ui/action_handler.ex:1399
+#: lib/ash_a2ui/action_handler.ex:1681
+#: lib/ash_a2ui/action_handler.ex:1766
 msgid "The selected option was not found."
 msgstr ""
 
@@ -421,7 +421,7 @@ msgstr ""
 msgid "This is taking longer than usual. Still working…"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:418
+#: lib/ash_a2ui/action_handler.ex:420
 msgid "This view shows an earlier moment, so nothing on it can be changed. Return to now to make changes."
 msgstr ""
 
@@ -447,15 +447,15 @@ msgstr ""
 msgid "Upcoming"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:4046
+#: lib/ash_a2ui/action_handler.ex:4062
 msgid "Updated %{field}."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:1906
+#: lib/ash_a2ui/action_handler.ex:1908
 msgid "Updated successfully."
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:4746
+#: lib/ash_a2ui/action_handler.ex:4762
 msgid "Validation failed. Please review the field errors."
 msgstr ""
 
@@ -483,7 +483,7 @@ msgstr ""
 msgid "Working…"
 msgstr ""
 
-#: lib/ash_a2ui/action_handler.ex:4624
+#: lib/ash_a2ui/action_handler.ex:4640
 msgid "You are not authorized to perform this action."
 msgstr ""
 

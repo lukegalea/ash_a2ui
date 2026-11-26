@@ -10,6 +10,14 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 Requires Elixir 1.20 or later.
 
+### Fixed: two cards of one record save under an optimistic lock
+
+- `save_changes` saves the cards of one record one after another, each from
+  the row the save before it left. Every card's record was read before the
+  first write, so an update action carrying `optimistic_lock` refused the
+  second card's save of the same record as stale, and the whole save rolled
+  back.
+
 ### Added: a save bar that counts the fields reviewed (admin catalog 3.17.0)
 
 Additive, under the same catalog id.
