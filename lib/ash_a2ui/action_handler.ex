@@ -181,7 +181,9 @@ defmodule AshA2ui.ActionHandler do
       then runs on it with the changed fields' values, cast to the
       attributes they edit (a field's `edit`). Every card's write runs in one
       transaction (on a data layer that has them): one refusal saves
-      nothing. `"then"` also runs the save bar `confirm`'s `then_action` on
+      nothing. Cards of one record save one after another, each from the
+      row the save before it left, so an update action with an optimistic
+      lock takes them all. `"then"` also runs the save bar `confirm`'s `then_action` on
       the bar's record (`recordId`, refused unless its `then_visible`
       holds), in the same transaction. A success clears `/ui/edits` and
       `/ui/edit_errors`, re-reads each saved card's record into
@@ -2480,14 +2482,28 @@ defmodule AshA2ui.ActionHandler do
       else: error
   end
 
+  # Cards of one record save one after another, each from the row the save
+  # before it left: every card's record was read before any write, so an
+  # update action with an optimistic lock would refuse the second card's
+  # save of that record as stale.
   defp write_saves(saves, ash_opts) do
-    Enum.reduce_while(saves, :ok, fn save, :ok ->
-      case update_record(save.record, save.detail.editable.update_action, save.params, ash_opts) do
-        {:ok, _record} -> {:cont, :ok}
+    saves
+    |> Enum.reduce_while({:ok, %{}}, fn save, {:ok, written} ->
+      record = Map.get(written, record_key(save.record), save.record)
+
+      case update_record(record, save.detail.editable.update_action, save.params, ash_opts) do
+        {:ok, updated} -> {:cont, {:ok, Map.put(written, record_key(updated), updated)}}
         {:error, error} -> {:halt, {:error, {save, error}}}
       end
     end)
+    |> case do
+      {:ok, _written} -> :ok
+      error -> error
+    end
   end
+
+  defp record_key(%resource{} = record),
+    do: {resource, Map.take(record, Ash.Resource.Info.primary_key(resource))}
 
   defp write_then(_view, nil, _env), do: :ok
 

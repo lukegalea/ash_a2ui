@@ -216,6 +216,7 @@ msgid "Board task"
 msgstr ""
 
 #: test/support/links.ex:135
+#: test/support/locked_note_edit_ui.ex:1
 #: test/support/ticket.ex:1
 msgid "Body"
 msgstr ""
@@ -451,6 +452,10 @@ msgstr ""
 
 #: test/support/referral.ex:1
 msgid "Contact email"
+msgstr ""
+
+#: test/support/locked_note_edit_ui.ex:1
+msgid "Content"
 msgstr ""
 
 #: test/support/hub_ui.ex:1
@@ -793,6 +798,10 @@ msgstr ""
 msgid "Go to the first field to check"
 msgstr ""
 
+#: test/support/locked_note_edit_ui.ex:1
+msgid "Heading"
+msgstr ""
+
 #: test/support/adoption.ex:243
 #: test/support/adoption.ex:394
 #: test/support/adoption_ui.ex:77
@@ -1091,6 +1100,7 @@ msgstr ""
 #: test/support/links.ex:230
 #: test/support/links.ex:267
 #: test/support/links.ex:333
+#: test/support/locked_note_edit_ui.ex:1
 #: test/support/manifest_task.ex:1
 #: test/support/secured_lease.ex:117
 #: test/support/statement_edit_ui.ex:1
@@ -1885,6 +1895,7 @@ msgstr ""
 #: test/support/links.ex:267
 #: test/support/links.ex:333
 #: test/support/live_filters_ui.ex:1
+#: test/support/locked_note_edit_ui.ex:1
 #: test/support/manifest_task.ex:1
 #: test/support/owner_overview_ui.ex:1
 #: test/support/owner_visits_ui.ex:1
