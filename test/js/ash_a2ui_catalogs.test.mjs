@@ -609,6 +609,13 @@ test("the Text element's skin selects the DOM the renderer draws", async () => {
     assert.ok(styled(heading, "font-weight: var(--a2ui-heading-font-weight"), `${tag} keeps its weight`);
   }
 
+  // lists keep their markers under a host's preflight (stood in for, as above)
+  const ordered = booked.appendChild(document.createElement("ol"));
+  assert.ok(styled(ordered, "list-style: var(--a2ui-text-ordered-list-style, decimal)"), "an ol keeps its numbers");
+  assert.ok(styled(ordered, "padding-inline-start"), "an ol keeps room for its numbers");
+  const unordered = booked.appendChild(document.createElement("ul"));
+  assert.ok(styled(unordered, "list-style: var(--a2ui-text-unordered-list-style, disc)"), "a ul keeps its bullets");
+
   // section chips: tone follows the heading's own words (level 2 and 3 only)
   assert.ok(booked.classList.contains("nb-section"));
   assert.ok(booked.classList.contains("nb-section-tone-cyan"), "### Booked hashes 'Booked'");
