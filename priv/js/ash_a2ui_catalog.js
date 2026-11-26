@@ -667,6 +667,19 @@ function defineAnatomyElements({lit, basicCatalog}) {
           font-weight: var(--a2ui-heading-font-weight, bold);
         }
 
+        /* Lists keep their markers, for the same reason: the preflight's
+         * ol, ul { list-style: none; padding: 0 } removes a numbered
+         * list's numbers. A list keeps its own start, so an item numbered
+         * 3 reads 3. */
+        .a2ui-text ol {
+          list-style: var(--a2ui-text-ordered-list-style, decimal);
+          padding-inline-start: var(--a2ui-text-list-indent, 1.5em);
+        }
+        .a2ui-text ul {
+          list-style: var(--a2ui-text-unordered-list-style, disc);
+          padding-inline-start: var(--a2ui-text-list-indent, 1.5em);
+        }
+
         /* The badge anatomy (digest §4): 2px black border, shared radius,
          * text-xs floor, saturated fill with BLACK ink. Prominence is the
          * fill + border — never size, never grey. */

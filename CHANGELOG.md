@@ -10,6 +10,16 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 Requires Elixir 1.20 or later.
 
+### Fixed: a Markdown list in a Text keeps its numbers and bullets
+
+The merged catalog's Text draws in the light DOM, so a host's Tailwind
+preflight (`ol, ul { list-style: none; padding: 0 }`) removed a numbered
+list's numbers, as it flattened headings before. `.a2ui-text ol` and
+`.a2ui-text ul` restore `decimal` and `disc` with an inline-start indent;
+`--a2ui-text-ordered-list-style`, `--a2ui-text-unordered-list-style` and
+`--a2ui-text-list-indent` override them. A host that relied on the reset
+now sees markers.
+
 ### Added: a save bar that counts the fields reviewed (admin catalog 3.17.0)
 
 Additive, under the same catalog id.
