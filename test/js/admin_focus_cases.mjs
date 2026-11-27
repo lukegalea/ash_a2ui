@@ -54,7 +54,7 @@ const buttonLabelled = (root, label) =>
 export function focusCases({mode, admin, mergedCatalog}) {
   const lightDom = mode === "light DOM";
 
-  function gridSurface(hook, rowAction, extra = []) {
+  function gridSurface(hook, rowAction, extra = [], gridProps = {}) {
     hook.processMessages([
       {
         version: "1.0",
@@ -70,6 +70,7 @@ export function focusCases({mode, admin, mergedCatalog}) {
               rows: {"@path": "/rows"},
               rowId: "id",
               rowActions: [rowAction],
+              ...gridProps,
               ...(extra.length ? {children: extra.map((c) => c.id)} : {}),
             },
             ...extra,
@@ -186,6 +187,17 @@ export function focusCases({mode, admin, mergedCatalog}) {
     assert.ok(deepActive() === opener, "focus returns to the row's Delete button");
   });
 
+  test(`${mode}: the row actions column is named in the words the server sent, else in English`, async () => {
+    const named = async (gridProps) => {
+      const hook = mountHook({catalogs: [mergedCatalog, admin]});
+      gridSurface(hook, {label: "Close", action: "invoke", context: {action: "close"}}, [], gridProps);
+      return deep(await render(hook), "th .sr-only").textContent.trim();
+    };
+
+    assert.equal(await named({actionsLabel: "Actions de la ligne"}), "Actions de la ligne");
+    assert.equal(await named({}), "Actions");
+  });
+
   test(`${mode}: the ConfirmDialog draws the text the server sent, and a body only when sent`, async () => {
     const open = async (entry) => {
       const hook = mountHook({catalogs: [mergedCatalog, admin]});
@@ -201,9 +213,12 @@ export function focusCases({mode, admin, mergedCatalog}) {
       context: {action: "destroy", recordId: {"@path": "id"}},
       confirmTitle: "Supprimer cet enregistrement ?",
       confirmBody: "Cette action est irréversible.",
+      confirmCancelLabel: "Annuler",
     });
     assert.equal(destroy.querySelector("[data-dialog-heading]").textContent.trim(), "Supprimer cet enregistrement ?");
     assert.equal(destroy.querySelector(".dialog-body").textContent.trim(), "Cette action est irréversible.");
+    assert.ok(buttonLabelled(destroy, "Annuler"), "the Cancel control reads the label the server sent");
+    assert.equal(buttonLabelled(destroy, "Cancel"), undefined, "and not the renderer's English");
 
     const declared = await open({
       label: "Deactivate",
@@ -213,6 +228,7 @@ export function focusCases({mode, admin, mergedCatalog}) {
     assert.equal(declared.querySelector("[data-dialog-heading]").textContent.trim(), "Deactivate this record?");
     assert.equal(declared.querySelector(".dialog-body"), null, "no body was sent, so none is drawn");
     assert.ok(buttonLabelled(declared, "Deactivate"), "the confirm control reads the action's label");
+    assert.ok(buttonLabelled(declared, "Cancel"), "with no label sent, Cancel is the renderer's own");
   });
 
   test(`${mode}: the prompt dialog's trap and focus restore read the focused control`, async () => {
@@ -223,7 +239,7 @@ export function focusCases({mode, admin, mergedCatalog}) {
         label: "Rename",
         action: "invoke",
         context: {action: "rename", recordId: {"@path": "id"}},
-        prompt: {content: "rename_form", title: "Rename"},
+        prompt: {content: "rename_form", title: "Rename", cancelLabel: "Annuler"},
       },
       [{id: "rename_form", component: "Text", text: "New name"}],
     );
@@ -234,6 +250,7 @@ export function focusCases({mode, admin, mergedCatalog}) {
     opener.focus();
     opener.click();
     await settle();
+    assert.ok(buttonLabelled(grid.renderRoot, "Annuler"), "the prompt's Cancel reads the label the server sent");
 
     const heading = grid.renderRoot.querySelector("[data-prompt-heading]");
     assert.ok(heading, "the prompt dialog opens");

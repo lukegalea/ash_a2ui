@@ -1370,6 +1370,7 @@ defmodule AshA2ui.Encoder do
   defp admin_data_grid_components(view, table, sfx) do
     pagination_children = if table.query, do: ["pagination#{sfx}"], else: []
     {prompt_ids, prompt_components} = admin_prompt_contents(view, table, sfx)
+    row_actions = admin_row_actions(view, table, sfx)
 
     data_grid =
       %{
@@ -1379,9 +1380,10 @@ defmodule AshA2ui.Encoder do
         "rows" => %{"@path" => table.records_path},
         "rowId" => "id",
         "label" => Experience.collection_label(view, table),
-        "rowActions" => admin_row_actions(view, table, sfx),
+        "rowActions" => row_actions,
         "children" => ["empty_state#{sfx}" | pagination_children] ++ prompt_ids
       }
+      |> maybe_put("actionsLabel", if(row_actions != [], do: t(view, msg("Actions"))))
       |> put_row_click(view, table)
       |> maybe_put("layout", grid_layout(table.component.display))
       |> maybe_put("expandLabel", expand_label(view, table.component.row_layout))
@@ -1985,6 +1987,7 @@ defmodule AshA2ui.Encoder do
       "content" => "row_action#{sfx}_#{action}_prompt",
       "title" => prompt_title(view, action, setting),
       "confirmLabel" => t(view, msg("Confirm")),
+      "cancelLabel" => t(view, msg("Cancel")),
       "open" => %{
         "action" => "prompt",
         "context" => %{
@@ -2020,6 +2023,7 @@ defmodule AshA2ui.Encoder do
     envelope
     |> Map.put("destructive", true)
     |> Map.put("confirmTitle", t(view, msg("%{action} this record?"), action: envelope["label"]))
+    |> Map.put("confirmCancelLabel", t(view, msg("Cancel")))
   end
 
   defp admin_empty_state(view, table, sfx) do

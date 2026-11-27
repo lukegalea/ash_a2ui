@@ -244,6 +244,7 @@ defmodule AshA2ui.ManifestTest do
       assert discard["destructive"] == true
       assert discard["confirmTitle"] == "⟦#{discard["label"]} this record?⟧"
       assert discard["confirmBody"] == "⟦This action cannot be undone.⟧"
+      assert discard["confirmCancelLabel"] == "⟦Cancel⟧"
 
       reopen = entry.("data_grid_done_tasks", "reopen")
       assert reopen["destructive"] == true
@@ -253,6 +254,7 @@ defmodule AshA2ui.ManifestTest do
       complete = entry.("data_grid_open_tasks", "complete")
       refute Map.has_key?(complete, "destructive")
       refute Map.has_key?(complete, "confirmTitle")
+      refute Map.has_key?(complete, "confirmCancelLabel")
     end
 
     test "a surface without row actions has tables and no row actions" do

@@ -166,6 +166,7 @@
     "text": "Apply"
   },
   {
+    "actionsLabel": "Actions",
     "children": [
       "empty_state",
       "pagination"
