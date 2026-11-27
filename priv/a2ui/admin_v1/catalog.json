@@ -8,8 +8,9 @@
   "metadata": {
     "extensions": {
       "ash_a2ui": {
-        "version": "3.17.0",
+        "version": "3.18.0",
         "changelog": {
+          "3.18.0": "Additive: the confirmation and prompt dialogs' Cancel button in the reader's language. A destructive rowActions entry gains an optional confirmCancelLabel and a prompt an optional cancelLabel (translated: \"Cancel\"); the renderer draws them, falling back to its own English \"Cancel\" when absent.",
           "3.17.0": "Additive: the save bar counts the fields reviewed. saveBar gains an optional statusReviewed (a tag counting the fields under review a person reviewed, %{count} replaced, translated) and statusReviewedOne (its text for one). A field counts as reviewed while its review state on the bar's record is reviewed, or, with editReviews, while it has a draft in /ui/edits (saving it reviews it); the table rows reviewed count too, from the record's _review_rows.reviewed (rows and pairs items of the counted tables with nothing waiting and a review reviewed). The tag shows only while the review is open (a field's review state on the record is still pending or missing, or _review_rows.waiting is above zero) and at least one field is reviewed; it is drawn after the status tag, in the success tone where status is in the warning tone. A renderer that ignores statusReviewed draws the bar as in 3.16. The catalogId is unchanged.",
           "3.16.0": "Additive: a save bar counts the table rows still waiting. The bar's record (/detail/<context>) carries _review_rows, {waiting: n}: the rows (and pairs items) of the context's tables still waiting for review, as a review summary counts them (3.9, 3.10), and in the same read. A saveBar adds n to the fields it counts (reviews): the bar shows while any waits (showWhileWaiting), its status counts them, Save opens the confirm while any waits, and thenWhenClear waits for them too. A record without _review_rows counts as 0. A renderer that ignores it counts the cards' fields alone, as in 3.15. The catalogId is unchanged.",
           "3.15.0": "Additive: values recalculated from unsaved changes. A fieldDisplay may carry preview, a binding to /ui/preview/<context>/<field>: while it resolves to an object, the field draws its value (and, for a steps field, its steps) from it instead of value and steps. The saveBar may carry preview, an envelope {action: preview_changes, context: {edits, contexts?}} it sends (the ash_a2ui catalog's ashAction, quiet: no pending state) whenever /ui/edits changes, to empty after Discard too; the server works the recalculated fields out with the changes, by the actions a save runs inside a transaction it rolls back, and writes /ui/preview whole ({} when there is nothing to show). Discard also clears /ui/preview; a save clears it with /ui/edits; a whole-model refresh keeps it while it keeps /ui/edits. A renderer that ignores preview shows the stored values until Save, as in 3.11. The catalogId is unchanged.",
@@ -398,6 +399,7 @@
               "destructive": {"type": "boolean", "description": "true when dispatch must be confirmed through ConfirmDialog (destroy actions, and actions declaring confirm :destructive)."},
               "confirmTitle": {"type": "string", "description": "Optional (3.13): the ConfirmDialog heading of a destructive entry, translated. Absent, the renderer heads the dialog with the entry's label."},
               "confirmBody": {"type": "string", "description": "Optional (3.13): the ConfirmDialog body of a destructive entry, translated. Sent for a destroy only (\"This action cannot be undone.\"); absent, the dialog has no body."},
+              "confirmCancelLabel": {"type": "string", "description": "Optional (3.18): the ConfirmDialog's Cancel button label of a destructive entry, translated. Absent, the renderer says \"Cancel\"."},
               "visiblePath": {"type": "string", "description": "Optional (1.2): row-relative path of the action's per-row visibility (the server-computed _visible_<action> key of a visible_when action). The renderer offers the action only on rows where the value is a non-empty list (or true); absent means always offered. Enforcement stays server-side."},
               "prompt": {
                 "type": "object",
@@ -406,6 +408,7 @@
                   "content": {"type": "string", "description": "Id of the dataGrid child holding the prompt inputs (bound to /prompt/values/<action>/<field>)."},
                   "title": {"type": "string"},
                   "confirmLabel": {"type": "string"},
+                  "cancelLabel": {"type": "string", "description": "Optional (3.18): the prompt's Cancel button label, translated. Absent, the renderer says \"Cancel\"."},
                   "open": {
                     "type": "object",
                     "description": "The prompt pre-fill envelope, in the flat rowActions shape ({action: \"prompt\", context}), resolved against the row.",
@@ -818,6 +821,7 @@
         "title": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Dialog title."},
         "body": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Dialog body text."},
         "confirmLabel": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Confirm button label."},
+        "cancelLabel": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Optional (3.18): Cancel button label, translated. Absent, the renderer says \"Cancel\"."},
         "destructive": {
           "type": "boolean",
           "description": "Styles the confirm action as destructive (default true)."

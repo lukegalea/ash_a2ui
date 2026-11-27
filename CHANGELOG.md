@@ -10,6 +10,16 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 Requires Elixir 1.20 or later.
 
+### Added: the dialogs' Cancel button in the reader's language (admin catalog 3.18.0)
+
+Additive, under the same catalog id.
+
+- The data grid's confirmation dialog and prompt dialog drew an English
+  "Cancel" whatever the locale, beside a translated title and confirm
+  button. A destructive `rowActions` entry now carries `confirmCancelLabel`
+  and a prompt carries `cancelLabel`, both translated; a renderer that
+  ignores them says "Cancel", as in 3.17.
+
 ### Fixed: two cards of one record save under an optimistic lock
 
 - `save_changes` saves the cards of one record one after another, each from

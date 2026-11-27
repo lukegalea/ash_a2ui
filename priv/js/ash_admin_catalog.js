@@ -560,7 +560,7 @@ import {
 const ADMIN_CATALOG_ID = "https://github.com/lukegalea/ash_a2ui/catalogs/admin/v3";
 
 /** The admin catalog contract version (minor versions are additive). */
-export const ADMIN_CATALOG_VERSION = "3.17.0";
+export const ADMIN_CATALOG_VERSION = "3.18.0";
 
 /**
  * The DOM event a reference-link activation raises when the host passed no
@@ -1004,6 +1004,7 @@ export function buildSchemas(basicCatalog = null) {
           // entry, translated by the server; a body only for a destroy.
           confirmTitle: Str.optional(),
           confirmBody: Str.optional(),
+          confirmCancelLabel: Str.optional(),
           // 1.2: the row-relative per-row visibility of a visible_when
           // action (`_visible_<action>`: a non-empty list = offered), and
           // the prompt a prompt_fields action collects first —
@@ -1251,6 +1252,7 @@ export function buildSchemas(basicCatalog = null) {
       title: DynamicStringSchema.nullable().optional(),
       body: DynamicStringSchema.nullable().optional(),
       confirmLabel: DynamicStringSchema.nullable().optional(),
+      cancelLabel: DynamicStringSchema.nullable().optional(),
       destructive: Bool.optional(),
       action: ActionSchema.optional(),
       weight: Num.optional(),
@@ -3764,7 +3766,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
                 : nothing}
               ${ref ? html`${this.renderNode(ref)}` : nothing}
               <div class="prompt-actions">
-                ${renderActionButton({label: "Cancel", onClick: () => this.closePrompt()})}
+                ${renderActionButton({label: str(spec.cancelLabel) || "Cancel", onClick: () => this.closePrompt()})}
                 ${renderActionButton({
                   label: str(spec.confirmLabel) || "Confirm",
                   tone: "primary",
@@ -3817,6 +3819,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
             label: str(action.label),
             title: str(action.confirmTitle),
             body: str(action.confirmBody),
+            cancelLabel: str(action.confirmCancelLabel),
             rowIdentity: this.rowIdentity((this.controller?.props?.rows || [])[index], index),
           };
           this.requestUpdate();
@@ -3884,6 +3887,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         dialog.title = pending.title || pending.label;
         dialog.body = pending.body;
         dialog.confirmLabel = pending.label || "Confirm";
+        dialog.cancelLabel = pending.cancelLabel || "Cancel";
         dialog.destructive = true;
 
         if (!dialog.parentNode) this.renderRoot.appendChild(dialog);
@@ -6715,6 +6719,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         title: {type: String},
         body: {type: String},
         confirmLabel: {type: String},
+        cancelLabel: {type: String},
         destructive: {type: Boolean},
       };
 
@@ -6724,6 +6729,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
         this.title = "";
         this.body = "";
         this.confirmLabel = "Confirm";
+        this.cancelLabel = "Cancel";
         this.destructive = true;
         this._amRestoreFocus = null;
       }
@@ -6897,7 +6903,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
                 ? html`<p class="dialog-body" id="am-dialog-body">${str(this.body)}</p>`
                 : nothing}
               <div class="dialog-actions">
-                ${renderActionButton({label: "Cancel", onClick: () => this.cancel()})}
+                ${renderActionButton({label: str(this.cancelLabel) || "Cancel", onClick: () => this.cancel()})}
                 ${renderActionButton({
                   label: str(this.confirmLabel) || "Confirm",
                   tone: "primary",

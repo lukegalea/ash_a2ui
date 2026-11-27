@@ -1985,6 +1985,7 @@ defmodule AshA2ui.Encoder do
       "content" => "row_action#{sfx}_#{action}_prompt",
       "title" => prompt_title(view, action, setting),
       "confirmLabel" => t(view, msg("Confirm")),
+      "cancelLabel" => t(view, msg("Cancel")),
       "open" => %{
         "action" => "prompt",
         "context" => %{
@@ -2020,6 +2021,7 @@ defmodule AshA2ui.Encoder do
     envelope
     |> Map.put("destructive", true)
     |> Map.put("confirmTitle", t(view, msg("%{action} this record?"), action: envelope["label"]))
+    |> Map.put("confirmCancelLabel", t(view, msg("Cancel")))
   end
 
   defp admin_empty_state(view, table, sfx) do

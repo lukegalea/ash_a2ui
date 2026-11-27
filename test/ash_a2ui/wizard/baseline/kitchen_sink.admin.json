@@ -123,6 +123,7 @@
             {
               "action": "invoke",
               "confirmBody": "This action cannot be undone.",
+              "confirmCancelLabel": "Cancel",
               "confirmTitle": "Destroy this record?",
               "context": {
                 "action": "destroy",
