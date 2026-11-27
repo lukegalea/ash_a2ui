@@ -987,6 +987,8 @@ export function buildSchemas(basicCatalog = null) {
       rows: DynamicValueSchema.optional(),
       rowId: Str.optional(),
       label: DynamicStringSchema.nullable().optional(),
+      // 3.18: the row actions column's accessible name, translated.
+      actionsLabel: Str.optional(),
       // Flat envelope shape the admin encoder emits (`admin_row_actions/2`):
       // `action` is the client action NAME string ("view_record",
       // "start_edit", "invoke") and `context` carries literal +
@@ -3083,7 +3085,7 @@ function defineAdminElements(deps, {adminApis, inputSchemas = {}}) {
                     ? html`<th scope="col"><span class="sr-only">${str(primary.label)}</span></th>`
                     : nothing}
                   ${hasActions
-                    ? html`<th scope="col"><span class="sr-only">Actions</span></th>`
+                    ? html`<th scope="col"><span class="sr-only">${str(this.controller?.props?.actionsLabel) || "Actions"}</span></th>`
                     : nothing}
                 </tr>
               </thead>

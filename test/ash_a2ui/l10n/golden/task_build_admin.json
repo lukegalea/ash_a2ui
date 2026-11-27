@@ -94,6 +94,7 @@
           "text": "Create Task"
         },
         {
+          "actionsLabel": "Actions",
           "children": [
             "empty_state",
             "pagination"

@@ -10,7 +10,7 @@ This changelog is managed by [git_ops](https://hex.pm/packages/git_ops).
 
 Requires Elixir 1.20 or later.
 
-### Added: the dialogs' Cancel button in the reader's language (admin catalog 3.18.0)
+### Added: the grid's English chrome in the reader's language (admin catalog 3.18.0)
 
 Additive, under the same catalog id.
 
@@ -19,6 +19,9 @@ Additive, under the same catalog id.
   button. A destructive `rowActions` entry now carries `confirmCancelLabel`
   and a prompt carries `cancelLabel`, both translated; a renderer that
   ignores them says "Cancel", as in 3.17.
+- The row actions column's accessible name was an English "Actions" for
+  every reader. A `dataGrid` with row actions now carries `actionsLabel`,
+  translated; without it the renderer says "Actions".
 
 ### Fixed: two cards of one record save under an optimistic lock
 

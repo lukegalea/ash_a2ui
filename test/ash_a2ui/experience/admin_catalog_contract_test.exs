@@ -303,7 +303,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
              "_review_rows"
   end
 
-  test "catalog 3.18 sends the dialogs' Cancel label, under the same id" do
+  test "catalog 3.18 sends the grid's Cancel and Actions labels, under the same id" do
     catalog = @admin_catalog_path |> File.read!() |> Jason.decode!()
 
     assert changelog(catalog)["3.18.0"] =~ "confirmCancelLabel"
@@ -312,6 +312,7 @@ defmodule AshA2ui.Experience.AdminCatalogContractTest do
     entry = catalog["components"]["dataGrid"]["properties"]["rowActions"]["items"]
     assert entry["properties"]["confirmCancelLabel"]["type"] == "string"
     assert entry["properties"]["prompt"]["properties"]["cancelLabel"]["type"] == "string"
+    assert catalog["components"]["dataGrid"]["properties"]["actionsLabel"]["type"] == "string"
     refute "confirmCancelLabel" in (entry["required"] || [])
   end
 

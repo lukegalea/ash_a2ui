@@ -113,6 +113,7 @@
           "text": "Create Enum record"
         },
         {
+          "actionsLabel": "Actions",
           "children": [
             "empty_state",
             "pagination"

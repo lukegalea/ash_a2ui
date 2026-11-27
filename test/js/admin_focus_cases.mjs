@@ -54,7 +54,7 @@ const buttonLabelled = (root, label) =>
 export function focusCases({mode, admin, mergedCatalog}) {
   const lightDom = mode === "light DOM";
 
-  function gridSurface(hook, rowAction, extra = []) {
+  function gridSurface(hook, rowAction, extra = [], gridProps = {}) {
     hook.processMessages([
       {
         version: "1.0",
@@ -70,6 +70,7 @@ export function focusCases({mode, admin, mergedCatalog}) {
               rows: {"@path": "/rows"},
               rowId: "id",
               rowActions: [rowAction],
+              ...gridProps,
               ...(extra.length ? {children: extra.map((c) => c.id)} : {}),
             },
             ...extra,
@@ -184,6 +185,17 @@ export function focusCases({mode, admin, mergedCatalog}) {
     await settle();
     assert.equal(sent(hook).length, 0, "cancelling invokes nothing");
     assert.ok(deepActive() === opener, "focus returns to the row's Delete button");
+  });
+
+  test(`${mode}: the row actions column is named in the words the server sent, else in English`, async () => {
+    const named = async (gridProps) => {
+      const hook = mountHook({catalogs: [mergedCatalog, admin]});
+      gridSurface(hook, {label: "Close", action: "invoke", context: {action: "close"}}, [], gridProps);
+      return deep(await render(hook), "th .sr-only").textContent.trim();
+    };
+
+    assert.equal(await named({actionsLabel: "Actions de la ligne"}), "Actions de la ligne");
+    assert.equal(await named({}), "Actions");
   });
 
   test(`${mode}: the ConfirmDialog draws the text the server sent, and a body only when sent`, async () => {

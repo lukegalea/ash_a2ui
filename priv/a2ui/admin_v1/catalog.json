@@ -10,7 +10,7 @@
       "ash_a2ui": {
         "version": "3.18.0",
         "changelog": {
-          "3.18.0": "Additive: the confirmation and prompt dialogs' Cancel button in the reader's language. A destructive rowActions entry gains an optional confirmCancelLabel and a prompt an optional cancelLabel (translated: \"Cancel\"); the renderer draws them, falling back to its own English \"Cancel\" when absent.",
+          "3.18.0": "Additive: the grid's English chrome in the reader's language. A destructive rowActions entry gains an optional confirmCancelLabel and a prompt an optional cancelLabel (translated: \"Cancel\"), and a dataGrid with row actions gains an optional actionsLabel (the row actions column's accessible name, translated: \"Actions\"); the renderer draws them, falling back to its own English when absent.",
           "3.17.0": "Additive: the save bar counts the fields reviewed. saveBar gains an optional statusReviewed (a tag counting the fields under review a person reviewed, %{count} replaced, translated) and statusReviewedOne (its text for one). A field counts as reviewed while its review state on the bar's record is reviewed, or, with editReviews, while it has a draft in /ui/edits (saving it reviews it); the table rows reviewed count too, from the record's _review_rows.reviewed (rows and pairs items of the counted tables with nothing waiting and a review reviewed). The tag shows only while the review is open (a field's review state on the record is still pending or missing, or _review_rows.waiting is above zero) and at least one field is reviewed; it is drawn after the status tag, in the success tone where status is in the warning tone. A renderer that ignores statusReviewed draws the bar as in 3.16. The catalogId is unchanged.",
           "3.16.0": "Additive: a save bar counts the table rows still waiting. The bar's record (/detail/<context>) carries _review_rows, {waiting: n}: the rows (and pairs items) of the context's tables still waiting for review, as a review summary counts them (3.9, 3.10), and in the same read. A saveBar adds n to the fields it counts (reviews): the bar shows while any waits (showWhileWaiting), its status counts them, Save opens the confirm while any waits, and thenWhenClear waits for them too. A record without _review_rows counts as 0. A renderer that ignores it counts the cards' fields alone, as in 3.15. The catalogId is unchanged.",
           "3.15.0": "Additive: values recalculated from unsaved changes. A fieldDisplay may carry preview, a binding to /ui/preview/<context>/<field>: while it resolves to an object, the field draws its value (and, for a steps field, its steps) from it instead of value and steps. The saveBar may carry preview, an envelope {action: preview_changes, context: {edits, contexts?}} it sends (the ash_a2ui catalog's ashAction, quiet: no pending state) whenever /ui/edits changes, to empty after Discard too; the server works the recalculated fields out with the changes, by the actions a save runs inside a transaction it rolls back, and writes /ui/preview whole ({} when there is nothing to show). Discard also clears /ui/preview; a save clears it with /ui/edits; a whole-model refresh keeps it while it keeps /ui/edits. A renderer that ignores preview shows the stored values until Save, as in 3.11. The catalogId is unchanged.",
@@ -359,6 +359,10 @@
         "description": {
           "type": "string",
           "description": "Optional (1.18): a one-line caption under the card's heading, above the rows (or the empty state), muted; translated."
+        },
+        "actionsLabel": {
+          "type": "string",
+          "description": "Optional (3.18): the accessible name of the row actions column, translated (\"Actions\"); sent when the grid has row actions. Absent, the renderer says \"Actions\"."
         },
         "expandLabel": {
           "type": "string",
