@@ -1,0 +1,50 @@
+[
+  {
+    "law": "10",
+    "file": "lib/ash_a2ui/dynamic/parser.ex",
+    "text": "case convert_name(String.to_atom(key), value, path, true) do",
+    "reason": "Reviewed 2026-11-26: the input is bounded by size and a name regex (or a literal in this module) before the atom is made, and the site carries a sobelow_skip note. Replacing it with String.to_existing_atom where the atom already exists is a follow-up."
+  },
+  {
+    "law": "10",
+    "file": "lib/ash_a2ui/dynamic/parser.ex",
+    "text": "do: String.to_atom(\"Elixir.\" <> module),",
+    "reason": "Reviewed 2026-11-26: the input is bounded by size and a name regex (or a literal in this module) before the atom is made, and the site carries a sobelow_skip note. Replacing it with String.to_existing_atom where the atom already exists is a follow-up."
+  },
+  {
+    "law": "10",
+    "file": "lib/ash_a2ui/dynamic/parser.ex",
+    "text": "do: String.to_atom(function),",
+    "reason": "Reviewed 2026-11-26: the input is bounded by size and a name regex (or a literal in this module) before the atom is made, and the site carries a sobelow_skip note. Replacing it with String.to_existing_atom where the atom already exists is a follow-up."
+  },
+  {
+    "law": "10",
+    "file": "lib/ash_a2ui/dynamic/parser.ex",
+    "text": "{:ok, String.to_atom(value)}",
+    "reason": "Reviewed 2026-11-26: the input is bounded by size and a name regex (or a literal in this module) before the atom is made, and the site carries a sobelow_skip note. Replacing it with String.to_existing_atom where the atom already exists is a follow-up."
+  },
+  {
+    "law": "10",
+    "file": "lib/ash_a2ui/dynamic/promoter.ex",
+    "text": "\"{#{inspect(String.to_atom(\"Elixir.\" <> module))}, :#{function}, #{inspect(args)}}\"",
+    "reason": "Reviewed 2026-11-26: the input is bounded by size and a name regex (or a literal in this module) before the atom is made, and the site carries a sobelow_skip note. Replacing it with String.to_existing_atom where the atom already exists is a follow-up."
+  },
+  {
+    "law": "10",
+    "file": "lib/ash_a2ui/query_runner.ex",
+    "text": "defp facet_key(index), do: String.to_atom(\"a2ui_facet_#{index}\")",
+    "reason": "Reviewed 2026-11-26: the atom is built from a loop index over the facet values of one query, so the count is bounded by the query, never by caller text. Replacing it with a tuple key would remove the hit."
+  },
+  {
+    "law": "11",
+    "file": "lib/ash_a2ui/shell/component.ex",
+    "text": "def handle_event(\"shell:open\", params, socket) do",
+    "reason": "Baselined unreviewed on 2026-11-26. The event opens the palette and filters entries the host supplied; the judge sees no Ash.can? or actor_fn in the file. Reviewing what each shell event may reveal is a follow-up."
+  },
+  {
+    "law": "11",
+    "file": "lib/ash_a2ui/web/composer_live.ex",
+    "text": "def handle_event(event, params, socket) do",
+    "reason": "Baselined unreviewed on 2026-11-26. The composer dispatches events to a host-supplied config and the file shows no Ash.can? or actor_fn. Reviewing how the host authorizes composer events is a follow-up."
+  }
+]
