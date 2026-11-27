@@ -188,6 +188,11 @@ defmodule AshA2ui.MixProject do
       # degradation) otherwise.
       {:ash_state_machine, "~> 0.2", optional: true},
       {:igniter, "~> 0.5", only: [:dev, :test]},
+      # Dev-and-test-only: the laws judge (`mix ash_agent.laws`), run by
+      # scripts/iron-laws.sh in CI. runtime: false keeps it out of consumers'
+      # dependency graphs.
+      {:ash_agent_tools,
+       github: "lukegalea/ash_agent_tools", only: [:dev, :test], runtime: false},
       {:simple_sat, "~> 0.1", only: [:dev, :test], runtime: false},
       {:jsv, "~> 0.27", only: :test},
       # no :only — reactor (via ash) requires jason in all envs anyway
